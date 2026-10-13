@@ -595,12 +595,15 @@
     </div>
 
     <div class="hud-right">
-      <div class="view-mode-toggle" id="viewModeToggle" title="Toggle between Canvas Week Constellations and Classic Semantic Obsidian Web">
+      <div class="view-mode-toggle" id="viewModeToggle" title="Toggle between Canvas Week Constellations, Classic Semantic Obsidian Web, and Radial Sunburst Tree">
         <button class="mode-btn active" id="btnModeConstellation" onclick="setViewMode('constellation')">
           <span>📅</span> Canvas Constellations
         </button>
         <button class="mode-btn" id="btnModeSemantic" onclick="setViewMode('semantic')">
           <span>🌌</span> Semantic Web
+        </button>
+        <button class="mode-btn" id="btnModeSunburst" onclick="setViewMode('sunburst')">
+          <span>☀️</span> Radial Sunburst
         </button>
       </div>
 
@@ -837,6 +840,91 @@
         return nodeObj;
       });
 
+      // Compute Deterministic Radial Sunburst Coordinates for all nodes
+      (function computeSunburstCoordinates() {
+        const courseKeys = [
+          "41200 - Engineering Project Appraisal",
+          "48430 - Fundamentals of C Programming",
+          "48521 - Foundations of Electrical and Electronic Technology",
+          "48520 - Electronics and Circuits",
+          "General"
+        ];
+        const byCourse = {};
+        nodes.forEach(n => {
+          const c = n.course || "General";
+          if (!byCourse[c]) byCourse[c] = [];
+          byCourse[c].push(n);
+        });
+
+        const weights = {};
+        courseKeys.forEach(c => {
+          const cNodes = byCourse[c] || [];
+          const hubs = cNodes.filter(n => n.type === "ModuleHub");
+          const concepts = cNodes.filter(n => n.type !== "ModuleHub");
+          weights[c] = Math.max(20, concepts.length + hubs.length * 2);
+        });
+
+        const totalW = courseKeys.reduce((acc, c) => acc + weights[c], 0);
+        const gap = 0.08;
+        const availableAngle = 2 * Math.PI - (courseKeys.length * gap);
+
+        let startAngle = -Math.PI;
+        const courseAngles = {};
+        courseKeys.forEach(c => {
+          const span = availableAngle * (weights[c] / totalW);
+          courseAngles[c] = { start: startAngle, end: startAngle + span, span: span };
+          startAngle += span + gap;
+        });
+
+        courseKeys.forEach(c => {
+          const cNodes = byCourse[c] || [];
+          const hubs = cNodes.filter(n => n.type === "ModuleHub").sort((a, b) => (a.order || 0) - (b.order || 0));
+          const conceptsByMod = {};
+          cNodes.filter(n => n.type !== "ModuleHub").forEach(n => {
+            const mId = n.moduleId || "root";
+            if (!conceptsByMod[mId]) conceptsByMod[mId] = [];
+            conceptsByMod[mId].push(n);
+          });
+
+          const cGeo = courseAngles[c];
+          if (!cGeo) return;
+          const numHubs = Math.max(1, hubs.length);
+          const step = cGeo.span / numHubs;
+
+          hubs.forEach((h, i) => {
+            const midTheta = cGeo.start + (i + 0.5) * step;
+            const rHub = 285;
+            h.sunburstX = rHub * Math.cos(midTheta);
+            h.sunburstY = rHub * Math.sin(midTheta);
+            h.sunburstAngle = midTheta;
+
+            const mConcepts = conceptsByMod[h.id] || [];
+            const K = mConcepts.length;
+            if (K > 0) {
+              const spread = step * 0.70;
+              mConcepts.forEach((cn, j) => {
+                const th = (K === 1) ? midTheta : ((midTheta - spread / 2) + (j / (K - 1)) * spread);
+                const rConcept = (K > 4) ? (430 + (j % 3) * 75) : 455;
+                cn.sunburstX = rConcept * Math.cos(th);
+                cn.sunburstY = rConcept * Math.sin(th);
+                cn.sunburstAngle = th;
+              });
+            }
+          });
+
+          // Unassigned / root concepts for course
+          const rootConcepts = conceptsByMod["root"] || [];
+          rootConcepts.forEach((cn, idx) => {
+            const midTheta = cGeo.start + cGeo.span * 0.5;
+            const th = midTheta + (idx - rootConcepts.length / 2) * 0.06;
+            const rRoot = 160;
+            cn.sunburstX = rRoot * Math.cos(th);
+            cn.sunburstY = rRoot * Math.sin(th);
+            cn.sunburstAngle = th;
+          });
+        });
+      })();
+
       const links = [];
       rawData.edges.forEach(e => {
         const s = nodesMap.get(e.data.source);
@@ -954,9 +1042,75 @@
           const sLinks = links.filter(l => l.type !== "spine" && l.type !== "containment" && l.source.type !== "ModuleHub" && l.target.type !== "ModuleHub");
           document.getElementById("nodeCount").textContent = sNodes.length;
           document.getElementById("edgeCount").textContent = sLinks.length;
+        } else if (currentViewMode === "sunburst") {
+          document.getElementById("nodeCount").textContent = nodes.length;
+          const sbLinks = links.filter(l => l.type === "containment" || l.type === "spine");
+          document.getElementById("edgeCount").textContent = sbLinks.length;
         } else {
           document.getElementById("nodeCount").textContent = nodes.length;
           document.getElementById("edgeCount").textContent = links.length;
+        }
+      }
+
+      function updateSimulationPhysics() {
+        if (!simulation) return;
+        if (currentViewMode === "sunburst") {
+          simulation.force("link")
+            .distance(d => {
+              if (d.type === "containment") return 155;
+              if (d.type === "spine") return 65;
+              return 80;
+            })
+            .strength(d => {
+              if (d.type === "containment") return 0.35;
+              if (d.type === "spine") return 0.20;
+              return 0.05;
+            });
+          simulation.force("charge").strength(-45).distanceMax(500);
+          simulation.force("collide").radius(d => d.radius + 7).strength(0.85);
+          simulation.force("clusterX", d3.forceX(d => (d.sunburstX !== undefined ? d.sunburstX : 0)).strength(0.82));
+          simulation.force("clusterY", d3.forceY(d => (d.sunburstY !== undefined ? d.sunburstY : 0)).strength(0.82));
+        } else if (currentViewMode === "semantic") {
+          simulation.force("link")
+            .distance(d => {
+              if (d.type === "prerequisite") return 85;
+              if (d.type === "pedagogical") return 55;
+              return 70;
+            })
+            .strength(d => {
+              if (d.type === "spine" || d.type === "containment") return 0;
+              if (d.type === "prerequisite") return 0.55;
+              if (d.type === "pedagogical") return 0.45;
+              return 0.35;
+            });
+          simulation.force("charge").strength(d => {
+            if (d.type === "ModuleHub") return 0;
+            return d.degree >= 3 ? -240 : -130;
+          }).distanceMax(600);
+          simulation.force("collide").radius(d => {
+            if (d.type === "ModuleHub") return 0;
+            return d.radius + (d.degree >= 3 ? 14 : 7);
+          }).strength(0.85);
+          simulation.force("clusterX", d3.forceX(d => (COURSE_THEMES[d.course] || COURSE_THEMES["General"]).center.x).strength(clusterStrength));
+          simulation.force("clusterY", d3.forceY(d => (COURSE_THEMES[d.course] || COURSE_THEMES["General"]).center.y).strength(clusterStrength));
+        } else {
+          simulation.force("link")
+            .distance(d => {
+              if (d.type === "spine") return 130;
+              if (d.type === "containment") return 50;
+              if (d.type === "prerequisite") return 85;
+              if (d.type === "pedagogical") return 55;
+              return 70;
+            })
+            .strength(d => {
+              if (d.type === "spine") return 0.45;
+              if (d.type === "containment") return 0.35;
+              return 0.25;
+            });
+          simulation.force("charge").strength(d => (d.type === "ModuleHub" ? -480 : (d.degree >= 3 ? -240 : -130))).distanceMax(600);
+          simulation.force("collide").radius(d => (d.radius + (d.type === "ModuleHub" ? 30 : (d.degree >= 3 ? 14 : 7)))).strength(0.85);
+          simulation.force("clusterX", d3.forceX(d => (COURSE_THEMES[d.course] || COURSE_THEMES["General"]).center.x).strength(clusterStrength));
+          simulation.force("clusterY", d3.forceY(d => (COURSE_THEMES[d.course] || COURSE_THEMES["General"]).center.y).strength(clusterStrength));
         }
       }
 
@@ -966,11 +1120,13 @@
 
         const btnConstellation = document.getElementById("btnModeConstellation");
         const btnSemantic = document.getElementById("btnModeSemantic");
+        const btnSunburst = document.getElementById("btnModeSunburst");
         const weekFilterBar = document.getElementById("weekFilterBar");
 
         if (btnConstellation && btnSemantic) {
           btnConstellation.classList.toggle("active", mode === "constellation");
           btnSemantic.classList.toggle("active", mode === "semantic");
+          if (btnSunburst) btnSunburst.classList.toggle("active", mode === "sunburst");
         }
 
         if (weekFilterBar) {
@@ -980,39 +1136,9 @@
         updateHUDCounts();
 
         if (simulation) {
-          simulation.force("link")
-            .distance(d => {
-              if (d.type === "spine") return 130;
-              if (d.type === "containment") return 50;
-              if (d.type === "prerequisite") return 85;
-              if (d.type === "cross_course") return 220;
-              if (d.type === "pedagogical") return 55;
-              return 70;
-            })
-            .strength(d => {
-              if (currentViewMode === "semantic") {
-                if (d.type === "spine" || d.type === "containment") return 0;
-                if (d.type === "prerequisite") return 0.55;
-                if (d.type === "cross_course") return 0.20;
-                if (d.type === "pedagogical") return 0.45;
-                return 0.35;
-              }
-              if (d.type === "spine") return 0.45;
-              if (d.type === "containment") return 0.35;
-              if (d.type === "cross_course") return 0.05;
-              return 0.25;
-            });
-          simulation.force("charge").strength(d => {
-            if (currentViewMode === "semantic" && d.type === "ModuleHub") return 0;
-            if (d.type === "ModuleHub") return -480;
-            return d.degree >= 3 ? -240 : -130;
-          });
-          simulation.force("collide").radius(d => {
-            if (currentViewMode === "semantic" && d.type === "ModuleHub") return 0;
-            return d.radius + (d.type === "ModuleHub" ? 30 : (d.degree >= 3 ? 14 : 7));
-          });
+          updateSimulationPhysics();
           if (reheat) {
-            simulation.alpha(0.65).restart();
+            simulation.alpha(0.70).restart();
           }
         }
         requestRender();
@@ -1021,38 +1147,14 @@
 
       // D3 Force Simulation Setup (Real Obsidian Elastic Movement)
       simulation = d3.forceSimulation(nodes)
-        .force("link", d3.forceLink(links).id(d => d.id).distance(d => {
-          if (d.type === "spine") return 130;
-          if (d.type === "containment") return 50;
-          if (d.type === "prerequisite") return 85;
-          if (d.type === "cross_course") return 220;
-          if (d.type === "pedagogical") return 55;
-          return 70;
-        }).strength(d => {
-          if (currentViewMode === "semantic") {
-            if (d.type === "spine" || d.type === "containment") return 0;
-            if (d.type === "prerequisite") return 0.55;
-            if (d.type === "cross_course") return 0.20;
-            if (d.type === "pedagogical") return 0.45;
-            return 0.35;
-          }
-          if (d.type === "spine") return 0.45;
-          if (d.type === "containment") return 0.35;
-          if (d.type === "cross_course") return 0.05;
-          return 0.25;
-        }))
-        .force("charge", d3.forceManyBody().strength(d => {
-          if (currentViewMode === "semantic" && d.type === "ModuleHub") return 0;
-          if (d.type === "ModuleHub") return -480;
-          return d.degree >= 3 ? -240 : -130;
-        }).distanceMax(600))
-        .force("collide", d3.forceCollide().radius(d => {
-          if (currentViewMode === "semantic" && d.type === "ModuleHub") return 0;
-          return d.radius + (d.type === "ModuleHub" ? 30 : (d.degree >= 3 ? 14 : 7));
-        }).strength(0.85))
-        .force("clusterX", d3.forceX().x(d => (COURSE_THEMES[d.course] || COURSE_THEMES["General"]).center.x).strength(clusterStrength))
-        .force("clusterY", d3.forceY().y(d => (COURSE_THEMES[d.course] || COURSE_THEMES["General"]).center.y).strength(clusterStrength))
+        .force("link", d3.forceLink(links).id(d => d.id))
+        .force("charge", d3.forceManyBody())
+        .force("collide", d3.forceCollide())
+        .force("clusterX", d3.forceX())
+        .force("clusterY", d3.forceY())
         .alphaDecay(0.022);
+
+      updateSimulationPhysics();
 
       simulation.on("tick", requestRender);
       window.graphNodes = nodes;
@@ -1075,33 +1177,94 @@
         const activeNode = hoveredNode || selectedNode;
 
         // Pass 0: Galaxy Nebula Glows & Celestial Watermarks
-        Object.keys(COURSE_THEMES).forEach(cKey => {
-          if (cKey === "General") return;
-          if (isFiltered && cKey !== activeCourseFilter) return;
-          const theme = COURSE_THEMES[cKey];
-          const cx = theme.center.x;
-          const cy = theme.center.y;
-
-          // Ambient Radial Nebula
-          const grad = ctx.createRadialGradient(cx, cy, 20, cx, cy, 520);
-          grad.addColorStop(0, theme.glow);
-          grad.addColorStop(0.5, theme.glow.replace(/[\d\.]+\)$/, "0.08)"));
-          grad.addColorStop(1, "rgba(0, 0, 0, 0)");
-          ctx.fillStyle = grad;
+        if (currentViewMode === "sunburst") {
+          // Central Sunburst Core Ambient Glow
+          const coreGrad = ctx.createRadialGradient(0, 0, 10, 0, 0, 260);
+          coreGrad.addColorStop(0, "rgba(249, 226, 175, 0.32)");
+          coreGrad.addColorStop(0.35, "rgba(203, 166, 247, 0.10)");
+          coreGrad.addColorStop(0.75, "rgba(137, 180, 250, 0.04)");
+          coreGrad.addColorStop(1, "transparent");
+          ctx.fillStyle = coreGrad;
           ctx.beginPath();
-          ctx.arc(cx, cy, 520, 0, Math.PI * 2);
+          ctx.arc(0, 0, 260, 0, Math.PI * 2);
           ctx.fill();
 
-          // Celestial Watermark
+          // Concentric Orbit Guide Rings
+          const orbitRings = [
+            { r: 160, label: "CORES" },
+            { r: 285, label: "WEEKS & MODULES" },
+            { r: 440, label: "CONCEPTS TIER 1" },
+            { r: 515, label: "CONCEPTS TIER 2" },
+            { r: 590, label: "CONCEPTS TIER 3" }
+          ];
+
+          ctx.lineWidth = 1.0 / transform.k;
+          ctx.strokeStyle = "rgba(255, 255, 255, 0.07)";
+          orbitRings.forEach(ring => {
+            ctx.setLineDash([4 / transform.k, 8 / transform.k]);
+            ctx.beginPath();
+            ctx.arc(0, 0, ring.r, 0, Math.PI * 2);
+            ctx.stroke();
+          });
+          ctx.setLineDash([]);
+
+          // Orbit Watermark Labels along top
           ctx.save();
-          ctx.font = `800 ${Math.max(26, 32 / Math.sqrt(transform.k))}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+          ctx.font = `600 ${Math.max(9, 11 / Math.sqrt(transform.k))}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+          ctx.fillStyle = "rgba(255, 255, 255, 0.20)";
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
-          ctx.fillStyle = theme.color;
-          ctx.globalAlpha = 0.14;
-          ctx.fillText(theme.name.toUpperCase(), cx, cy - 210);
+          orbitRings.forEach(ring => {
+            ctx.fillText(ring.label, 0, -ring.r);
+          });
           ctx.restore();
-        });
+
+          // Course Galaxy Watermarks along perimeter
+          Object.keys(COURSE_THEMES).forEach(cKey => {
+            if (cKey === "General") return;
+            if (isFiltered && cKey !== activeCourseFilter) return;
+            const theme = COURSE_THEMES[cKey];
+            const cx = theme.center.x;
+            const cy = theme.center.y;
+
+            ctx.save();
+            ctx.font = `800 ${Math.max(22, 28 / Math.sqrt(transform.k))}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillStyle = theme.color;
+            ctx.globalAlpha = 0.16;
+            ctx.fillText(theme.name.toUpperCase(), cx * 1.05, cy * 1.05);
+            ctx.restore();
+          });
+        } else {
+          Object.keys(COURSE_THEMES).forEach(cKey => {
+            if (cKey === "General") return;
+            if (isFiltered && cKey !== activeCourseFilter) return;
+            const theme = COURSE_THEMES[cKey];
+            const cx = theme.center.x;
+            const cy = theme.center.y;
+
+            // Ambient Radial Nebula
+            const grad = ctx.createRadialGradient(cx, cy, 20, cx, cy, 520);
+            grad.addColorStop(0, theme.glow);
+            grad.addColorStop(0.5, theme.glow.replace(/[\d\.]+\)$/, "0.08)"));
+            grad.addColorStop(1, "rgba(0, 0, 0, 0)");
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.arc(cx, cy, 520, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Celestial Watermark
+            ctx.save();
+            ctx.font = `800 ${Math.max(26, 32 / Math.sqrt(transform.k))}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillStyle = theme.color;
+            ctx.globalAlpha = 0.14;
+            ctx.fillText(theme.name.toUpperCase(), cx, cy - 210);
+            ctx.restore();
+          });
+        }
 
         // Pass 1: Render Synaptic Edges
         ctx.lineCap = "round";
