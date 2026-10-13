@@ -707,36 +707,37 @@
     const rawData = /* __GRAPH_DATA__ */;
 
     // Course Palette & Galaxy Centers
+    // Course Palette & Galaxy Centers (Separated into 4 spacious cosmic quadrants)
     const COURSE_THEMES = {
       "41200 - Engineering Project Appraisal": {
         name: "41200 EPA",
         color: "#fab387", // Warm Amber
-        glow: "rgba(250, 179, 135, 0.45)",
-        center: { x: -360, y: -90 }
+        glow: "rgba(250, 179, 135, 0.4)",
+        center: { x: -500, y: -290 }
       },
       "48430 - Fundamentals of C Programming": {
         name: "48430 C Prog",
         color: "#a6e3a1", // Emerald Mint
-        glow: "rgba(166, 227, 161, 0.45)",
-        center: { x: 360, y: -90 }
+        glow: "rgba(166, 227, 161, 0.4)",
+        center: { x: 500, y: -290 }
       },
       "48520 - Electronics and Circuits": {
         name: "48520 Circuits",
         color: "#89b4fa", // Electric Azure
-        glow: "rgba(137, 180, 250, 0.45)",
-        center: { x: -360, y: 260 }
+        glow: "rgba(137, 180, 250, 0.4)",
+        center: { x: -500, y: 310 }
       },
       "48521 - Foundations of Electrical and Electronic Technology": {
         name: "48521 FEET",
         color: "#cba6f7", // Neon Violet
-        glow: "rgba(203, 166, 247, 0.45)",
-        center: { x: 360, y: 260 }
+        glow: "rgba(203, 166, 247, 0.4)",
+        center: { x: 500, y: 310 }
       },
       "General": {
         name: "Core Overviews",
         color: "#f5e0dc", // Platinum Rose
-        glow: "rgba(245, 224, 220, 0.45)",
-        center: { x: 0, y: 80 }
+        glow: "rgba(245, 224, 220, 0.4)",
+        center: { x: 0, y: 0 }
       }
     };
 
@@ -749,8 +750,8 @@
       let height = container.clientHeight || window.innerHeight;
       const dpr = window.devicePixelRatio || 1;
 
-      // Transform and Interactive State
-      let transform = d3.zoomIdentity.translate(width / 2, height / 2 + 40).scale(0.56);
+      // Transform and Interactive State (Fits full 4-galaxy cosmos in viewport)
+      let transform = d3.zoomIdentity.translate(width / 2, height / 2 + 10).scale(0.58);
       let selectedNode = null;
       let hoveredNode = null;
       let activeCourseFilter = "ALL";
@@ -758,7 +759,7 @@
       let showLabels = true;
       let enableHaloBloom = true;
       let enablePulses = true;
-      let clusterStrength = 0.12;
+      let clusterStrength = 0.22;
       let pulseTime = 0;
       let animFrameRequested = false;
 
@@ -802,6 +803,12 @@
         const cleaned = cleanNodeTitle(rawLabel);
         const short = cleaned.length > 25 ? (cleaned.slice(0, 24) + '…') : cleaned;
 
+        const cTheme = COURSE_THEMES[course] || COURSE_THEMES["General"] || { center: { x: 0, y: 0 } };
+        const angle = Math.random() * Math.PI * 2;
+        const dist = 30 + Math.random() * 220;
+        const initX = cTheme.center.x + Math.cos(angle) * dist;
+        const initY = cTheme.center.y + Math.sin(angle) * dist;
+
         const nodeObj = {
           id: d.id,
           label: rawLabel,
@@ -820,6 +827,8 @@
           cornellPath: d.cornell_path || "",
           cornellCues: d.cornell_cues || 0,
           radius: (d.type === "ModuleHub") ? 13 : Math.max(3.5, Math.min(13, 3.2 + Math.sqrt(d.degree || 0) * 1.8)),
+          x: initX,
+          y: initY,
           neighbors: new Set(),
           links: []
         };
@@ -978,12 +987,12 @@
           });
           simulation.force("charge").strength(d => {
             if (currentViewMode === "semantic" && d.type === "ModuleHub") return 0;
-            if (d.type === "ModuleHub") return -320;
-            return d.degree >= 3 ? -220 : -130;
+            if (d.type === "ModuleHub") return -480;
+            return d.degree >= 3 ? -240 : -130;
           });
           simulation.force("collide").radius(d => {
             if (currentViewMode === "semantic" && d.type === "ModuleHub") return 0;
-            return d.radius + (d.type === "ModuleHub" ? 18 : (d.degree >= 3 ? 14 : 7));
+            return d.radius + (d.type === "ModuleHub" ? 30 : (d.degree >= 3 ? 14 : 7));
           });
           if (reheat) {
             simulation.alpha(0.65).restart();
@@ -996,9 +1005,9 @@
       // D3 Force Simulation Setup (Real Obsidian Elastic Movement)
       simulation = d3.forceSimulation(nodes)
         .force("link", d3.forceLink(links).id(d => d.id).distance(d => {
-          if (d.type === "spine") return 95;
-          if (d.type === "containment") return 42;
-          return 65;
+          if (d.type === "spine") return 130;
+          if (d.type === "containment") return 50;
+          return 70;
         }).strength(d => {
           if (currentViewMode === "semantic" && (d.type === "spine" || d.type === "containment")) return 0;
           if (d.type === "spine") return 0.45;
@@ -1007,14 +1016,14 @@
         }))
         .force("charge", d3.forceManyBody().strength(d => {
           if (currentViewMode === "semantic" && d.type === "ModuleHub") return 0;
-          if (d.type === "ModuleHub") return -320;
-          return d.degree >= 3 ? -220 : -130;
-        }).distanceMax(550))
+          if (d.type === "ModuleHub") return -480;
+          return d.degree >= 3 ? -240 : -130;
+        }).distanceMax(600))
         .force("collide", d3.forceCollide().radius(d => {
           if (currentViewMode === "semantic" && d.type === "ModuleHub") return 0;
-          return d.radius + (d.type === "ModuleHub" ? 18 : (d.degree >= 3 ? 14 : 7));
-        }).strength(0.75))
-        .force("center", d3.forceCenter(0, 0).strength(0.04))
+          return d.radius + (d.type === "ModuleHub" ? 30 : (d.degree >= 3 ? 14 : 7));
+        }).strength(0.85))
+        .force("center", d3.forceCenter(0, 0).strength(0.005))
         .force("clusterX", d3.forceX().x(d => (COURSE_THEMES[d.course] || COURSE_THEMES["General"]).center.x).strength(clusterStrength))
         .force("clusterY", d3.forceY().y(d => (COURSE_THEMES[d.course] || COURSE_THEMES["General"]).center.y).strength(clusterStrength))
         .alphaDecay(0.022);
@@ -1036,6 +1045,35 @@
         const isFiltered = activeCourseFilter !== "ALL";
         const hasActiveFocus = selectedNode !== null || hoveredNode !== null;
         const activeNode = hoveredNode || selectedNode;
+
+        // Pass 0: Galaxy Nebula Glows & Celestial Watermarks
+        Object.keys(COURSE_THEMES).forEach(cKey => {
+          if (cKey === "General") return;
+          if (isFiltered && cKey !== activeCourseFilter) return;
+          const theme = COURSE_THEMES[cKey];
+          const cx = theme.center.x;
+          const cy = theme.center.y;
+
+          // Ambient Radial Nebula
+          const grad = ctx.createRadialGradient(cx, cy, 20, cx, cy, 520);
+          grad.addColorStop(0, theme.glow);
+          grad.addColorStop(0.5, theme.glow.replace(/[\d\.]+\)$/, "0.08)"));
+          grad.addColorStop(1, "rgba(0, 0, 0, 0)");
+          ctx.fillStyle = grad;
+          ctx.beginPath();
+          ctx.arc(cx, cy, 520, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Celestial Watermark
+          ctx.save();
+          ctx.font = `800 ${Math.max(26, 32 / Math.sqrt(transform.k))}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillStyle = theme.color;
+          ctx.globalAlpha = 0.14;
+          ctx.fillText(theme.name.toUpperCase(), cx, cy - 210);
+          ctx.restore();
+        });
 
         // Pass 1: Render Synaptic Edges
         ctx.lineCap = "round";
@@ -1309,7 +1347,7 @@
             }
 
             // Cull lower priority labels that collide; active node always gets drawn
-            if (collides && !isNodeActive && n.type !== "ModuleHub") {
+            if (collides && !isNodeActive) {
               continue;
             }
 
@@ -1319,12 +1357,24 @@
             ctx.textAlign = "center";
             ctx.textBaseline = "top";
 
-            // Dark Text Halo for legibility over edges & blooms
-            ctx.lineJoin = "round";
-            ctx.miterLimit = 2;
-            ctx.lineWidth = (isNodeActive ? 4.5 : 3.2) / transform.k;
-            ctx.strokeStyle = "#0b0c10";
-            ctx.strokeText(labelText, n.x, boxY);
+            // Semi-transparent pill backdrop for ModuleHub or active node
+            if (n.type === "ModuleHub" || isNodeActive) {
+              ctx.fillStyle = "rgba(11, 12, 16, 0.85)";
+              ctx.strokeStyle = isNodeActive ? "rgba(137, 180, 250, 0.6)" : "rgba(249, 226, 175, 0.35)";
+              ctx.lineWidth = 1 / transform.k;
+              const r = 3 / transform.k;
+              ctx.beginPath();
+              ctx.roundRect(box.x1, box.y1, box.x2 - box.x1, box.y2 - box.y1, r);
+              ctx.fill();
+              ctx.stroke();
+            } else {
+              // Dark Text Halo for legibility over edges & blooms
+              ctx.lineJoin = "round";
+              ctx.miterLimit = 2;
+              ctx.lineWidth = 3.2 / transform.k;
+              ctx.strokeStyle = "#0b0c10";
+              ctx.strokeText(labelText, n.x, boxY);
+            }
 
             ctx.fillStyle = isNodeActive ? "#ffffff" : (n.type === "ModuleHub" ? "#f9e2af" : (isNeighbor ? "#cdd6f4" : "#a6adc8"));
             ctx.fillText(labelText, n.x, boxY);
