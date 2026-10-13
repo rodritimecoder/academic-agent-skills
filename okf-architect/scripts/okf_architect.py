@@ -145,6 +145,27 @@ def validate_bundle(bundle_root: Path) -> bool:
         if "description" not in meta:
             warnings += 1
 
+    # Audit Concept Title Uniqueness & Generic Placeholders
+    course_titles: Dict[str, Dict[str, List[str]]] = {}
+    for md_file in all_files:
+        if md_file.name in RESERVED_FILENAMES: continue
+        meta, _ = parse_frontmatter(md_file)
+        t = meta.get("title", md_file.stem)
+        parts = md_file.relative_to(bundle_root).parts
+        crs = parts[0] if len(parts) > 1 else "General"
+        course_titles.setdefault(crs, {}).setdefault(t, []).append(md_file.name)
+
+    title_dups = 0
+    for crs, t_map in course_titles.items():
+        for t, flist in t_map.items():
+            if len(flist) > 1:
+                print(f"  ⚠️  Warning [{crs}]: Duplicate concept title '{t}' shared across: {', '.join(flist)}")
+                warnings += 1
+                title_dups += 1
+
+    if title_dups == 0:
+        print("  ✅ Concept titles are distinct across all courses (0 duplicates)")
+
     print(f"\n📊 [Validation Summary]")
     print(f"  • Concepts Found:   {concepts_count}")
     print(f"  • Total Errors:     {errors}")
@@ -583,6 +604,19 @@ def build_graph_nodes(
         module_hubs.setdefault(course, {})
         if mod_id not in module_hubs[course]:
             module_hubs[course][mod_id] = ModuleHub(id=mod_id, label=mod_label, order=mod_order, course=course)
+
+        # Fallback guard: Auto-enrich bare generic titles if they lack academic context
+        cleaned_check = re.sub(r'^\[[^\]]+\]\s*', '', title)
+        cleaned_check = re.sub(r'^(?:week|w)\s*\d+[\s:_-]*', '', cleaned_check, flags=re.IGNORECASE).strip()
+        GENERIC_TITLES = {
+            "overview", "topic notes", "tutorial recording", "tutorial solutions",
+            "knowledge recap", "lecture notes", "ppt", "tutorial", "notes", "summary"
+        }
+        if cleaned_check.lower() in GENERIC_TITLES and mod_label and mod_label not in ("Overview", "Course Overview"):
+            course_code = course.split()[0]
+            w_match = re.search(r'\b(?:week|w)[_\s-]*(\d{1,2})\b', str(rel_path), re.IGNORECASE)
+            w_badge = f" W{int(w_match.group(1)):02d}" if w_match else ""
+            title = f"[{course_code}{w_badge}] {cleaned_check.title()}: {mod_label}"
 
         clean_stem = md_file.stem.lower().replace("-", "_").replace(" ", "_")
         cornell_info = cornell_map.get(clean_stem)

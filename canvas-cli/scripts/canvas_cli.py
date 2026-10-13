@@ -89,7 +89,82 @@ TIMEOUT = 30
 MAX_RETRIES = 4
 RETRY_STATUSES = frozenset({429, 500, 502, 503, 504})
 
-# ── HTTP ──────────────────────────────────────────────────────────────────────
+# ── Slug & Naming Normalization (OKF Standard) ─────────────────────────────────
+
+def clean_okf_slug(title: str, course_code: str | None = None, week: str | int | None = None) -> str:
+    """
+    Produce a clean, emoji-free, predictable OKF concept slug.
+    Format: [course_]w[week_]type_topic-slug
+    """
+    s = title.strip()
+    # Strip emojis and non-ASCII decorative symbols
+    s = re.sub(r'[\U00010000-\U0010ffff]', '', s)
+    s = re.sub(r'[^\x00-\x7F]+', '', s)
+    # Remove file extensions and raw query noise
+    s = re.sub(r'\.(md|html|pdf|docx|pptx)$', '', s, flags=re.IGNORECASE)
+    # Replace punctuation and separators with single dashes
+    s = re.sub(r'[\s_:\-\—\–\/\(\)\,\@\%\&]+', '-', s)
+    s = s.strip('-').lower()
+
+    parts = []
+    if course_code:
+        c_clean = str(course_code).split()[0].lower()
+        parts.append(c_clean)
+    if week is not None:
+        try:
+            w_num = int(str(week).lower().replace("week", "").replace("w", "").strip())
+            parts.append(f"w{w_num:02d}")
+        except ValueError:
+            pass
+    parts.append(s or "untitled")
+    return "_".join(parts)
+
+
+GENERIC_ITEM_PATTERNS = re.compile(
+    r'^(?:overview|topic\s*notes|tutorial(?:\s*recording|\s*solutions|\s*questions)?|'
+    r'knowledge\s*recap|lecture(?:\s*notes|\s*recording)?|slides?|ppt|solutions?|summary)$',
+    re.IGNORECASE
+)
+
+def build_descriptive_title(
+    item_title: str,
+    module_name: str | None = None,
+    course_code: str | None = None,
+    week: str | int | None = None
+) -> str:
+    """
+    Produce a descriptive OKF title for an academic note.
+    If the raw Canvas title is generic (e.g. 'overview', 'topic notes', 'tutorial recording'),
+    automatically absorbs the module topic to ensure uniqueness across the course.
+    Example: '[48520 W05] Module Overview: First-Order Step Response'
+    """
+    clean_item = item_title.strip()
+    clean_item = re.sub(r'[\U00010000-\U0010ffff]', '', clean_item).strip()
+    clean_item = re.sub(r'\.(md|html|pdf|docx|pptx)$', '', clean_item, flags=re.IGNORECASE).strip()
+
+    # Determine week tag
+    week_tag = ""
+    if week is not None:
+        try:
+            w_num = int(str(week).lower().replace("week", "").replace("w", "").strip())
+            week_tag = f"W{w_num:02d}"
+        except ValueError:
+            pass
+
+    # Build badge: e.g. "[48520 W05]" or "[48520]"
+    c_badge = str(course_code).split()[0] if course_code else ""
+    badge_parts = [c_badge, week_tag] if week_tag else [c_badge]
+    badge = f"[{' '.join(p for p in badge_parts if p)}] " if any(badge_parts) else ""
+
+    # Check if item title is generic
+    item_stripped = re.sub(r'^(?:week|w)\s*\d+[\s:_-]*', '', clean_item, flags=re.IGNORECASE).strip()
+    if GENERIC_ITEM_PATTERNS.match(item_stripped) and module_name:
+        mod_clean = re.sub(r'^(?:week|w)\s*\d+[\s:_-]*', '', module_name, flags=re.IGNORECASE).strip()
+        if mod_clean and mod_clean.lower() not in item_stripped.lower():
+            return f"{badge}{item_stripped.title()}: {mod_clean}"
+
+    return f"{badge}{clean_item}"
+
 
 def _format_param_val(v):
     if isinstance(v, bool):
