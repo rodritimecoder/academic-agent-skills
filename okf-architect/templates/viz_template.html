@@ -1,0 +1,1607 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>University Knowledge Cosmos — OKF Graph Viewer</title>
+  <!-- Inlined D3.js v7 for 100% offline standalone portability -->
+  <script>/* __D3_INLINE__ */</script>
+  <script>
+    if (typeof d3 === 'undefined') {
+      document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"><\/script>');
+    }
+  </script>
+  <style>
+    :root {
+      --bg: #0b0c10;
+      --bg-panel: rgba(18, 19, 26, 0.85);
+      --bg-panel-hover: rgba(28, 30, 42, 0.95);
+      --border: rgba(255, 255, 255, 0.08);
+      --border-active: rgba(137, 180, 250, 0.5);
+      --text: #cdd6f4;
+      --text-muted: #7f849c;
+      --accent: #89b4fa;
+      --accent-glow: rgba(137, 180, 250, 0.35);
+      --drawer-bg: rgba(15, 16, 23, 0.96);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body, html {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, Helvetica, Arial, sans-serif;
+      color: var(--text);
+      user-select: none;
+    }
+
+    /* Main Canvas Area */
+    #graphContainer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      cursor: grab;
+      background: radial-gradient(circle at 50% 50%, #141522 0%, #0b0c10 100%);
+    }
+    #graphContainer:active {
+      cursor: grabbing;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Floating Glassmorphic Header Toolbar */
+    .hud-header {
+      position: absolute;
+      top: 14px;
+      left: 16px;
+      right: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      pointer-events: none;
+      z-index: 20;
+    }
+    .hud-left, .hud-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      pointer-events: auto;
+    }
+    .glass-card {
+      background: var(--bg-panel);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 6px 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+    }
+    .badge-logo {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .badge-logo::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 10px var(--accent);
+    }
+    .stats-label {
+      font-size: 12px;
+      color: var(--text-muted);
+      border-left: 1px solid var(--border);
+      padding-left: 10px;
+    }
+    .stats-label span {
+      color: #fff;
+      font-weight: 600;
+    }
+
+    /* Search Box */
+    .search-wrapper {
+      position: relative;
+      width: 260px;
+    }
+    .search-input {
+      width: 100%;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 6px 12px 6px 28px;
+      border-radius: 8px;
+      font-size: 12px;
+      outline: none;
+      transition: all 0.2s ease;
+    }
+    .search-input:focus {
+      border-color: var(--accent);
+      background: rgba(255, 255, 255, 0.08);
+      box-shadow: 0 0 12px var(--accent-glow);
+    }
+    .search-icon {
+      position: absolute;
+      left: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 12px;
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+
+    /* Course Filter Chips */
+    .course-chips {
+      position: absolute;
+      top: 68px;
+      left: 16px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      z-index: 20;
+      pointer-events: auto;
+      max-width: 80%;
+    }
+    .chip {
+      background: var(--bg-panel);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 5px 12px;
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--text-muted);
+      transition: all 0.2s ease;
+    }
+    .chip:hover {
+      background: var(--bg-panel-hover);
+      color: #fff;
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+    .chip.active {
+      color: #fff;
+      border-color: var(--chip-color, var(--accent));
+      background: rgba(255, 255, 255, 0.08);
+      box-shadow: 0 0 10px var(--chip-glow, var(--accent-glow));
+    }
+    .chip-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--chip-color, var(--accent));
+    }
+
+    /* Canvas Week / Module Filter Chips */
+    .week-chips-bar {
+      position: absolute;
+      top: 104px;
+      left: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      z-index: 20;
+      pointer-events: auto;
+      max-width: calc(100% - 32px);
+    }
+    .week-chips-scroll {
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      scrollbar-width: none;
+      padding: 2px 0;
+    }
+    .week-chips-scroll::-webkit-scrollbar { display: none; }
+    .cornell-toggle-chip {
+      background: var(--bg-panel);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(166, 227, 161, 0.35);
+      color: #cdd6f4;
+      font-size: 11px;
+      font-weight: 500;
+      padding: 5px 12px;
+      border-radius: 20px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+      transition: all 0.2s ease;
+    }
+    .cornell-toggle-chip:hover {
+      background: rgba(166, 227, 161, 0.15);
+      border-color: #a6e3a1;
+      color: #fff;
+    }
+    .cornell-toggle-chip.active {
+      background: rgba(166, 227, 161, 0.25);
+      border-color: #a6e3a1;
+      color: #a6e3a1;
+      box-shadow: 0 0 10px rgba(166, 227, 161, 0.3);
+    }
+    .cornell-portal-link {
+      background: var(--bg-panel);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(137, 180, 250, 0.35);
+      color: #89b4fa;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 5px 12px;
+      border-radius: 20px;
+      text-decoration: none;
+      white-space: nowrap;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.2s ease;
+    }
+    .cornell-portal-link:hover {
+      background: rgba(137, 180, 250, 0.2);
+      box-shadow: 0 0 10px rgba(137, 180, 250, 0.3);
+    }
+
+    /* Graph View Mode Switcher */
+    .view-mode-toggle {
+      display: flex;
+      background: var(--bg-panel);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 3px;
+      gap: 3px;
+    }
+    .mode-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 600;
+      padding: 5px 12px;
+      border-radius: 16px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      user-select: none;
+    }
+    .mode-btn:hover {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.05);
+    }
+    .mode-btn.active {
+      background: rgba(137, 180, 250, 0.18);
+      color: #89b4fa;
+      border-color: rgba(137, 180, 250, 0.4);
+      box-shadow: 0 0 10px rgba(137, 180, 250, 0.25);
+    }
+
+    .cornell-action-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      padding: 10px 14px;
+      background: linear-gradient(135deg, rgba(30, 58, 47, 0.9), rgba(20, 40, 33, 0.9));
+      border: 1px solid #a6e3a1;
+      border-radius: 8px;
+      color: #a6e3a1;
+      font-weight: 600;
+      font-size: 12px;
+      text-decoration: none;
+      transition: all 0.2s ease;
+      box-shadow: 0 2px 8px rgba(166, 227, 161, 0.15);
+    }
+    .cornell-action-btn:hover {
+      background: linear-gradient(135deg, #2d5544, #1e3a2f);
+      box-shadow: 0 4px 14px rgba(166, 227, 161, 0.35);
+      transform: translateY(-1px);
+    }
+
+    /* Floating Tool Buttons */
+    .btn-icon {
+      background: var(--bg-panel);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border);
+      color: var(--text);
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 14px;
+      transition: all 0.2s;
+    }
+    .btn-icon:hover {
+      border-color: var(--accent);
+      color: #fff;
+      box-shadow: 0 0 10px var(--accent-glow);
+    }
+    .btn-icon.active {
+      background: var(--accent);
+      color: #0b0c10;
+      border-color: var(--accent);
+    }
+
+    /* Settings Control Panel */
+    .settings-popover {
+      position: absolute;
+      top: 60px;
+      right: 16px;
+      width: 280px;
+      background: var(--bg-panel);
+      backdrop-filter: blur(18px);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      display: none;
+      flex-direction: column;
+      gap: 14px;
+      z-index: 25;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+    }
+    .settings-popover.open {
+      display: flex;
+    }
+    .pop-title {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--text-muted);
+      margin-bottom: 2px;
+    }
+    .setting-row {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .setting-label {
+      font-size: 11px;
+      display: flex;
+      justify-content: space-between;
+      color: var(--text);
+    }
+    .setting-label span {
+      color: var(--text-muted);
+    }
+    input[type=range] {
+      width: 100%;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .toggle-switch {
+      width: 32px;
+      height: 18px;
+      background: #313244;
+      border-radius: 10px;
+      position: relative;
+      transition: background 0.2s;
+    }
+    .toggle-switch::after {
+      content: "";
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 14px;
+      height: 14px;
+      background: #fff;
+      border-radius: 50%;
+      transition: transform 0.2s;
+    }
+    .toggle-active .toggle-switch {
+      background: var(--accent);
+    }
+    .toggle-active .toggle-switch::after {
+      transform: translateX(14px);
+    }
+
+    /* Details Drawer */
+    #detailsDrawer {
+      position: absolute;
+      top: 14px;
+      bottom: 14px;
+      right: 16px;
+      width: 380px;
+      background: var(--drawer-bg);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 22px;
+      display: none;
+      flex-direction: column;
+      gap: 16px;
+      z-index: 30;
+      box-shadow: 0 16px 50px rgba(0, 0, 0, 0.7);
+      overflow-y: auto;
+      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    #detailsDrawer.open {
+      display: flex;
+    }
+    .drawer-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .drawer-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: #fff;
+      line-height: 1.35;
+    }
+    .drawer-close {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 18px;
+      cursor: pointer;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .drawer-close:hover {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.1);
+    }
+    .course-badge {
+      display: inline-block;
+      align-self: flex-start;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid var(--border);
+    }
+    .meta-block {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .meta-tag {
+      font-size: 10px;
+      text-transform: uppercase;
+      font-weight: 700;
+      letter-spacing: 0.6px;
+      color: var(--text-muted);
+    }
+    .meta-content {
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--text);
+      word-break: break-word;
+    }
+    .tag-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .pill {
+      font-size: 10px;
+      background: rgba(255, 255, 255, 0.06);
+      color: #fab387;
+      padding: 3px 8px;
+      border-radius: 4px;
+      border: 1px solid rgba(250, 179, 135, 0.2);
+    }
+    .connections-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-height: 240px;
+      overflow-y: auto;
+    }
+    .conn-item {
+      padding: 6px 10px;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border);
+      font-size: 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s;
+    }
+    .conn-item:hover {
+      background: rgba(137, 180, 250, 0.1);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .conn-arrow {
+      color: var(--accent);
+      font-weight: bold;
+    }
+
+    /* Bottom Quick Legend */
+    .legend-bar {
+      position: absolute;
+      bottom: 16px;
+      left: 16px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      background: var(--bg-panel);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 6px 14px;
+      font-size: 11px;
+      color: var(--text-muted);
+      z-index: 20;
+      pointer-events: auto;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .legend-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Background Interactive Graph Canvas -->
+  <div id="graphContainer">
+    <canvas id="graphCanvas"></canvas>
+  </div>
+
+  <!-- Top Navigation & Stats Bar -->
+  <header class="hud-header">
+    <div class="hud-left">
+      <div class="glass-card">
+        <div class="badge-logo">Knowledge Cosmos</div>
+        <div class="stats-label"><span id="nodeCount">0</span> Neurons &bull; <span id="edgeCount">0</span> Synapses</div>
+      </div>
+
+      <div class="glass-card search-wrapper">
+        <span class="search-icon">&#128269;</span>
+        <input type="text" id="searchInput" class="search-input" placeholder="Search concept, course, tag...">
+      </div>
+    </div>
+
+    <div class="hud-right">
+      <div class="view-mode-toggle" id="viewModeToggle" title="Toggle between Canvas Week Constellations and Classic Semantic Obsidian Web">
+        <button class="mode-btn active" id="btnModeConstellation" onclick="setViewMode('constellation')">
+          <span>📅</span> Canvas Constellations
+        </button>
+        <button class="mode-btn" id="btnModeSemantic" onclick="setViewMode('semantic')">
+          <span>🌌</span> Semantic Web
+        </button>
+      </div>
+
+      <div class="glass-card" style="padding: 4px 6px;">
+        <button id="resetBtn" class="btn-icon" title="Reset Zoom & Center">&#8982;</button>
+        <button id="toggleLabelsBtn" class="btn-icon active" title="Toggle Labels">Aa</button>
+        <button id="settingsBtn" class="btn-icon" title="Physics & Graph Settings">&#9881;</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Course Galaxy Filter Chips -->
+  <div class="course-chips" id="courseChips"></div>
+
+  <!-- Canvas Module / Week Filter Chips -->
+  <div class="week-chips-bar" id="weekFilterBar">
+    <div class="week-chips-scroll" id="weekChips"></div>
+    <button class="cornell-toggle-chip" id="cornellToggleChip" onclick="toggleCornellFilter()" title="Filter to notes with Cornell Revision HTML">
+      <span class="chip-dot" style="background:#a6e3a1;"></span>📝 Cornell Notes (<span id="cornellCount">0</span>)
+    </button>
+    <a href="cornell_index.html" target="_blank" class="cornell-portal-link" title="Open Canvas Cornell Study Portal">
+      📖 Study Portal &rsaquo;
+    </a>
+  </div>
+
+  <!-- Settings Popover -->
+  <div class="settings-popover" id="settingsPopover">
+    <div class="pop-title">Simulation Physics</div>
+
+    <div class="setting-row">
+      <div class="setting-label">Repulsion Charge <span id="valCharge">-180</span></div>
+      <input type="range" id="sliderCharge" min="-600" max="-40" value="-180" step="10">
+    </div>
+
+    <div class="setting-row">
+      <div class="setting-label">Synaptic Elasticity <span id="valLink">65</span></div>
+      <input type="range" id="sliderLink" min="20" max="180" value="65" step="5">
+    </div>
+
+    <div class="setting-row">
+      <div class="setting-label">Galaxy Clustering <span id="valCluster">0.12</span></div>
+      <input type="range" id="sliderCluster" min="0" max="0.35" value="0.12" step="0.01">
+    </div>
+
+    <div class="pop-title" style="margin-top: 6px;">Visual Aesthetics</div>
+
+    <div class="toggle-row toggle-active" id="toggleGlowRow">
+      <span>Neuron Halo Bloom</span>
+      <div class="toggle-switch"></div>
+    </div>
+
+    <div class="toggle-row toggle-active" id="togglePulsesRow">
+      <span>Active Synapse Pulse</span>
+      <div class="toggle-switch"></div>
+    </div>
+  </div>
+
+  <!-- Details Drawer (Slide-out Inspector) -->
+  <div id="detailsDrawer">
+    <div class="drawer-header">
+      <div class="drawer-title" id="dTitle">Concept Title</div>
+      <button class="drawer-close" id="drawerClose">&times;</button>
+    </div>
+
+    <div id="dCourseBadge" class="course-badge">Course Name</div>
+
+    <div class="action-block" id="dCornellBlock" style="display:none; margin: 4px 0 8px 0;">
+      <a id="dCornellLink" href="#" target="_blank" class="cornell-action-btn">
+        <span>📝</span> Open Interactive Cornell Notes (<span id="dCornellCues">0</span> Cues)
+      </a>
+    </div>
+
+    <div class="meta-block">
+      <div class="meta-tag">Concept ID & Path</div>
+      <div class="meta-content" id="dId" style="font-family: monospace; font-size: 11px; color: var(--accent);">id</div>
+    </div>
+
+    <div class="meta-block">
+      <div class="meta-tag">Trust Tier</div>
+      <div class="meta-content" id="dTrust">Human-Reviewed</div>
+    </div>
+
+    <div class="meta-block">
+      <div class="meta-tag">Description</div>
+      <div class="meta-content" id="dDesc">Description goes here...</div>
+    </div>
+
+    <div class="meta-block" id="tagsContainer">
+      <div class="meta-tag">Tags</div>
+      <div class="tag-container" id="dTags"></div>
+    </div>
+
+    <div class="meta-block">
+      <div class="meta-tag">Connected Synapses (<span id="dLinkCount">0</span>)</div>
+      <ul class="connections-list" id="dLinks"></ul>
+    </div>
+  </div>
+
+  <!-- Bottom Legend -->
+  <div class="legend-bar" id="legendBar"></div>
+
+  <script>
+    // Injected Graph Payload from okf-architect
+    const rawData = /* __GRAPH_DATA__ */;
+
+    // Course Palette & Galaxy Centers
+    const COURSE_THEMES = {
+      "41200 - Engineering Project Appraisal": {
+        name: "41200 EPA",
+        color: "#fab387", // Warm Amber
+        glow: "rgba(250, 179, 135, 0.45)",
+        center: { x: -360, y: -90 }
+      },
+      "48430 - Fundamentals of C Programming": {
+        name: "48430 C Prog",
+        color: "#a6e3a1", // Emerald Mint
+        glow: "rgba(166, 227, 161, 0.45)",
+        center: { x: 360, y: -90 }
+      },
+      "48520 - Electronics and Circuits": {
+        name: "48520 Circuits",
+        color: "#89b4fa", // Electric Azure
+        glow: "rgba(137, 180, 250, 0.45)",
+        center: { x: -360, y: 260 }
+      },
+      "48521 - Foundations of Electrical and Electronic Technology": {
+        name: "48521 FEET",
+        color: "#cba6f7", // Neon Violet
+        glow: "rgba(203, 166, 247, 0.45)",
+        center: { x: 360, y: 260 }
+      },
+      "General": {
+        name: "Core Overviews",
+        color: "#f5e0dc", // Platinum Rose
+        glow: "rgba(245, 224, 220, 0.45)",
+        center: { x: 0, y: 80 }
+      }
+    };
+
+    document.addEventListener("DOMContentLoaded", () => {
+      const container = document.getElementById("graphContainer");
+      const canvas = document.getElementById("graphCanvas");
+      const ctx = canvas.getContext("2d");
+
+      let width = container.clientWidth || window.innerWidth;
+      let height = container.clientHeight || window.innerHeight;
+      const dpr = window.devicePixelRatio || 1;
+
+      // Transform and Interactive State
+      let transform = d3.zoomIdentity.translate(width / 2, height / 2 + 40).scale(0.56);
+      let selectedNode = null;
+      let hoveredNode = null;
+      let activeCourseFilter = "ALL";
+      let searchQuery = "";
+      let showLabels = true;
+      let enableHaloBloom = true;
+      let enablePulses = true;
+      let clusterStrength = 0.12;
+      let pulseTime = 0;
+      let animFrameRequested = false;
+
+      // Render Request Helper
+      function requestRender() {
+        if (!animFrameRequested) {
+          animFrameRequested = true;
+          requestAnimationFrame(render);
+        }
+      }
+
+      function resize() {
+        width = container.clientWidth || window.innerWidth;
+        height = container.clientHeight || window.innerHeight;
+        canvas.width = width * dpr;
+        canvas.height = height * dpr;
+        ctx.scale(dpr, dpr);
+        requestRender();
+      }
+      window.addEventListener("resize", resize);
+
+      // Title cleaner to remove redundant course/week prefixes
+      function cleanNodeTitle(raw) {
+        if (!raw) return "";
+        let s = raw;
+        // Strip redundant bracket prefixes like [41200], [48520 W09], [48520] [48520]
+        s = s.replace(/^(\[[^\]]+\]\s*)+/g, "");
+        // Strip leading week tags like "Week 09 - ", "w09_"
+        s = s.replace(/^(?:Week|w)\s*\d+[\s_-]*/i, "");
+        s = s.replace(/_/g, " ");
+        s = s.trim();
+        return s || raw;
+      }
+
+      // Extract Nodes and Edges
+      const nodesMap = new Map();
+      const nodes = rawData.nodes.map(n => {
+        const d = n.data;
+        const course = d.course || (d.id.split('/')[0] || "General");
+        const rawLabel = d.label || d.id;
+        const cleaned = cleanNodeTitle(rawLabel);
+        const short = cleaned.length > 25 ? (cleaned.slice(0, 24) + '…') : cleaned;
+
+        const nodeObj = {
+          id: d.id,
+          label: rawLabel,
+          cleanTitle: cleaned,
+          shortTitle: short,
+          type: d.type || "Concept",
+          course: course,
+          module: d.module || "Overview",
+          moduleId: d.moduleId || "",
+          order: d.order || 0,
+          description: d.description || "",
+          tags: d.tags || [],
+          trust: d.trust || "Unverified",
+          degree: d.degree || 0,
+          hasCornell: d.has_cornell || false,
+          cornellPath: d.cornell_path || "",
+          cornellCues: d.cornell_cues || 0,
+          radius: (d.type === "ModuleHub") ? 13 : Math.max(3.5, Math.min(13, 3.2 + Math.sqrt(d.degree || 0) * 1.8)),
+          neighbors: new Set(),
+          links: []
+        };
+        nodesMap.set(nodeObj.id, nodeObj);
+        return nodeObj;
+      });
+
+      const links = [];
+      rawData.edges.forEach(e => {
+        const s = nodesMap.get(e.data.source);
+        const t = nodesMap.get(e.data.target);
+        if (s && t && s !== t) {
+          const linkObj = { source: s, target: t, id: e.data.id, type: e.data.type || "reference" };
+          links.push(linkObj);
+          s.neighbors.add(t);
+          t.neighbors.add(s);
+          s.links.push(linkObj);
+          t.links.push(linkObj);
+        }
+      });
+
+      // Update HUD stats
+      document.getElementById("nodeCount").textContent = nodes.length;
+      document.getElementById("edgeCount").textContent = links.length;
+      const cornellNodes = nodes.filter(n => n.hasCornell);
+      document.getElementById("cornellCount").textContent = cornellNodes.length;
+
+      let activeWeekFilter = "ALL";
+      let filterCornellOnly = false;
+
+      // Build Course Filter Chips & Legend
+      const courseChips = document.getElementById("courseChips");
+      const legendBar = document.getElementById("legendBar");
+
+      const allChip = document.createElement("div");
+      allChip.className = "chip active";
+      allChip.textContent = `All Galaxies (${nodes.length})`;
+      allChip.onclick = () => setCourseFilter("ALL", allChip);
+      courseChips.appendChild(allChip);
+
+      Object.keys(COURSE_THEMES).forEach(cKey => {
+        const cTheme = COURSE_THEMES[cKey];
+        const count = nodes.filter(n => n.course === cKey).length;
+        if (count === 0) return;
+
+        // Chip
+        const chip = document.createElement("div");
+        chip.className = "chip";
+        chip.style.setProperty("--chip-color", cTheme.color);
+        chip.style.setProperty("--chip-glow", cTheme.glow);
+        chip.innerHTML = `<span class="chip-dot"></span>${cTheme.name} (${count})`;
+        chip.onclick = () => setCourseFilter(cKey, chip);
+        courseChips.appendChild(chip);
+
+        // Legend item
+        const legItem = document.createElement("div");
+        legItem.className = "legend-item";
+        legItem.innerHTML = `<span class="legend-dot" style="background:${cTheme.color}"></span>${cTheme.name}`;
+        legendBar.appendChild(legItem);
+      });
+
+      function setCourseFilter(cKey, chipEl) {
+        activeCourseFilter = cKey;
+        document.querySelectorAll("#courseChips .chip").forEach(c => c.classList.remove("active"));
+        chipEl.classList.add("active");
+        renderWeekChips();
+        requestRender();
+      }
+
+      // Build Canvas Module / Week Filter Chips
+      const weekChips = document.getElementById("weekChips");
+      function renderWeekChips() {
+        weekChips.innerHTML = "";
+        const allWChip = document.createElement("div");
+        allWChip.className = `chip ${activeWeekFilter === "ALL" ? "active" : ""}`;
+        allWChip.textContent = "All Canvas Weeks";
+        allWChip.onclick = () => setWeekFilter("ALL", allWChip);
+        weekChips.appendChild(allWChip);
+
+        const uniqueWeeks = new Map();
+        nodes.forEach(n => {
+          if (activeCourseFilter !== "ALL" && n.course !== activeCourseFilter) return;
+          if (n.module && !uniqueWeeks.has(n.module)) {
+            uniqueWeeks.set(n.module, n.order || 50);
+          }
+        });
+        const sortedWeeks = Array.from(uniqueWeeks.entries()).sort((a, b) => a[1] - b[1]);
+
+        sortedWeeks.forEach(([wLabel, wOrder]) => {
+          const count = nodes.filter(n => (activeCourseFilter === "ALL" || n.course === activeCourseFilter) && n.module === wLabel && n.type !== "ModuleHub").length;
+          if (count === 0) return;
+          const wChip = document.createElement("div");
+          wChip.className = `chip ${activeWeekFilter === wLabel ? "active" : ""}`;
+          wChip.innerHTML = `${wLabel} <span style="font-size:9px;opacity:0.7;">(${count})</span>`;
+          wChip.onclick = () => setWeekFilter(wLabel, wChip);
+          weekChips.appendChild(wChip);
+        });
+      }
+      renderWeekChips();
+
+      function setWeekFilter(wKey, chipEl) {
+        activeWeekFilter = wKey;
+        document.querySelectorAll("#weekChips .chip").forEach(c => c.classList.remove("active"));
+        chipEl.classList.add("active");
+        requestRender();
+      }
+
+      function toggleCornellFilter() {
+        filterCornellOnly = !filterCornellOnly;
+        document.getElementById("cornellToggleChip").classList.toggle("active", filterCornellOnly);
+        requestRender();
+      }
+      window.toggleCornellFilter = toggleCornellFilter;
+
+      // View Mode State: 'constellation' (Canvas Weekly Spine) vs 'semantic' (Classic Obsidian Network)
+      let currentViewMode = localStorage.getItem("viz_view_mode") || "constellation";
+      let simulation = null;
+
+      function updateHUDCounts() {
+        if (currentViewMode === "semantic") {
+          const sNodes = nodes.filter(n => n.type !== "ModuleHub");
+          const sLinks = links.filter(l => l.type !== "spine" && l.type !== "containment" && l.source.type !== "ModuleHub" && l.target.type !== "ModuleHub");
+          document.getElementById("nodeCount").textContent = sNodes.length;
+          document.getElementById("edgeCount").textContent = sLinks.length;
+        } else {
+          document.getElementById("nodeCount").textContent = nodes.length;
+          document.getElementById("edgeCount").textContent = links.length;
+        }
+      }
+
+      function setViewMode(mode, reheat = true) {
+        currentViewMode = mode;
+        localStorage.setItem("viz_view_mode", mode);
+
+        const btnConstellation = document.getElementById("btnModeConstellation");
+        const btnSemantic = document.getElementById("btnModeSemantic");
+        const weekFilterBar = document.getElementById("weekFilterBar");
+
+        if (btnConstellation && btnSemantic) {
+          btnConstellation.classList.toggle("active", mode === "constellation");
+          btnSemantic.classList.toggle("active", mode === "semantic");
+        }
+
+        if (weekFilterBar) {
+          weekFilterBar.style.display = (mode === "constellation") ? "flex" : "none";
+        }
+
+        updateHUDCounts();
+
+        if (simulation) {
+          simulation.force("link").strength(d => {
+            if (currentViewMode === "semantic" && (d.type === "spine" || d.type === "containment")) return 0;
+            if (d.type === "spine") return 0.45;
+            if (d.type === "containment") return 0.35;
+            return 0.35;
+          });
+          simulation.force("charge").strength(d => {
+            if (currentViewMode === "semantic" && d.type === "ModuleHub") return 0;
+            if (d.type === "ModuleHub") return -320;
+            return d.degree >= 3 ? -220 : -130;
+          });
+          simulation.force("collide").radius(d => {
+            if (currentViewMode === "semantic" && d.type === "ModuleHub") return 0;
+            return d.radius + (d.type === "ModuleHub" ? 18 : (d.degree >= 3 ? 14 : 7));
+          });
+          if (reheat) {
+            simulation.alpha(0.65).restart();
+          }
+        }
+        requestRender();
+      }
+      window.setViewMode = setViewMode;
+
+      // D3 Force Simulation Setup (Real Obsidian Elastic Movement)
+      simulation = d3.forceSimulation(nodes)
+        .force("link", d3.forceLink(links).id(d => d.id).distance(d => {
+          if (d.type === "spine") return 95;
+          if (d.type === "containment") return 42;
+          return 65;
+        }).strength(d => {
+          if (currentViewMode === "semantic" && (d.type === "spine" || d.type === "containment")) return 0;
+          if (d.type === "spine") return 0.45;
+          if (d.type === "containment") return 0.35;
+          return 0.35;
+        }))
+        .force("charge", d3.forceManyBody().strength(d => {
+          if (currentViewMode === "semantic" && d.type === "ModuleHub") return 0;
+          if (d.type === "ModuleHub") return -320;
+          return d.degree >= 3 ? -220 : -130;
+        }).distanceMax(550))
+        .force("collide", d3.forceCollide().radius(d => {
+          if (currentViewMode === "semantic" && d.type === "ModuleHub") return 0;
+          return d.radius + (d.type === "ModuleHub" ? 18 : (d.degree >= 3 ? 14 : 7));
+        }).strength(0.75))
+        .force("center", d3.forceCenter(0, 0).strength(0.04))
+        .force("clusterX", d3.forceX().x(d => (COURSE_THEMES[d.course] || COURSE_THEMES["General"]).center.x).strength(clusterStrength))
+        .force("clusterY", d3.forceY().y(d => (COURSE_THEMES[d.course] || COURSE_THEMES["General"]).center.y).strength(clusterStrength))
+        .alphaDecay(0.022);
+
+      simulation.on("tick", requestRender);
+
+      // Render Function
+      function render() {
+        animFrameRequested = false;
+        pulseTime += 0.015;
+
+        ctx.save();
+        ctx.clearRect(0, 0, width, height);
+
+        // Apply Zoom & Pan
+        ctx.translate(transform.x, transform.y);
+        ctx.scale(transform.k, transform.k);
+
+        const isFiltered = activeCourseFilter !== "ALL";
+        const hasActiveFocus = selectedNode !== null || hoveredNode !== null;
+        const activeNode = hoveredNode || selectedNode;
+
+        // Pass 1: Render Synaptic Edges
+        ctx.lineCap = "round";
+        for (let i = 0; i < links.length; i++) {
+          const l = links[i];
+          const s = l.source;
+          const t = l.target;
+
+          // Filter invisibility
+          if (isFiltered && s.course !== activeCourseFilter && t.course !== activeCourseFilter) {
+            continue;
+          }
+
+          // In Semantic Web mode: suppress weekly spines, containment orbits, and ModuleHub connections
+          if (currentViewMode === "semantic") {
+            if (l.type === "spine" || l.type === "containment" || s.type === "ModuleHub" || t.type === "ModuleHub") {
+              continue;
+            }
+          }
+
+          if (s.x === undefined || s.y === undefined || t.x === undefined || t.y === undefined || isNaN(s.x) || isNaN(s.y) || isNaN(t.x) || isNaN(t.y)) {
+            continue;
+          }
+
+          let isConnected = false;
+          if (activeNode) {
+            isConnected = (s === activeNode || t === activeNode);
+          }
+
+          // Chronological Weekly Spine Track
+          if (l.type === "spine") {
+            ctx.lineWidth = (isConnected ? 3.2 : 2.2) / transform.k;
+            ctx.strokeStyle = isConnected ? "#f9e2af" : "rgba(249, 226, 175, 0.45)";
+            ctx.globalAlpha = hasActiveFocus ? (isConnected ? 1.0 : 0.12) : 0.85;
+            ctx.setLineDash([5 / transform.k, 4 / transform.k]);
+            ctx.beginPath();
+            ctx.moveTo(s.x, s.y);
+            ctx.lineTo(t.x, t.y);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            continue;
+          }
+
+          // Module Containment Orbital Edge
+          if (l.type === "containment") {
+            const isWeekActive = (activeWeekFilter === "ALL" || s.module === activeWeekFilter || t.module === activeWeekFilter);
+            ctx.lineWidth = (isConnected ? 1.6 : 0.6) / transform.k;
+            const sourceColor = (COURSE_THEMES[s.course] || COURSE_THEMES["General"]).color;
+            ctx.strokeStyle = isConnected ? sourceColor : "rgba(255, 255, 255, 0.08)";
+            ctx.globalAlpha = hasActiveFocus ? (isConnected ? 0.85 : 0.08) : (isWeekActive ? 0.35 : 0.06);
+            ctx.beginPath();
+            ctx.moveTo(s.x, s.y);
+            ctx.lineTo(t.x, t.y);
+            ctx.stroke();
+            continue;
+          }
+
+          if (hasActiveFocus) {
+            if (isConnected) {
+              ctx.lineWidth = 1.8 / transform.k;
+              const sourceColor = (COURSE_THEMES[s.course] || COURSE_THEMES["General"]).color;
+              ctx.strokeStyle = sourceColor;
+              ctx.globalAlpha = 0.85;
+            } else {
+              ctx.lineWidth = 0.6 / transform.k;
+              ctx.strokeStyle = "rgba(255, 255, 255, 0.04)";
+              ctx.globalAlpha = 0.12;
+            }
+          } else {
+            ctx.lineWidth = 0.85 / transform.k;
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.12)";
+            ctx.globalAlpha = 0.6;
+          }
+
+          ctx.beginPath();
+          ctx.moveTo(s.x, s.y);
+          ctx.lineTo(t.x, t.y);
+          ctx.stroke();
+
+          // Optional: Synaptic Traveling Pulses on Connected Edges
+          if (enablePulses && isConnected) {
+            const progress = (pulseTime + i * 0.25) % 1;
+            const px = s.x + (t.x - s.x) * progress;
+            const py = s.y + (t.y - s.y) * progress;
+            ctx.beginPath();
+            ctx.arc(px, py, 2.5 / transform.k, 0, Math.PI * 2);
+            ctx.fillStyle = "#ffffff";
+            ctx.fill();
+          }
+        }
+
+        // Pass 2: Render Neuron Nodes
+        for (let i = 0; i < nodes.length; i++) {
+          const n = nodes[i];
+
+          // Course Filter
+          if (isFiltered && n.course !== activeCourseFilter) {
+            continue;
+          }
+
+          // In Semantic Web mode: suppress ModuleHub synthetic nodes
+          if (currentViewMode === "semantic" && n.type === "ModuleHub") {
+            continue;
+          }
+
+          if (n.x === undefined || n.y === undefined || isNaN(n.x) || isNaN(n.y)) {
+            continue;
+          }
+
+          const theme = COURSE_THEMES[n.course] || COURSE_THEMES["General"];
+          const isNodeActive = (n === activeNode);
+          const isNeighbor = activeNode && activeNode.neighbors.has(n);
+          const isSearchMatched = searchQuery && (
+            n.label.toLowerCase().includes(searchQuery) ||
+            n.id.toLowerCase().includes(searchQuery) ||
+            n.tags.some(t => t.toLowerCase().includes(searchQuery))
+          );
+
+          let nodeAlpha = 1;
+          if (filterCornellOnly && !n.hasCornell && !isNodeActive) {
+            nodeAlpha = 0.08;
+          } else if (activeWeekFilter !== "ALL" && n.module !== activeWeekFilter && n.type !== "ModuleHub" && !isNodeActive && !isNeighbor) {
+            nodeAlpha = 0.12;
+          } else if (searchQuery) {
+            nodeAlpha = isSearchMatched ? 1 : 0.15;
+          } else if (hasActiveFocus) {
+            nodeAlpha = (isNodeActive || isNeighbor) ? 1 : 0.18;
+          }
+
+          ctx.globalAlpha = nodeAlpha;
+
+          // Halo Bloom Glow for Hub Neurons & Active Nodes
+          if (enableHaloBloom && (n.degree >= 2 || isNodeActive || n.type === "ModuleHub")) {
+            const glowR = isNodeActive ? n.radius * 3.2 : (n.type === "ModuleHub" ? n.radius * 2.8 : n.radius * 2.2);
+            const grad = ctx.createRadialGradient(n.x, n.y, n.radius * 0.5, n.x, n.y, glowR);
+            grad.addColorStop(0, theme.glow);
+            grad.addColorStop(1, "transparent");
+            ctx.beginPath();
+            ctx.arc(n.x, n.y, glowR, 0, Math.PI * 2);
+            ctx.fillStyle = grad;
+            ctx.fill();
+          }
+
+          // Core Node Body
+          ctx.beginPath();
+          ctx.arc(n.x, n.y, isNodeActive ? n.radius * 1.3 : n.radius, 0, Math.PI * 2);
+          ctx.fillStyle = isNodeActive ? "#ffffff" : theme.color;
+          ctx.fill();
+
+          // High-contrast Border
+          ctx.lineWidth = (isNodeActive ? 2.5 : 1) / transform.k;
+          ctx.strokeStyle = isNodeActive ? theme.color : "rgba(255, 255, 255, 0.4)";
+          ctx.stroke();
+
+          // If ModuleHub: draw outer concentric orbit sun ring
+          if (n.type === "ModuleHub") {
+            ctx.beginPath();
+            ctx.arc(n.x, n.y, n.radius * 1.5, 0, Math.PI * 2);
+            ctx.strokeStyle = theme.color;
+            ctx.lineWidth = 1.2 / transform.k;
+            ctx.stroke();
+          }
+
+          // If Cornell Note available: draw emerald active-recall pip indicator
+          if (n.hasCornell) {
+            ctx.beginPath();
+            ctx.arc(n.x + n.radius * 0.72, n.y - n.radius * 0.72, 2.8 / transform.k, 0, Math.PI * 2);
+            ctx.fillStyle = "#a6e3a1";
+            ctx.fill();
+            ctx.strokeStyle = "#0b0c10";
+            ctx.lineWidth = 1.0 / transform.k;
+            ctx.stroke();
+          }
+
+        } // End Pass 2: Nodes
+
+        // Pass 3: Labels (Adaptive Level of Detail & Spatial Occlusion Culling)
+        if (showLabels) {
+          ctx.globalAlpha = 1;
+          const labelCandidates = [];
+
+          for (let i = 0; i < nodes.length; i++) {
+            const n = nodes[i];
+            if (isFiltered && n.course !== activeCourseFilter) continue;
+            if (currentViewMode === "semantic" && n.type === "ModuleHub") continue;
+            if (n.x === undefined || n.y === undefined || isNaN(n.x) || isNaN(n.y)) continue;
+
+            const isNodeActive = (activeNode && n === activeNode);
+            const isNeighbor = activeNode && activeNode.neighbors.has(n);
+            const isSearchMatched = searchQuery && (
+              n.label.toLowerCase().includes(searchQuery) ||
+              n.cleanTitle.toLowerCase().includes(searchQuery) ||
+              n.id.toLowerCase().includes(searchQuery) ||
+              n.tags.some(t => t.toLowerCase().includes(searchQuery))
+            );
+
+            // Filter out labels during search or focused inspection
+            if (searchQuery && !isSearchMatched && !isNodeActive) continue;
+            if (hasActiveFocus && !isNodeActive && !isNeighbor && transform.k < 1.4) continue;
+
+            // Level of Detail (LOD) threshold:
+            let drawCandidate = false;
+            if (n.type === "ModuleHub") {
+              drawCandidate = true;
+            } else if (isNodeActive || isNeighbor || isSearchMatched) {
+              drawCandidate = true;
+            } else if (transform.k > 1.35) {
+              drawCandidate = true;
+            } else if (transform.k > 0.75 && n.degree >= 2) {
+              drawCandidate = true;
+            } else if (n.degree >= 3) {
+              drawCandidate = true;
+            }
+
+            if (!drawCandidate) continue;
+
+            let priority = n.degree;
+            if (n.type === "ModuleHub") priority += 1600;
+            if (isNodeActive) priority += 2500;
+            else if (isNeighbor) priority += 1200;
+            else if (isSearchMatched) priority += 900;
+            else if (n.degree >= 3) priority += 300;
+
+            labelCandidates.push({
+              node: n,
+              priority: priority,
+              isNodeActive: isNodeActive,
+              isNeighbor: isNeighbor
+            });
+          }
+
+          // Sort candidates descending by priority: highest priority reserves space first
+          labelCandidates.sort((a, b) => b.priority - a.priority);
+
+          const placedBoxes = [];
+          function hasOverlap(b1, b2) {
+            return !(b1.x2 < b2.x1 || b1.x1 > b2.x2 || b1.y2 < b2.y1 || b1.y1 > b2.y2);
+          }
+
+          for (let i = 0; i < labelCandidates.length; i++) {
+            const item = labelCandidates[i];
+            const n = item.node;
+            const isNodeActive = item.isNodeActive;
+            const isNeighbor = item.isNeighbor;
+
+            const labelText = isNodeActive ? n.cleanTitle : n.shortTitle;
+            const fontWeight = (isNodeActive || n.type === "ModuleHub") ? '700' : '400';
+            const fontSize = isNodeActive ? Math.max(11, 13 / transform.k) : (n.type === "ModuleHub" ? Math.max(11, 12.5 / transform.k) : Math.max(10, 11 / transform.k));
+            ctx.font = `${fontWeight} ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+
+            const textWidth = ctx.measureText(labelText).width;
+            const textHeight = fontSize * 1.15;
+            const padX = 5 / transform.k;
+            const padY = 2 / transform.k;
+
+            const boxY = n.y + (isNodeActive ? n.radius * 1.35 : n.radius) + (4 / transform.k);
+            const box = {
+              x1: n.x - (textWidth / 2) - padX,
+              x2: n.x + (textWidth / 2) + padX,
+              y1: boxY - padY,
+              y2: boxY + textHeight + padY
+            };
+
+            // Occlusion test against previously placed higher-priority labels
+            let collides = false;
+            for (let j = 0; j < placedBoxes.length; j++) {
+              if (hasOverlap(box, placedBoxes[j])) {
+                collides = true;
+                break;
+              }
+            }
+
+            // Cull lower priority labels that collide; active node always gets drawn
+            if (collides && !isNodeActive && n.type !== "ModuleHub") {
+              continue;
+            }
+
+            placedBoxes.push(box);
+
+            // Render Label
+            ctx.textAlign = "center";
+            ctx.textBaseline = "top";
+
+            // Dark Text Halo for legibility over edges & blooms
+            ctx.lineJoin = "round";
+            ctx.miterLimit = 2;
+            ctx.lineWidth = (isNodeActive ? 4.5 : 3.2) / transform.k;
+            ctx.strokeStyle = "#0b0c10";
+            ctx.strokeText(labelText, n.x, boxY);
+
+            ctx.fillStyle = isNodeActive ? "#ffffff" : (n.type === "ModuleHub" ? "#f9e2af" : (isNeighbor ? "#cdd6f4" : "#a6adc8"));
+            ctx.fillText(labelText, n.x, boxY);
+          }
+        }
+
+        ctx.restore();
+
+        // Continue pulse animation if active
+        if (enablePulses && activeNode) {
+          requestRender();
+        }
+      }
+
+      // Accurate Coordinate & Hit-testing Helper
+      function findNodeAt(clientX, clientY) {
+        const rect = canvas.getBoundingClientRect();
+        const canvasX = clientX - rect.left;
+        const canvasY = clientY - rect.top;
+        const simX = transform.invertX(canvasX);
+        const simY = transform.invertY(canvasY);
+        for (let i = nodes.length - 1; i >= 0; i--) {
+          const n = nodes[i];
+          if (activeCourseFilter !== "ALL" && n.course !== activeCourseFilter) continue;
+          if (currentViewMode === "semantic" && n.type === "ModuleHub") continue;
+          const dx = simX - n.x;
+          const dy = simY - n.y;
+          const hitRadius = Math.max(n.radius * 1.6, 12 / transform.k);
+          if (dx * dx + dy * dy < hitRadius * hitRadius) {
+            return n;
+          }
+        }
+        return null;
+      }
+
+      let isDraggingNode = false;
+      let draggedNode = null;
+
+      // Obsidian-style Drag Behavior (Glides connected nodes with spring tension)
+      const drag = d3.drag()
+        .container(canvas)
+        .subject(event => {
+          const e = event.sourceEvent;
+          return findNodeAt(e.clientX, e.clientY);
+        })
+        .on("start", event => {
+          if (!event.subject) return;
+          isDraggingNode = true;
+          draggedNode = event.subject;
+          simulation.alphaTarget(0.35).restart();
+          draggedNode.fx = draggedNode.x;
+          draggedNode.fy = draggedNode.y;
+        })
+        .on("drag", event => {
+          if (!draggedNode) return;
+          const rect = canvas.getBoundingClientRect();
+          const e = event.sourceEvent;
+          const canvasX = e.clientX - rect.left;
+          const canvasY = e.clientY - rect.top;
+          draggedNode.fx = transform.invertX(canvasX);
+          draggedNode.fy = transform.invertY(canvasY);
+          requestRender();
+        })
+        .on("end", event => {
+          if (!draggedNode) return;
+          simulation.alphaTarget(0);
+          draggedNode.fx = null;
+          draggedNode.fy = null;
+          isDraggingNode = false;
+          draggedNode = null;
+        });
+
+      // Pan & Zoom
+      const zoom = d3.zoom()
+        .scaleExtent([0.15, 6.0])
+        .filter(event => {
+          // Allow zoom/pan only when NOT initiating a node drag
+          if (event.type === "mousedown" || event.type === "touchstart") {
+            const node = findNodeAt(event.clientX, event.clientY);
+            return !node;
+          }
+          return true;
+        })
+        .on("zoom", event => {
+          transform = event.transform;
+          requestRender();
+        });
+
+      // Bind zoom and drag to canvas
+      d3.select(canvas).call(zoom);
+      d3.select(canvas).call(drag);
+      d3.select(canvas).call(zoom.transform, transform);
+
+      // Initial Canvas Sizing
+      resize();
+
+      // Hover Tracking
+      canvas.addEventListener("mousemove", e => {
+        if (isDraggingNode) return;
+        const n = findNodeAt(e.clientX, e.clientY);
+        if (n !== hoveredNode) {
+          hoveredNode = n;
+          canvas.style.cursor = hoveredNode ? "pointer" : "grab";
+          requestRender();
+        }
+      });
+
+      // Node Click Inspector
+      canvas.addEventListener("click", e => {
+        const n = findNodeAt(e.clientX, e.clientY);
+        if (n) {
+          selectNode(n);
+        } else if (!isDraggingNode) {
+          selectedNode = null;
+          document.getElementById("detailsDrawer").classList.remove("open");
+          requestRender();
+        }
+      });
+
+      function selectNode(n) {
+        selectedNode = n;
+        requestRender();
+
+        const drawer = document.getElementById("detailsDrawer");
+        drawer.classList.add("open");
+
+        document.getElementById("dTitle").textContent = n.cleanTitle;
+        document.getElementById("dId").textContent = n.id;
+        document.getElementById("dTrust").textContent = n.trust;
+        document.getElementById("dDesc").textContent = n.description || "Comprehensive notes, derivations, and examples for this module.";
+
+        // Cornell Interactive Button
+        const cBlock = document.getElementById("dCornellBlock");
+        const cLink = document.getElementById("dCornellLink");
+        const cCues = document.getElementById("dCornellCues");
+        if (n.hasCornell && n.cornellPath) {
+          cBlock.style.display = "block";
+          cLink.href = n.cornellPath;
+          cCues.textContent = n.cornellCues;
+        } else {
+          cBlock.style.display = "none";
+        }
+
+        const cTheme = COURSE_THEMES[n.course] || COURSE_THEMES["General"];
+        const badge = document.getElementById("dCourseBadge");
+        badge.textContent = cTheme.name;
+        badge.style.color = cTheme.color;
+        badge.style.borderColor = cTheme.color;
+
+        // Tags
+        const tagsContainer = document.getElementById("dTags");
+        tagsContainer.innerHTML = "";
+        if (n.tags && n.tags.length > 0) {
+          n.tags.forEach(t => {
+            const p = document.createElement("span");
+            p.className = "pill";
+            p.textContent = t;
+            tagsContainer.appendChild(p);
+          });
+        } else {
+          tagsContainer.textContent = "None";
+        }
+
+        // Connections List
+        const linksList = document.getElementById("dLinks");
+        linksList.innerHTML = "";
+        const visibleNeighbors = Array.from(n.neighbors).filter(nbr => {
+          if (currentViewMode === "semantic" && nbr.type === "ModuleHub") return false;
+          return true;
+        });
+        document.getElementById("dLinkCount").textContent = visibleNeighbors.length;
+
+        visibleNeighbors.forEach(nbr => {
+          const li = document.createElement("li");
+          li.className = "conn-item";
+          const nbrTheme = COURSE_THEMES[nbr.course] || COURSE_THEMES["General"];
+          li.innerHTML = `<span class="conn-arrow" style="color:${nbrTheme.color}">&#8594;</span> <span>${nbr.cleanTitle}</span>`;
+          li.onclick = () => {
+            d3.select(canvas).transition().duration(600).call(
+              zoom.transform,
+              d3.zoomIdentity.translate(width / 2, height / 2).scale(1.2).translate(-nbr.x, -nbr.y)
+            );
+            selectNode(nbr);
+          };
+          linksList.appendChild(li);
+        });
+      }
+
+      document.getElementById("drawerClose").onclick = () => {
+        document.getElementById("detailsDrawer").classList.remove("open");
+        selectedNode = null;
+        requestRender();
+      };
+
+      // Reset View Button
+      document.getElementById("resetBtn").onclick = () => {
+        d3.select(canvas).transition().duration(750).call(
+          zoom.transform,
+          d3.zoomIdentity.translate(width / 2, height / 2).scale(0.85)
+        );
+      };
+
+      // Toggle Labels Button
+      const toggleLabelsBtn = document.getElementById("toggleLabelsBtn");
+      toggleLabelsBtn.onclick = () => {
+        showLabels = !showLabels;
+        toggleLabelsBtn.classList.toggle("active", showLabels);
+        requestRender();
+      };
+
+      // Settings Popover Toggle
+      const settingsBtn = document.getElementById("settingsBtn");
+      const settingsPopover = document.getElementById("settingsPopover");
+      settingsBtn.onclick = () => {
+        settingsPopover.classList.toggle("open");
+      };
+
+      // Physics Sliders
+      document.getElementById("sliderCharge").oninput = e => {
+        const val = +e.target.value;
+        document.getElementById("valCharge").textContent = val;
+        simulation.force("charge").strength(val);
+        simulation.alpha(0.3).restart();
+      };
+
+      document.getElementById("sliderLink").oninput = e => {
+        const val = +e.target.value;
+        document.getElementById("valLink").textContent = val;
+        simulation.force("link").distance(val);
+        simulation.alpha(0.3).restart();
+      };
+
+      document.getElementById("sliderCluster").oninput = e => {
+        clusterStrength = +e.target.value;
+        document.getElementById("valCluster").textContent = clusterStrength;
+        simulation.force("clusterX").strength(clusterStrength);
+        simulation.force("clusterY").strength(clusterStrength);
+        simulation.alpha(0.3).restart();
+      };
+
+      // Aesthetics Toggles
+      const toggleGlowRow = document.getElementById("toggleGlowRow");
+      toggleGlowRow.onclick = () => {
+        enableHaloBloom = !enableHaloBloom;
+        toggleGlowRow.classList.toggle("toggle-active", enableHaloBloom);
+        requestRender();
+      };
+
+      const togglePulsesRow = document.getElementById("togglePulsesRow");
+      togglePulsesRow.onclick = () => {
+        enablePulses = !enablePulses;
+        togglePulsesRow.classList.toggle("toggle-active", enablePulses);
+        requestRender();
+      };
+
+      // Search Filter Input
+      const searchInput = document.getElementById("searchInput");
+      searchInput.oninput = e => {
+        searchQuery = e.target.value.toLowerCase().trim();
+        if (searchQuery) {
+          const match = nodes.find(n => n.label.toLowerCase().includes(searchQuery));
+          if (match) {
+            d3.select(canvas).transition().duration(500).call(
+              zoom.transform,
+              d3.zoomIdentity.translate(width / 2, height / 2).scale(1.2).translate(-match.x, -match.y)
+            );
+          }
+        }
+        requestRender();
+      };
+
+      // Initialize view mode state
+      setViewMode(currentViewMode, false);
+
+      // Expose for testing and external inspection
+      window.__graph = { nodes, selectNode, simulation, requestRender, setViewMode };
+    });
+  </script>
+</body>
+</html>

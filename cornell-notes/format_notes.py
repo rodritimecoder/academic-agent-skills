@@ -472,8 +472,35 @@ def render_cornell_html(data: dict, template_path: Path, srs_path: Path | None =
 
     sections_final = "\n\n".join(sections_html_parts)
 
+    course_val = data.get("course", "")
+    module_val = data.get("module", "") or data.get("week", "")
+    src = data.get("source", "")
+    if not course_val or not module_val:
+        m_c = re.search(r'(41200|48430|48520|48521)', src)
+        if m_c and not course_val:
+            course_map = {
+                "41200": "41200 EPA",
+                "48430": "48430 C Prog",
+                "48520": "48520 Circuits",
+                "48521": "48521 FEET"
+            }
+            course_val = course_map.get(m_c.group(1), m_c.group(1))
+        m_w = re.search(r'(?:week|w)[_\s-]*(\d{1,2})', src, re.IGNORECASE)
+        if m_w and not module_val:
+            module_val = f"Week {int(m_w.group(1)):02d}"
+
+    breadcrumb_html = ""
+    if course_val or module_val:
+        crumb_parts = []
+        if course_val:
+            crumb_parts.append(f'<span class="crumb-course">{html.escape(course_val)}</span>')
+        if module_val:
+            crumb_parts.append(f'<span class="crumb-module">{html.escape(module_val)}</span>')
+        breadcrumb_html = f'<div class="document-breadcrumb">{" <span class=\\"crumb-sep\\">&rsaquo;</span> ".join(crumb_parts)}</div>'
+
     rendered = template_str.replace("{{PAGE_TITLE}}", title_safe)
     rendered = rendered.replace("{{TITLE}}", title_safe)
+    rendered = rendered.replace("{{META_BREADCRUMB}}", breadcrumb_html)
     rendered = rendered.replace("{{META_SOURCE}}", meta_source_html)
     rendered = rendered.replace("{{META_DATE}}", meta_date_html)
     rendered = rendered.replace("{{SECTIONS_HTML}}", sections_final)

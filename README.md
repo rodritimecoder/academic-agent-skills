@@ -39,6 +39,17 @@
         │        Active-Recall & Revision Output       │
         │                 cornell-notes                │
         │   Interactive self-quiz HTML & Anki cards    │
+        └─────────────────────┬────────────────────────┘
+                              │
+                              ▼
+        ┌──────────────────────────────────────────────┐
+        │    Curriculum Architecture & Cosmos Graph    │
+        │                 okf-architect                │
+        │  • CURRICULUM_TREE.md Virtual Outline Tree   │
+        │  • Dual-Mode Knowledge Cosmos (viz.html)     │
+        │    [Canvas Constellations ⟷ Semantic Web]    │
+        │  • Unified Canvas Cornell Study Portal       │
+        │  • OKF v0.2 Specification Certification      │
         └──────────────────────────────────────────────┘
 ```
 
@@ -77,6 +88,7 @@ pip install 'markitdown[all]' requests
 | [`zoom-recorder`](zoom-recorder/) | Lecture Transcripts | Passcode-protected Zoom cloud transcripts (`.md`/`.vtt`) & slide keyframes | None (Zero API admin keys required) |
 | [`markitdown-cli`](markitdown-cli/) | Document Parser | Converts PPTX slide decks, PDF worksheets, DOCX, XLSX to Markdown | `pip install 'markitdown[all]'` |
 | [`cornell-notes`](cornell-notes/) | Study & Revision | Formats markdown notes into interactive self-quiz Cornell HTML & Anki flashcards | Python stdlib (zero-dep) |
+| [`okf-architect`](okf-architect/) | Knowledge Architecture & Cosmos | Virtual curriculum trees (`CURRICULUM_TREE.md`), dual-mode graph cosmos (`viz.html`), and Cornell study portal (`cornell_index.html`) | Python stdlib (zero-dep) |
 
 ---
 
@@ -156,6 +168,29 @@ Transforms notes into interactive, print-ready Cornell study notes HTML with cue
 
 ```bash
 python3 cornell-notes/format_notes.py /path/to/notes_cornell.json
+```
+
+---
+
+### 6. `okf-architect` — Curriculum Architecture & Knowledge Cosmos Engine
+The unifying engine that connects raw markdown notes, slide transcripts, and Cornell study sheets into a coherent, navigable curriculum:
+
+- **Virtual Curriculum Tree (`CURRICULUM_TREE.md`)**: Human-editable, clickable Markdown outline grouping all courses and weekly modules without breaking physical paths on disk.
+- **Dual-Mode Interactive Graph (`viz.html`)**: Standalone, offline-ready D3 cosmos with live top-bar toggle:
+  - **`📅 Canvas Constellations`**: Modules linked along a chronological learning spine (`Week 01 → Week 02 → ...`) with orbital containment.
+  - **`🌌 Semantic Web`**: Classic Obsidian neural network gliding organically on concept cross-references.
+- **Canvas Cornell Study Portal (`cornell_index.html`)**: Automatically indexes all active-recall Cornell revision notes by course and week with instant self-quiz launch buttons.
+- **Open Knowledge Format (OKF v0.2) Certification**: Scaffolds, normalizes, and certifies knowledge bundles adhering to Google's OKF v0.2 specification.
+
+```bash
+# 1. Compile or initialize CURRICULUM_TREE.md into interactive cosmos & study portal
+python3 okf-architect/scripts/okf_architect.py compile-tree /path/to/notes
+
+# 2. Re-render standalone Knowledge Cosmos (viz.html)
+python3 okf-architect/scripts/okf_architect.py viz /path/to/notes
+
+# 3. Validate entire knowledge bundle against OKF v0.2 spec
+python3 okf-architect/scripts/okf_architect.py validate /path/to/notes
 ```
 
 ---
