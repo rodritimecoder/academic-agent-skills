@@ -11,6 +11,13 @@
 
 ## 🏛️ Architecture: The Complete University-to-Markdown Pipeline
 
+<p align="center">
+  <img src="assets/pipeline_architecture.png" alt="Academic Agent Skills Pipeline Architecture" width="100%">
+</p>
+
+<details>
+<summary><b>Click to view ASCII Architecture Diagram</b></summary>
+
 ```
   ┌────────────────────────────────────────────────────────┐
   │         University Data Ingestion & Harvesting         │
@@ -52,6 +59,8 @@
         │  • OKF v0.2 Specification Certification      │
         └──────────────────────────────────────────────┘
 ```
+
+</details>
 
 ---
 
@@ -181,6 +190,10 @@ The unifying engine that connects raw markdown notes, slide transcripts, and Cor
   - **`🌌 Semantic Web`**: Classic Obsidian neural network gliding organically on concept cross-references.
 - **Canvas Cornell Study Portal (`cornell_index.html`)**: Automatically indexes all active-recall Cornell revision notes by course and week with instant self-quiz launch buttons.
 - **Open Knowledge Format (OKF v0.2) Certification**: Scaffolds, normalizes, and certifies knowledge bundles adhering to Google's OKF v0.2 specification.
+
+<p align="center">
+  <img src="assets/knowledge_cosmos.png" alt="University Knowledge Cosmos — Canvas Constellations vs Semantic Web" width="100%">
+</p>
 
 ```bash
 # 1. Compile or initialize CURRICULUM_TREE.md into interactive cosmos & study portal
