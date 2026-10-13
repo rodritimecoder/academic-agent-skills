@@ -781,14 +781,15 @@
       }
       window.addEventListener("resize", resize);
 
-      // Title cleaner to remove redundant course/week prefixes
+      // Title cleaner to remove redundant course code prefixes while preserving descriptive week badges and topic context
       function cleanNodeTitle(raw) {
         if (!raw) return "";
         let s = raw;
-        // Strip redundant bracket prefixes like [41200], [48520 W09], [48520] [48520]
-        s = s.replace(/^(\[[^\]]+\]\s*)+/g, "");
-        // Strip leading week tags like "Week 09 - ", "w09_"
-        s = s.replace(/^(?:Week|w)\s*\d+[\s_-]*/i, "");
+        // Convert bracketed week badges like "[48520 W01] Foo" -> "W01: Foo"
+        s = s.replace(/^\[\d+\s+(W\d+)\]\s*/i, "$1: ");
+        // Strip bracket course numbers like "[41200] Foo", "[48520] Foo", "[48521] Foo", "[48430] Foo" -> "Foo"
+        s = s.replace(/^\[\d+\]\s*/g, "");
+        // Clean double underscores and normalize spaces
         s = s.replace(/_/g, " ");
         s = s.trim();
         return s || raw;
@@ -801,7 +802,7 @@
         const course = d.course || (d.id.split('/')[0] || "General");
         const rawLabel = d.label || d.id;
         const cleaned = cleanNodeTitle(rawLabel);
-        const short = cleaned.length > 25 ? (cleaned.slice(0, 24) + '…') : cleaned;
+        const short = cleaned.length > 28 ? (cleaned.slice(0, 27) + '…') : cleaned;
 
         const cTheme = COURSE_THEMES[course] || COURSE_THEMES["General"] || { center: { x: 0, y: 0 } };
         const angle = Math.random() * Math.PI * 2;
