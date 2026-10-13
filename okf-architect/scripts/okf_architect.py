@@ -705,11 +705,13 @@ def build_graph_edges(
             degree_map[src] = degree_map.get(src, 0) + 1
             degree_map[tgt] = degree_map.get(tgt, 0) + 1
 
+    # 1. Weekly Spines between consecutive ModuleHubs
     for _, hubs in module_hubs.items():
         sorted_hubs = sorted(hubs.values(), key=lambda x: x.order)
         for i in range(len(sorted_hubs) - 1):
             add_edge(sorted_hubs[i].id, sorted_hubs[i + 1].id, "spine")
 
+    # 2. Module Containment edges from ModuleHubs to concept nodes
     for n in nodes:
         if n["data"]["type"] != "ModuleHub":
             m_id = n["data"].get("moduleId")
@@ -717,6 +719,7 @@ def build_graph_edges(
             if m_id:
                 add_edge(m_id, n_id, "containment")
 
+    # 3. Explicit Reference links extracted from markdown bodies
     for md_file in md_files:
         rel_path = md_file.relative_to(bundle_root)
         if md_file.name in RESERVED_FILENAMES or "outputs" in md_file.parts:
@@ -736,6 +739,97 @@ def build_graph_edges(
 
             if target_id and target_id in node_ids and target_id != source_id:
                 add_edge(source_id, target_id, "reference")
+
+    # 4. Intra-module Pedagogical Workflow edges
+    by_course_mod: Dict[Tuple[str, str], List[Dict[str, Any]]] = {}
+    for n in nodes:
+        d = n["data"]
+        if d.get("type") == "ModuleHub":
+            continue
+        c = d.get("course", "General")
+        m = d.get("moduleId", "")
+        if m:
+            by_course_mod.setdefault((c, m), []).append(d)
+        else:
+            by_course_mod.setdefault((c, "root"), []).append(d)
+
+    def get_pedagogical_role(it: Dict[str, Any]) -> int:
+        lbl = (it.get("label", "") + " " + it.get("id", "")).lower()
+        if "overview" in lbl or "guide" in lbl or "learning guide" in lbl or "timetable" in lbl or "get started" in lbl:
+            return 1
+        if "prework" in lbl or "preparation" in lbl or "reading" in lbl:
+            return 2
+        if any(k in lbl for k in ["topic", "notes", "lecture", "material", "semiconductor", "electrostatic", "slide", "ppt", "scope", "circuit", "diode", "transistor", "magnetic", "motor", "meter", "c_prog"]):
+            return 3
+        if "lab" in lbl or "workshop" in lbl or "excel" in lbl:
+            return 4
+        if "tutorial" in lbl and not any(k in lbl for k in ["solution", "recording"]):
+            return 5
+        if "solution" in lbl or "quiz" in lbl or "exam" in lbl or "answer" in lbl:
+            return 6
+        if any(k in lbl for k in ["recording", "video", "transcript"]):
+            return 7
+        if "recap" in lbl or "summary" in lbl:
+            return 8
+        return 3
+
+    for (c, m), items in by_course_mod.items():
+        sorted_items = sorted(items, key=lambda x: (get_pedagogical_role(x), x.get("label", "")))
+        # Sequential intra-module chain connecting the full learning journey
+        for i in range(len(sorted_items) - 1):
+            add_edge(sorted_items[i]["id"], sorted_items[i + 1]["id"], "pedagogical")
+        # Star connection from primary core lecture to all module materials
+        lectures = [it for it in sorted_items if get_pedagogical_role(it) == 3]
+        prim = lectures[0] if lectures else sorted_items[0]
+        for it in sorted_items:
+            if it["id"] != prim["id"]:
+                add_edge(prim["id"], it["id"], "pedagogical")
+
+    # 5. Curriculum Progression & Prerequisite chains across modules
+    mod_order_map = {n["data"]["id"]: n["data"].get("order", 0) for n in nodes if n["data"].get("type") == "ModuleHub"}
+    by_course: Dict[str, List[Dict[str, Any]]] = {}
+    for n in nodes:
+        d = n["data"]
+        if d.get("type") == "ModuleHub":
+            continue
+        by_course.setdefault(d.get("course", "General"), []).append(d)
+
+    for c, c_nodes in by_course.items():
+        c_mods: Dict[str, List[Dict[str, Any]]] = {}
+        for cn in c_nodes:
+            m = cn.get("moduleId", "root")
+            c_mods.setdefault(m, []).append(cn)
+
+        sorted_m_keys = sorted(c_mods.keys(), key=lambda m: mod_order_map.get(m, 999))
+        for i in range(len(sorted_m_keys) - 1):
+            m1, m2 = sorted_m_keys[i], sorted_m_keys[i + 1]
+            add_edge(c_mods[m1][0]["id"], c_mods[m2][0]["id"], "prerequisite")
+
+    # 6. Interstellar Cross-Course Bridges
+    cross_links = [
+        ("48521 - Foundations of Electrical and Electronic Technology/Module 1 Electric Field Material and Capacitance Week 1/topic_2a_electric_material_and_capacitance",
+         "48520 - Electronics and Circuits/Week_3/markdown/week_3_topic_notes"),
+        ("48521 - Foundations of Electrical and Electronic Technology/Module 2 Diode Principles and Applications Weeks 2-3/topic_4a_diode_circuits",
+         "48520 - Electronics and Circuits/Week_4/markdown/week_4_topic_notes"),
+        ("48521 - Foundations of Electrical and Electronic Technology/Module 3 Transistor Principles and Applications Weeks 4-5/topic_7a_mosfet",
+         "48520 - Electronics and Circuits/Week_1/markdown/48520_topic_1_and_2"),
+        ("48521 - Foundations of Electrical and Electronic Technology/Module 4 Magntic Field Inductance Circuit and Energy Weeks 6-8/topic_2b_magnetic_materials_and_inductance_v2",
+         "48520 - Electronics and Circuits/Week_4/markdown/week_4_topic_notes"),
+        ("48521 - Foundations of Electrical and Electronic Technology/Module 5 Magntic Devices - Transformers Transducers Motors Meters Weeks 9-11/topics_6b_7b_transformer_principles_circuits_and_models",
+         "48520 - Electronics and Circuits/Week_9/markdown/w09_week_9_48520_topic_18_2022_2nd"),
+        ("48430 - Fundamentals of C Programming/slides/markdown/c_prog_w01_intro_slides",
+         "48520 - Electronics and Circuits/Week_1/markdown/lab_0_lab_introduction_getting_to_know_the_lab"),
+        ("41200 - Engineering Project Appraisal/use_of_generative_ai_in_this_course",
+         "AGENTS"),
+        ("AGENTS",
+         "41200 - Engineering Project Appraisal/README"),
+        ("AGENTS",
+         "48430 - Fundamentals of C Programming/slides/markdown/c_prog_w01_intro_slides"),
+        ("cornell_notes_skill_agent_brief",
+         "AGENTS")
+    ]
+    for s, t in cross_links:
+        add_edge(s, t, "cross_course")
 
     return edges, degree_map
 

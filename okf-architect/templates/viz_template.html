@@ -980,12 +980,28 @@
         updateHUDCounts();
 
         if (simulation) {
-          simulation.force("link").strength(d => {
-            if (currentViewMode === "semantic" && (d.type === "spine" || d.type === "containment")) return 0;
-            if (d.type === "spine") return 0.45;
-            if (d.type === "containment") return 0.35;
-            return 0.35;
-          });
+          simulation.force("link")
+            .distance(d => {
+              if (d.type === "spine") return 130;
+              if (d.type === "containment") return 50;
+              if (d.type === "prerequisite") return 85;
+              if (d.type === "cross_course") return 220;
+              if (d.type === "pedagogical") return 55;
+              return 70;
+            })
+            .strength(d => {
+              if (currentViewMode === "semantic") {
+                if (d.type === "spine" || d.type === "containment") return 0;
+                if (d.type === "prerequisite") return 0.55;
+                if (d.type === "cross_course") return 0.20;
+                if (d.type === "pedagogical") return 0.45;
+                return 0.35;
+              }
+              if (d.type === "spine") return 0.45;
+              if (d.type === "containment") return 0.35;
+              if (d.type === "cross_course") return 0.05;
+              return 0.25;
+            });
           simulation.force("charge").strength(d => {
             if (currentViewMode === "semantic" && d.type === "ModuleHub") return 0;
             if (d.type === "ModuleHub") return -480;
@@ -1008,12 +1024,22 @@
         .force("link", d3.forceLink(links).id(d => d.id).distance(d => {
           if (d.type === "spine") return 130;
           if (d.type === "containment") return 50;
+          if (d.type === "prerequisite") return 85;
+          if (d.type === "cross_course") return 220;
+          if (d.type === "pedagogical") return 55;
           return 70;
         }).strength(d => {
-          if (currentViewMode === "semantic" && (d.type === "spine" || d.type === "containment")) return 0;
+          if (currentViewMode === "semantic") {
+            if (d.type === "spine" || d.type === "containment") return 0;
+            if (d.type === "prerequisite") return 0.55;
+            if (d.type === "cross_course") return 0.20;
+            if (d.type === "pedagogical") return 0.45;
+            return 0.35;
+          }
           if (d.type === "spine") return 0.45;
           if (d.type === "containment") return 0.35;
-          return 0.35;
+          if (d.type === "cross_course") return 0.05;
+          return 0.25;
         }))
         .force("charge", d3.forceManyBody().strength(d => {
           if (currentViewMode === "semantic" && d.type === "ModuleHub") return 0;
@@ -1133,21 +1159,60 @@
             continue;
           }
 
+          // Interstellar Cross-Course Bridges
+          if (l.type === "cross_course") {
+            ctx.lineWidth = (isConnected ? 3.0 : 1.6) / transform.k;
+            ctx.strokeStyle = isConnected ? "#f9e2af" : "rgba(249, 226, 175, 0.45)";
+            ctx.globalAlpha = hasActiveFocus ? (isConnected ? 1.0 : 0.15) : 0.75;
+            ctx.setLineDash([6 / transform.k, 4 / transform.k]);
+            ctx.beginPath();
+            ctx.moveTo(s.x, s.y);
+            ctx.lineTo(t.x, t.y);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            continue;
+          }
+
+          // Curriculum Prerequisite & Progression Chains
+          if (l.type === "prerequisite") {
+            ctx.lineWidth = (isConnected ? 2.8 : 1.8) / transform.k;
+            ctx.strokeStyle = isConnected ? "#cba6f7" : "rgba(203, 166, 247, 0.45)";
+            ctx.globalAlpha = hasActiveFocus ? (isConnected ? 1.0 : 0.15) : 0.75;
+            ctx.beginPath();
+            ctx.moveTo(s.x, s.y);
+            ctx.lineTo(t.x, t.y);
+            ctx.stroke();
+            continue;
+          }
+
+          // Intra-Module Pedagogical Workflow
+          if (l.type === "pedagogical") {
+            const sourceColor = (COURSE_THEMES[s.course] || COURSE_THEMES["General"]).color;
+            ctx.lineWidth = (isConnected ? 2.0 : 1.1) / transform.k;
+            ctx.strokeStyle = isConnected ? sourceColor : "rgba(166, 173, 200, 0.28)";
+            ctx.globalAlpha = hasActiveFocus ? (isConnected ? 0.95 : 0.10) : 0.65;
+            ctx.beginPath();
+            ctx.moveTo(s.x, s.y);
+            ctx.lineTo(t.x, t.y);
+            ctx.stroke();
+            continue;
+          }
+
           if (hasActiveFocus) {
             if (isConnected) {
-              ctx.lineWidth = 1.8 / transform.k;
+              ctx.lineWidth = 2.0 / transform.k;
               const sourceColor = (COURSE_THEMES[s.course] || COURSE_THEMES["General"]).color;
               ctx.strokeStyle = sourceColor;
-              ctx.globalAlpha = 0.85;
+              ctx.globalAlpha = 0.90;
             } else {
               ctx.lineWidth = 0.6 / transform.k;
               ctx.strokeStyle = "rgba(255, 255, 255, 0.04)";
               ctx.globalAlpha = 0.12;
             }
           } else {
-            ctx.lineWidth = 0.85 / transform.k;
-            ctx.strokeStyle = "rgba(255, 255, 255, 0.12)";
-            ctx.globalAlpha = 0.6;
+            ctx.lineWidth = 1.0 / transform.k;
+            ctx.strokeStyle = "rgba(137, 180, 250, 0.35)";
+            ctx.globalAlpha = 0.65;
           }
 
           ctx.beginPath();
