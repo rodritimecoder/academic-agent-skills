@@ -689,8 +689,12 @@ def build_graph_edges(
     edges: List[Dict[str, Any]] = []
     edge_set: Set[Tuple[str, str]] = set()
     degree_map: Dict[str, int] = {}
+    node_course: Dict[str, str] = {n["data"]["id"]: n["data"].get("course", "General") for n in nodes}
 
     def add_edge(src: str, tgt: str, etype: str) -> None:
+        # Strictly insulate subjects: prevent cross-course contamination
+        if node_course.get(src) != node_course.get(tgt):
+            return
         key = (src, tgt)
         if key not in edge_set and src in node_ids and tgt in node_ids and src != tgt:
             edge_set.add(key)
@@ -805,31 +809,12 @@ def build_graph_edges(
             m1, m2 = sorted_m_keys[i], sorted_m_keys[i + 1]
             add_edge(c_mods[m1][0]["id"], c_mods[m2][0]["id"], "prerequisite")
 
-    # 6. Interstellar Cross-Course Bridges
-    cross_links = [
-        ("48521 - Foundations of Electrical and Electronic Technology/Module 1 Electric Field Material and Capacitance Week 1/topic_2a_electric_material_and_capacitance",
-         "48520 - Electronics and Circuits/Week_3/markdown/week_3_topic_notes"),
-        ("48521 - Foundations of Electrical and Electronic Technology/Module 2 Diode Principles and Applications Weeks 2-3/topic_4a_diode_circuits",
-         "48520 - Electronics and Circuits/Week_4/markdown/week_4_topic_notes"),
-        ("48521 - Foundations of Electrical and Electronic Technology/Module 3 Transistor Principles and Applications Weeks 4-5/topic_7a_mosfet",
-         "48520 - Electronics and Circuits/Week_1/markdown/48520_topic_1_and_2"),
-        ("48521 - Foundations of Electrical and Electronic Technology/Module 4 Magntic Field Inductance Circuit and Energy Weeks 6-8/topic_2b_magnetic_materials_and_inductance_v2",
-         "48520 - Electronics and Circuits/Week_4/markdown/week_4_topic_notes"),
-        ("48521 - Foundations of Electrical and Electronic Technology/Module 5 Magntic Devices - Transformers Transducers Motors Meters Weeks 9-11/topics_6b_7b_transformer_principles_circuits_and_models",
-         "48520 - Electronics and Circuits/Week_9/markdown/w09_week_9_48520_topic_18_2022_2nd"),
-        ("48430 - Fundamentals of C Programming/slides/markdown/c_prog_w01_intro_slides",
-         "48520 - Electronics and Circuits/Week_1/markdown/lab_0_lab_introduction_getting_to_know_the_lab"),
-        ("41200 - Engineering Project Appraisal/use_of_generative_ai_in_this_course",
-         "AGENTS"),
-        ("AGENTS",
-         "41200 - Engineering Project Appraisal/README"),
-        ("AGENTS",
-         "48430 - Fundamentals of C Programming/slides/markdown/c_prog_w01_intro_slides"),
-        ("cornell_notes_skill_agent_brief",
-         "AGENTS")
+    # 6. General ecosystem links (strictly intra-General)
+    general_links = [
+        ("cornell_notes_skill_agent_brief", "AGENTS")
     ]
-    for s, t in cross_links:
-        add_edge(s, t, "cross_course")
+    for s, t in general_links:
+        add_edge(s, t, "pedagogical")
 
     return edges, degree_map
 
