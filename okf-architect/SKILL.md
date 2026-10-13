@@ -5,11 +5,11 @@ description: Autonomous Open Knowledge Format (OKF v0.2) architect and validator
 
 # OKF Architect (`okf-architect`)
 
-An autonomous design and validation skill for building, maintaining, and certifying **Open Knowledge Format (OKF v0.2)** bundles.
+Build, maintain, and certify **Open Knowledge Format (OKF v0.2)** bundles.
 
-Where **ICM Architect** structures sequential agent pipelines and workflows into numbered stage directories, **OKF Architect** structures *knowledge corpora, domain catalogs, and connected concepts* into portable, self-describing, and verified markdown bundles that both humans and autonomous agents can walk.
+OKF Architect structures knowledge corpora, domain catalogs, and connected concepts into portable, verified markdown bundles for human inspection and autonomous agent navigation.
 
-Specification Reference: [Google Cloud Platform Knowledge Catalog OKF v0.2](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md) (mirrored locally in `references/SPEC.md`).
+Specification reference: [Google Cloud Platform Knowledge Catalog OKF v0.2](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md) (mirrored locally in `references/SPEC.md`).
 
 ---
 

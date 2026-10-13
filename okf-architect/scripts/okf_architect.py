@@ -1,13 +1,5 @@
 #!/usr/bin/env python3
-"""
-okf_architect.py — Open Knowledge Format (OKF v0.2) Bundle Architect & Validator
-
-Autonomous CLI tool for:
-1. Validating an existing OKF bundle against Google's OKF v0.2 specification.
-2. Scaffolding a clean, spec-compliant OKF knowledge bundle.
-3. Compiling or refreshing progressive-disclosure index.md and log.md files.
-4. Converting / structuring loose notes or directories into an OKF bundle.
-"""
+"""okf_architect.py: Open Knowledge Format (OKF v0.2) bundle architect and validator."""
 
 from __future__ import annotations
 
@@ -17,15 +9,43 @@ import json
 import os
 import re
 import sys
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 OKF_VERSION = "0.2"
 RESERVED_FILENAMES = {"index.md", "log.md"}
+TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates"
+
+
+@dataclass(frozen=True)
+class ModuleHub:
+    id: str
+    label: str
+    order: int
+    course: str
+
+
+@dataclass(frozen=True)
+class NoteAssignment:
+    course: str
+    module_id: str
+    module: str
+    order: int
+    custom_title: str
+
+
+@dataclass(frozen=True)
+class CornellInfo:
+    html_path: str
+    title: str
+    cues: int
+    sections: int
+    source: str
 
 
 def parse_frontmatter(file_path: Path) -> Tuple[Dict[str, Any], str]:
-    """Parse YAML frontmatter from a markdown file with minimal zero-dependency parser."""
+    """Parse YAML frontmatter from a markdown document using zero-dependency parsing."""
     content = file_path.read_text(encoding="utf-8", errors="replace")
     if not content.startswith("---"):
         return {}, content
@@ -37,23 +57,22 @@ def parse_frontmatter(file_path: Path) -> Tuple[Dict[str, Any], str]:
     raw_yaml = parts[1]
     body = parts[2].lstrip("\r\n")
 
-    # Simple YAML key: value extractor (handles basic strings, lists, inline dicts)
     metadata: Dict[str, Any] = {}
-    current_key = None
+    current_key: Optional[str] = None
     in_list = False
 
     for line in raw_yaml.splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
+        s = line.strip()
+        if not s or s.startswith("#"):
             continue
 
-        if line.startswith("- ") and current_key and in_list:
-            item = line[2:].strip().strip("\"'")
+        if s.startswith("- ") and current_key and in_list:
+            item = s[2:].strip().strip("\"'")
             metadata[current_key].append(item)
             continue
 
-        if ":" in line:
-            key, val = line.split(":", 1)
+        if ":" in s:
+            key, val = s.split(":", 1)
             key = key.strip()
             val = val.strip()
 
@@ -62,13 +81,11 @@ def parse_frontmatter(file_path: Path) -> Tuple[Dict[str, Any], str]:
                 metadata[key] = []
                 in_list = True
             elif val.startswith("[") and val.endswith("]"):
-                # Inline list
                 items = [x.strip().strip("\"'") for x in val[1:-1].split(",") if x.strip()]
                 metadata[key] = items
                 in_list = False
                 current_key = key
             elif val.startswith("{") and val.endswith("}"):
-                # Inline map
                 metadata[key] = val
                 in_list = False
                 current_key = key
@@ -111,22 +128,18 @@ def validate_bundle(bundle_root: Path) -> bool:
             continue
 
         concepts_count += 1
-        meta, body = parse_frontmatter(md_file)
+        meta, _ = parse_frontmatter(md_file)
 
-        # Check required 'type' field
         if not meta or "type" not in meta:
             print(f"  ❌ Error: Concept '{rel_path}' is missing required frontmatter 'type:' (§4.1)")
             errors += 1
             continue
 
         ctype = meta.get("type", "Unknown")
-
-        # Check Attested Computation requirements (§10)
         if ctype == "Attested Computation" and "runtime" not in meta:
             print(f"  ❌ Error: Attested Computation '{rel_path}' missing required 'runtime:' (§10.2)")
             errors += 1
 
-        # Check recommended fields
         if "title" not in meta:
             warnings += 1
         if "description" not in meta:
@@ -140,12 +153,12 @@ def validate_bundle(bundle_root: Path) -> bool:
     if errors == 0:
         print("🎉 Bundle conforms to Open Knowledge Format (OKF v0.2) specification!")
         return True
-    else:
-        print("❌ Bundle has validation errors that should be resolved.")
-        return False
+
+    print("❌ Bundle has validation errors that should be resolved.")
+    return False
 
 
-def scaffold_bundle(target_dir: Path, title: str, domain: str = "Knowledge"):
+def scaffold_bundle(target_dir: Path, title: str, domain: str = "Knowledge") -> None:
     """Scaffold a new OKF v0.2 compliant bundle structure."""
     target_dir.mkdir(parents=True, exist_ok=True)
     print(f"\n🛠️  [Scaffold] Creating OKF v0.2 bundle in: {target_dir.resolve()}")
@@ -153,7 +166,6 @@ def scaffold_bundle(target_dir: Path, title: str, domain: str = "Knowledge"):
     now_iso = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     today_str = datetime.date.today().isoformat()
 
-    # 1. Root index.md
     index_content = f"""---
 okf_version: "{OKF_VERSION}"
 ---
@@ -173,7 +185,6 @@ Welcome to the **{title}** knowledge bundle, structured in accordance with the [
     (target_dir / "index.md").write_text(index_content, encoding="utf-8")
     print("  ✅ Created root index.md (with okf_version: 0.2)")
 
-    # 2. Root log.md
     log_content = f"""# Directory Update Log
 
 ## {today_str}
@@ -182,7 +193,6 @@ Welcome to the **{title}** knowledge bundle, structured in accordance with the [
     (target_dir / "log.md").write_text(log_content, encoding="utf-8")
     print("  ✅ Created log.md")
 
-    # 3. Overview concept
     overview_content = f"""---
 type: Overview
 title: {title} Overview
@@ -198,7 +208,7 @@ verified: {{ by: human:user, at: {now_iso} }}
 > Autonomous knowledge bundle conforming to the Open Knowledge Format (OKF v0.2).
 
 ## Scope & Intent
-This bundle captures structured domain knowledge, concepts, and relationships designed for both human inspection and autonomous AI agent walking.
+This bundle captures structured domain knowledge, concepts, and relationships designed for human inspection and autonomous AI agent navigation.
 
 ## Navigation
 Use the [Directory Index](/index.md) to progressively disclose concepts and relationships.
@@ -206,15 +216,14 @@ Use the [Directory Index](/index.md) to progressively disclose concepts and rela
     (target_dir / "overview.md").write_text(overview_content, encoding="utf-8")
     print("  ✅ Created overview.md (concept with full provenance & trust metadata)")
 
-    # 4. References subdirectory
     refs_dir = target_dir / "references"
     refs_dir.mkdir(exist_ok=True)
-    refs_index = f"""# References & Supporting Material
+    refs_index = """# References & Supporting Material
 
 * [Data Sources](sources.md) - Canonical external sources and references.
 """
     (refs_dir / "index.md").write_text(refs_index, encoding="utf-8")
-    
+
     sources_content = f"""---
 type: Reference
 title: Canonical Data Sources
@@ -234,14 +243,12 @@ generated: {{ by: okf-architect/v0.2, at: {now_iso} }}
     print(f"\n🎉 OKF bundle scaffolded successfully in {target_dir}")
 
 
-def refresh_indexes(bundle_root: Path):
+def refresh_indexes(bundle_root: Path) -> None:
     """Scan bundle and rebuild all index.md listings for progressive disclosure (§8)."""
     print(f"\n🔄 [Index Refresh] Updating index.md files across: {bundle_root.resolve()}")
-    
+
     for dirpath, dirnames, filenames in os.walk(bundle_root):
         current_dir = Path(dirpath)
-        rel_dir = current_dir.relative_to(bundle_root)
-
         concepts = []
         for f in sorted(filenames):
             if f.endswith(".md") and f not in RESERVED_FILENAMES:
@@ -252,15 +259,10 @@ def refresh_indexes(bundle_root: Path):
                 ctype = meta.get("type", "Concept")
                 concepts.append((f, title, desc, ctype))
 
-        subdirs = []
-        for d in sorted(dirnames):
-            if not d.startswith(".") and not d.startswith("_"):
-                subdirs.append(d)
-
+        subdirs = [d for d in sorted(dirnames) if not d.startswith(".") and not d.startswith("_")]
         if not concepts and not subdirs:
             continue
 
-        # Build index.md
         index_lines = []
         if current_dir == bundle_root:
             index_lines.append("---\nokf_version: \"0.2\"\n---\n")
@@ -285,75 +287,14 @@ def refresh_indexes(bundle_root: Path):
         print(f"  ✅ Updated: {index_file.relative_to(bundle_root)}")
 
 
-def main():
-    parser = argparse.ArgumentParser(description="okf-architect — Open Knowledge Format (OKF v0.2) architect & validator")
-    subparsers = parser.add_subparsers(dest="command", required=True)
-
-    # audit / validate
-    p_audit = subparsers.add_parser("validate", aliases=["audit"], help="Validate an OKF bundle against spec v0.2")
-    p_audit.add_argument("path", type=str, nargs="?", default=".", help="Path to OKF bundle root")
-
-    # scaffold
-    p_scaffold = subparsers.add_parser("scaffold", help="Scaffold a new OKF bundle structure")
-    p_scaffold.add_argument("path", type=str, nargs="?", default=".", help="Target directory")
-    p_scaffold.add_argument("--title", type=str, default="Knowledge Bundle", help="Bundle title")
-    p_scaffold.add_argument("--domain", type=str, default="Knowledge", help="Primary domain tag")
-
-    # index
-    p_index = subparsers.add_parser("index", help="Rebuild index.md files for progressive disclosure")
-    p_index.add_argument("path", type=str, nargs="?", default=".", help="Path to OKF bundle root")
-
-    # viz
-    p_viz = subparsers.add_parser("viz", aliases=["graph"], help="Generate interactive knowledge graph (viz.html)")
-    p_viz.add_argument("path", type=str, nargs="?", default=".", help="Path to OKF bundle root")
-    p_viz.add_argument("--tree", type=str, default=None, help="Path to CURRICULUM_TREE.md outline")
-    p_viz.add_argument("-o", "--output", type=str, default=None, help="Custom output path for HTML")
-
-    # compile-tree
-    p_tree = subparsers.add_parser("compile-tree", aliases=["tree", "curriculum"], help="Compile CURRICULUM_TREE.md outline into interactive knowledge cosmos and study portal")
-    p_tree.add_argument("path", type=str, nargs="?", default=".", help="Path to OKF bundle root")
-    p_tree.add_argument("--tree", type=str, default=None, help="Custom path to CURRICULUM_TREE.md")
-    p_tree.add_argument("--init", action="store_true", help="Initialize or regenerate CURRICULUM_TREE.md outline template from bundle")
-    p_tree.add_argument("-o", "--output", type=str, default=None, help="Custom output path for viz.html")
-
-    # normalize
-    p_norm = subparsers.add_parser("normalize", help="Normalize concept filenames to clean OKF kebab/snake slugs")
-    p_norm.add_argument("path", type=str, nargs="?", default=".", help="Path to OKF bundle root")
-    p_norm.add_argument("--dry-run", action="store_true", help="Print changes without renaming")
-
-    args = parser.parse_args()
-    target_path = Path(args.path).resolve()
-
-    if args.command in ("validate", "audit"):
-        success = validate_bundle(target_path)
-        sys.exit(0 if success else 1)
-    elif args.command == "scaffold":
-        scaffold_bundle(target_path, title=args.title, domain=args.domain)
-    elif args.command == "index":
-        refresh_indexes(target_path)
-    elif args.command in ("viz", "graph"):
-        out_f = Path(args.output).resolve() if args.output else None
-        tree_p = Path(args.tree).resolve() if getattr(args, "tree", None) else None
-        generate_viz(target_path, out_f, tree_file=tree_p)
-    elif args.command in ("compile-tree", "tree", "curriculum"):
-        tree_p = Path(args.tree).resolve() if getattr(args, "tree", None) else None
-        out_f = Path(args.output).resolve() if args.output else None
-        compile_tree(target_path, tree_file=tree_p, init=args.init, output_file=out_f)
-    elif args.command == "normalize":
-        normalize_bundle(target_path, dry_run=args.dry_run)
-
-
-
 def extract_links(body: str) -> List[str]:
-    """Extract markdown links and bundle paths from markdown body."""
-    links = []
-    # Standard markdown links: [text](path)
+    """Extract markdown links and wikilinks from body content."""
+    links: List[str] = []
     md_links = re.findall(r'\[([^\]]+)\]\(([^)]+)\)', body)
-    for text, url in md_links:
+    for _, url in md_links:
         if not url.startswith("http") and not url.startswith("#"):
             links.append(url.split("#")[0].strip())
 
-    # Wikilinks: [[target]]
     wikilinks = re.findall(r'\[\[([^\]|]+)(?:\|[^\]]+)?\]\]', body)
     for target in wikilinks:
         links.append(target.strip())
@@ -361,12 +302,8 @@ def extract_links(body: str) -> List[str]:
     return links
 
 
-def classify_canvas_module(rel_path_str: str, meta: dict, course_name: str) -> Tuple[str, str, int]:
-    """
-    Classifies a note into its canonical Canvas LMS Module or Week.
-    Returns (module_id, module_label, sort_order).
-    """
-    # 1. Explicit metadata in frontmatter
+def classify_canvas_module(rel_path_str: str, meta: Dict[str, Any], course_name: str) -> Tuple[str, str, int]:
+    """Classify a note into its canonical Canvas LMS Module or Week."""
     if meta.get("module"):
         m_str = str(meta["module"]).strip()
         m_w = re.search(r'(?:week|w)[_\s-]*(\d{1,2})', m_str, re.IGNORECASE)
@@ -374,31 +311,30 @@ def classify_canvas_module(rel_path_str: str, meta: dict, course_name: str) -> T
         slug = f"w{int(m_w.group(1)):02d}" if m_w else re.sub(r'[^a-zA-Z0-9]+', '_', m_str).lower().strip('_')
         return f"{course_name}/mod_{slug}", m_str, order
 
-    # 2. Week regex from path or filename
     m_week = re.search(r'(?:week|w)[_\s-]*(\d{1,2})', rel_path_str, re.IGNORECASE)
     if m_week:
         w_num = int(m_week.group(1))
         return f"{course_name}/mod_w{w_num:02d}", f"Week {w_num:02d}", w_num
 
-    # 3. Module regex from path (Module 0, Module 1, Module 2...)
     m_mod = re.search(r'\bmodule\s*(\d{1,2})\b', rel_path_str, re.IGNORECASE)
     if m_mod:
         m_num = int(m_mod.group(1))
         return f"{course_name}/mod_m{m_num:02d}", f"Module {m_num:02d}", m_num
 
-    if "assignment" in rel_path_str.lower():
+    low = rel_path_str.lower()
+    if "assignment" in low:
         return f"{course_name}/mod_assignments", "Assignments & Projects", 90
-    if "quiz" in rel_path_str.lower():
+    if "quiz" in low:
         return f"{course_name}/mod_quizzes", "Quizzes & Practice", 85
-    if "slide" in rel_path_str.lower():
+    if "slide" in low:
         return f"{course_name}/mod_slides", "Lecture Slides", 80
 
     return f"{course_name}/mod_overview", "Course Overview", 0
 
 
-def collect_cornell_map(bundle_root: Path) -> Dict[str, dict]:
-    """Scans bundle for generated Cornell notes JSON and HTML sidecars."""
-    cornell_map: Dict[str, dict] = {}
+def collect_cornell_map(bundle_root: Path) -> Dict[str, CornellInfo]:
+    """Scan bundle for generated Cornell notes JSON and HTML sidecars."""
+    cornell_map: Dict[str, CornellInfo] = {}
     for jf in bundle_root.rglob("*_cornell.json"):
         if "outputs" in jf.parts:
             try:
@@ -410,13 +346,13 @@ def collect_cornell_map(bundle_root: Path) -> Dict[str, dict]:
                 if html_candidate.is_file():
                     rel_html = str(html_candidate.relative_to(bundle_root)).replace("\\", "/")
                     cues_count = sum(len(s.get("entries", [])) for s in c_data.get("sections", []))
-                    info = {
-                        "html_path": rel_html,
-                        "title": c_data.get("title", jf.stem.replace("_cornell", "").replace("_", " ").title()),
-                        "cues": cues_count,
-                        "sections": len(c_data.get("sections", [])),
-                        "source": src
-                    }
+                    info = CornellInfo(
+                        html_path=rel_html,
+                        title=c_data.get("title", jf.stem.replace("_cornell", "").replace("_", " ").title()),
+                        cues=cues_count,
+                        sections=len(c_data.get("sections", [])),
+                        source=src
+                    )
                     if src:
                         src_stem = Path(src).stem.lower().replace("-", "_").replace(" ", "_")
                         cornell_map[src_stem] = info
@@ -426,282 +362,8 @@ def collect_cornell_map(bundle_root: Path) -> Dict[str, dict]:
     return cornell_map
 
 
-def generate_cornell_portal(bundle_root: Path, nodes: list, module_hubs: dict, cornell_map: dict):
-    """Generates standalone Canvas-style Cornell Notes Study Portal HTML."""
-    portal_path = bundle_root / "cornell_index.html"
-    print(f"\n📖 [Cornell Portal] Building Canvas Study Portal at {portal_path.resolve()}")
-
-    # Group notes with cornell notes by course and week
-    grouped: Dict[str, Dict[str, list]] = {}
-    total_cues = 0
-
-    for n in nodes:
-        d = n["data"]
-        if d.get("has_cornell") and d.get("cornell_path"):
-            c = d.get("course", "General")
-            m = d.get("module", "Overview")
-            grouped.setdefault(c, {}).setdefault(m, []).append(d)
-            total_cues += d.get("cornell_cues", 0)
-
-    total_cornell_notes = sum(len(items) for c_dict in grouped.values() for items in c_dict.values())
-
-    portal_html = f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Canvas Cornell Study Portal &bull; Active Recall Revision</title>
-  <style>
-    :root {{
-      --bg: #0b0c10;
-      --card-bg: #141721;
-      --card-border: #232738;
-      --text: #cdd6f4;
-      --text-dim: #8b92aa;
-      --accent-blue: #89b4fa;
-      --accent-green: #a6e3a1;
-      --accent-amber: #fab387;
-      --accent-violet: #cba6f7;
-    }}
-    * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-    body {{
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      line-height: 1.5;
-      padding: 30px 24px;
-      max-width: 1300px;
-      margin: 0 auto;
-    }}
-    header {{
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: space-between;
-      gap: 16px;
-      padding-bottom: 24px;
-      border-bottom: 1px solid var(--card-border);
-      margin-bottom: 28px;
-    }}
-    .header-title h1 {{
-      font-size: 24px;
-      font-weight: 700;
-      color: #ffffff;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }}
-    .header-title p {{
-      color: var(--text-dim);
-      font-size: 13px;
-      margin-top: 4px;
-    }}
-    .header-actions {{
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }}
-    .btn {{
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 8px 16px;
-      border-radius: 6px;
-      font-size: 13px;
-      font-weight: 600;
-      text-decoration: none;
-      transition: all 0.2s ease;
-      cursor: pointer;
-    }}
-    .btn-cosmos {{
-      background: rgba(137, 180, 250, 0.15);
-      color: var(--accent-blue);
-      border: 1px solid rgba(137, 180, 250, 0.35);
-    }}
-    .btn-cosmos:hover {{
-      background: rgba(137, 180, 250, 0.28);
-      transform: translateY(-1px);
-    }}
-    .stats-bar {{
-      display: flex;
-      gap: 16px;
-      margin-bottom: 24px;
-    }}
-    .stat-pill {{
-      background: var(--card-bg);
-      border: 1px solid var(--card-border);
-      padding: 8px 16px;
-      border-radius: 8px;
-      font-size: 13px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }}
-    .stat-num {{
-      font-weight: 700;
-      color: var(--accent-green);
-    }}
-    .course-section {{
-      margin-bottom: 36px;
-    }}
-    .course-header {{
-      font-size: 18px;
-      font-weight: 700;
-      color: #ffffff;
-      margin-bottom: 14px;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }}
-    .module-group {{
-      background: var(--card-bg);
-      border: 1px solid var(--card-border);
-      border-radius: 10px;
-      margin-bottom: 18px;
-      overflow: hidden;
-    }}
-    .module-header {{
-      background: rgba(255, 255, 255, 0.03);
-      padding: 10px 18px;
-      font-size: 14px;
-      font-weight: 600;
-      color: var(--accent-amber);
-      border-bottom: 1px solid var(--card-border);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }}
-    .notes-grid {{
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
-      gap: 14px;
-      padding: 16px;
-    }}
-    .note-card {{
-      background: rgba(255, 255, 255, 0.02);
-      border: 1px solid rgba(255, 255, 255, 0.06);
-      border-radius: 8px;
-      padding: 14px 16px;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      transition: all 0.2s ease;
-    }}
-    .note-card:hover {{
-      border-color: var(--accent-green);
-      background: rgba(166, 227, 161, 0.04);
-      transform: translateY(-2px);
-    }}
-    .note-title {{
-      font-size: 14px;
-      font-weight: 600;
-      color: #ffffff;
-      margin-bottom: 6px;
-    }}
-    .note-badges {{
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 12px;
-    }}
-    .badge-cues {{
-      font-size: 11px;
-      font-weight: 600;
-      color: var(--accent-green);
-      background: rgba(166, 227, 161, 0.15);
-      padding: 2px 8px;
-      border-radius: 4px;
-    }}
-    .card-actions {{
-      display: flex;
-      gap: 8px;
-      margin-top: 8px;
-    }}
-    .btn-study {{
-      flex: 1;
-      text-align: center;
-      background: #1e3a2f;
-      color: var(--accent-green);
-      border: 1px solid var(--accent-green);
-      padding: 6px 12px;
-      border-radius: 6px;
-      font-size: 12px;
-      font-weight: 600;
-      text-decoration: none;
-      transition: background 0.15s;
-    }}
-    .btn-study:hover {{
-      background: #2a5242;
-    }}
-  </style>
-</head>
-<body>
-  <header>
-    <div class="header-title">
-      <h1><span>📝</span> Canvas Cornell Study Portal</h1>
-      <p>Active Recall Revision &bull; Paired Cues &bull; Interactive Self-Quiz Mode</p>
-    </div>
-    <div class="header-actions">
-      <a href="viz.html" class="btn btn-cosmos"><span>🌌</span> Open Knowledge Cosmos</a>
-    </div>
-  </header>
-
-  <div class="stats-bar">
-    <div class="stat-pill"><span>📚 Cornell Notes:</span> <span class="stat-num">{total_cornell_notes}</span></div>
-    <div class="stat-pill"><span>⚡ Active Recall Cues:</span> <span class="stat-num">{total_cues}</span></div>
-    <div class="stat-pill"><span>🎓 Subjects:</span> <span class="stat-num">{len(grouped)}</span></div>
-  </div>
-"""
-
-    for course, mods in sorted(grouped.items()):
-        portal_html += f"""
-  <section class="course-section">
-    <div class="course-header"><span>🏛️</span> {course}</div>
-"""
-        for mod_name, items in sorted(mods.items()):
-            portal_html += f"""
-    <div class="module-group">
-      <div class="module-header">
-        <span>📅 {mod_name}</span>
-        <span style="font-size:12px; color:var(--text-dim);">{len(items)} Study Notes</span>
-      </div>
-      <div class="notes-grid">
-"""
-            for itm in items:
-                title = itm.get("label", "Note")
-                cues = itm.get("cornell_cues", 0)
-                html_rel = itm.get("cornell_path", "#")
-                portal_html += f"""
-        <div class="note-card">
-          <div>
-            <div class="note-title">{title}</div>
-            <div class="note-badges">
-              <span class="badge-cues">⚡ {cues} Active Recall Cues</span>
-            </div>
-          </div>
-          <div class="card-actions">
-            <a href="{html_rel}" class="btn-study" target="_blank">👁️ Self-Quiz Mode &rsaquo;</a>
-          </div>
-        </div>
-"""
-            portal_html += """
-      </div>
-    </div>
-"""
-        portal_html += """
-  </section>
-"""
-
-    portal_html += """
-</body>
-</html>
-"""
-    portal_path.write_text(portal_html, encoding="utf-8")
-    print(f"  🎉 Cornell Study Portal generated: {portal_path.resolve()}")
-
-
 def generate_curriculum_tree_template(bundle_root: Path, target_file: Optional[Path] = None) -> Path:
-    """Generates an editable, human-readable CURRICULUM_TREE.md outline of all courses and weekly modules."""
+    """Generate an editable, human-readable CURRICULUM_TREE.md outline of all courses and weekly modules."""
     tree_path = target_file if target_file else (bundle_root / "CURRICULUM_TREE.md")
     print(f"\n🌲 [Curriculum Tree] Generating editable Markdown tree outline at {tree_path.resolve()}")
 
@@ -723,19 +385,17 @@ def generate_curriculum_tree_template(bundle_root: Path, target_file: Optional[P
         if not md_files:
             continue
 
-        tree_lines.append(f"## {course_name}")
-        tree_lines.append("")
-
-        modules_map: Dict[tuple, list] = {}
+        tree_lines.append(f"## {course_name}\n")
+        modules_map: Dict[Tuple[int, str], List[Tuple[str, str]]] = {}
         for mf in sorted(md_files):
             rel_to_bundle = str(mf.relative_to(bundle_root)).replace("\\", "/")
             meta, _ = parse_frontmatter(mf)
-            m_id, m_label, order = classify_canvas_module(rel_to_bundle, meta, course_name)
+            _, m_label, order = classify_canvas_module(rel_to_bundle, meta, course_name)
             title = meta.get("title", mf.stem.replace("_", " ").title())
             rel_to_course = str(mf.relative_to(course_dir)).replace("\\", "/")
             modules_map.setdefault((order, m_label), []).append((rel_to_course, title))
 
-        for (order, m_label), items in sorted(modules_map.items(), key=lambda x: (x[0][0], x[0][1])):
+        for (_, m_label), items in sorted(modules_map.items(), key=lambda x: (x[0][0], x[0][1])):
             tree_lines.append(f"### {m_label}")
             for rel_c, title in items:
                 clean_path = rel_c.replace(".md", "")
@@ -747,22 +407,24 @@ def generate_curriculum_tree_template(bundle_root: Path, target_file: Optional[P
     return tree_path
 
 
-def parse_curriculum_tree(tree_file: Path, bundle_root: Path) -> Tuple[Dict[str, Dict[str, dict]], Dict[Any, dict]]:
-    """Parses a CURRICULUM_TREE.md markdown outline into structured module hubs and file mappings."""
+def parse_curriculum_tree(
+    tree_file: Path, bundle_root: Path
+) -> Tuple[Dict[str, Dict[str, ModuleHub]], Dict[Tuple[str, str], NoteAssignment], Dict[str, NoteAssignment]]:
+    """Parse CURRICULUM_TREE.md into typed module hubs and path-indexed note assignments."""
     print(f"\n📖 [Curriculum Tree] Parsing curriculum hierarchy from {tree_file.resolve()}")
     content = tree_file.read_text(encoding="utf-8")
 
-    course_modules: Dict[str, Dict[str, dict]] = {}
-    file_assignments: Dict[Any, dict] = {}
+    course_modules: Dict[str, Dict[str, ModuleHub]] = {}
+    path_assignments: Dict[Tuple[str, str], NoteAssignment] = {}
+    stem_assignments: Dict[str, NoteAssignment] = {}
 
-    current_course = None
+    current_course: Optional[str] = None
     current_module_label = "Course Overview"
     current_module_order = 0
     current_module_id = "mod_overview"
     seq_counter = 1
 
-    lines = content.splitlines()
-    for line in lines:
+    for line in content.splitlines():
         sline = line.strip()
         if not sline or sline.startswith(">"):
             continue
@@ -777,18 +439,17 @@ def parse_curriculum_tree(tree_file: Path, bundle_root: Path) -> Tuple[Dict[str,
             current_module_id = f"{current_course}/mod_overview"
             seq_counter = 1
             course_modules.setdefault(current_course, {})
-            course_modules[current_course][current_module_id] = {
-                "id": current_module_id,
-                "label": current_module_label,
-                "order": 0,
-                "course": current_course
-            }
+            course_modules[current_course][current_module_id] = ModuleHub(
+                id=current_module_id,
+                label=current_module_label,
+                order=0,
+                course=current_course
+            )
             continue
 
         if not current_course:
             continue
 
-        # Check for module header: ### Module or - **Module**
         is_module_header = False
         mod_text = ""
         if sline.startswith("### "):
@@ -813,19 +474,18 @@ def parse_curriculum_tree(tree_file: Path, bundle_root: Path) -> Tuple[Dict[str,
                 current_module_order = seq_counter
                 seq_counter += 1
 
-            clean_mod_slug = re.sub(r'[^a-zA-Z0-9]+', '_', mod_text.lower()).strip('_')
-            current_module_id = f"{current_course}/{clean_mod_slug}"
+            clean_slug = re.sub(r'[^a-zA-Z0-9]+', '_', mod_text.lower()).strip('_')
+            current_module_id = f"{current_course}/{clean_slug}"
 
             course_modules.setdefault(current_course, {})
-            course_modules[current_course][current_module_id] = {
-                "id": current_module_id,
-                "label": current_module_label,
-                "order": current_module_order,
-                "course": current_course
-            }
+            course_modules[current_course][current_module_id] = ModuleHub(
+                id=current_module_id,
+                label=current_module_label,
+                order=current_module_order,
+                course=current_course
+            )
             continue
 
-        # Check for note items: - [[path]] Title or - [Title](path)
         if sline.startswith("- ") or sline.startswith("* "):
             item_body = sline[2:].strip()
             wm = re.search(r'\[\[([^\]|]+)(?:\|([^\]]+))?\]\](?:\s*(.*))?', item_body)
@@ -833,7 +493,6 @@ def parse_curriculum_tree(tree_file: Path, bundle_root: Path) -> Tuple[Dict[str,
 
             target = None
             custom_title = None
-
             if wm:
                 target = wm.group(1).strip()
                 custom_title = wm.group(2) or wm.group(3) or ""
@@ -846,60 +505,36 @@ def parse_curriculum_tree(tree_file: Path, bundle_root: Path) -> Tuple[Dict[str,
                 stem = Path(target_clean).name.lower().replace("-", "_").replace(" ", "_")
                 clean_target = target_clean.lower().replace("\\", "/").replace("-", "_").replace(" ", "_")
 
-                info = {
-                    "course": current_course,
-                    "moduleId": current_module_id,
-                    "module": current_module_label,
-                    "order": current_module_order,
-                    "custom_title": custom_title.strip() if custom_title else ""
-                }
-                file_assignments[(current_course, clean_target)] = info
-                file_assignments[(current_course, stem)] = info
-                file_assignments[stem] = info
+                assignment = NoteAssignment(
+                    course=current_course,
+                    module_id=current_module_id,
+                    module=current_module_label,
+                    order=current_module_order,
+                    custom_title=custom_title.strip() if custom_title else ""
+                )
+                path_assignments[(current_course, clean_target)] = assignment
+                path_assignments[(current_course, stem)] = assignment
+                stem_assignments[stem] = assignment
 
-    print(f"  ✅ Parsed {len(course_modules)} courses with {sum(len(m) for m in course_modules.values())} module hubs")
-    return course_modules, file_assignments
-
-
-def compile_tree(bundle_root: Path, tree_file: Optional[Path] = None, init: bool = False, output_file: Optional[Path] = None) -> bool:
-    """Compiles a CURRICULUM_TREE.md outline into interactive knowledge cosmos and study portal."""
-    target_tree = tree_file if tree_file else (bundle_root / "CURRICULUM_TREE.md")
-    if init or not target_tree.is_file():
-        generate_curriculum_tree_template(bundle_root, target_tree)
-
-    return generate_viz(bundle_root, output_file=output_file, tree_file=target_tree)
+    total_hubs = sum(len(m) for m in course_modules.values())
+    print(f"  ✅ Parsed {len(course_modules)} courses with {total_hubs} module hubs")
+    return course_modules, path_assignments, stem_assignments
 
 
-def generate_viz(bundle_root: Path, output_file: Optional[Path] = None, tree_file: Optional[Path] = None):
-    """Generate standalone viz.html interactive graph and cornell study portal for OKF bundle."""
-    print(f"\n📊 [Knowledge Graph] Generating Canvas-Structured viz.html for bundle: {bundle_root.resolve()}")
-    if not bundle_root.is_dir():
-        print(f"❌ Error: Not a directory: {bundle_root}")
-        return False
-
-    nodes = []
-    node_ids = set()
+def build_graph_nodes(
+    bundle_root: Path,
+    md_files: List[Path],
+    cornell_map: Dict[str, CornellInfo],
+    tree_hubs: Optional[Dict[str, Dict[str, ModuleHub]]],
+    path_assignments: Optional[Dict[Tuple[str, str], NoteAssignment]],
+    stem_assignments: Optional[Dict[str, NoteAssignment]],
+) -> Tuple[List[Dict[str, Any]], Set[str], Dict[str, str], Dict[str, Dict[str, ModuleHub]]]:
+    """Extract content nodes and module hub nodes for the graph simulation."""
+    nodes: List[Dict[str, Any]] = []
+    node_ids: Set[str] = set()
     file_to_id: Dict[str, str] = {}
-    md_files = list(bundle_root.rglob("*.md"))
+    module_hubs: Dict[str, Dict[str, ModuleHub]] = dict(tree_hubs) if tree_hubs else {}
 
-    # Map existing Cornell Notes
-    cornell_map = collect_cornell_map(bundle_root)
-
-    # Check for CURRICULUM_TREE.md
-    active_tree = tree_file
-    if not active_tree:
-        default_tree = bundle_root / "CURRICULUM_TREE.md"
-        if default_tree.is_file():
-            active_tree = default_tree
-
-    tree_hubs = None
-    tree_assignments = None
-    if active_tree and active_tree.is_file():
-        tree_hubs, tree_assignments = parse_curriculum_tree(active_tree, bundle_root)
-
-    module_hubs: Dict[str, Dict[str, dict]] = tree_hubs if tree_hubs else {}
-
-    # Pass 1: Build content nodes
     for md_file in md_files:
         rel_path = md_file.relative_to(bundle_root)
         if md_file.name in RESERVED_FILENAMES or "outputs" in md_file.parts or md_file.name == "CURRICULUM_TREE.md":
@@ -909,7 +544,7 @@ def generate_viz(bundle_root: Path, output_file: Optional[Path] = None, tree_fil
         file_to_id[str(rel_path).replace("\\", "/")] = concept_id
         file_to_id[md_file.name] = concept_id
 
-        meta, body = parse_frontmatter(md_file)
+        meta, _ = parse_frontmatter(md_file)
         title = meta.get("title", md_file.stem.replace("_", " ").title())
         desc = meta.get("description", "")
         ctype = meta.get("type", "Concept")
@@ -920,8 +555,8 @@ def generate_viz(bundle_root: Path, output_file: Optional[Path] = None, tree_fil
         parts = rel_path.parts
         course = parts[0] if len(parts) > 1 else "General"
 
-        assigned = None
-        if tree_assignments:
+        assigned: Optional[NoteAssignment] = None
+        if path_assignments and stem_assignments:
             clean_stem = md_file.stem.lower().replace("-", "_").replace(" ", "_")
             course_dir = bundle_root / course
             try:
@@ -930,36 +565,31 @@ def generate_viz(bundle_root: Path, output_file: Optional[Path] = None, tree_fil
                 rel_to_course = clean_stem
 
             assigned = (
-                tree_assignments.get((course, rel_to_course)) or
-                tree_assignments.get((course, clean_stem)) or
-                tree_assignments.get(clean_stem)
+                path_assignments.get((course, rel_to_course))
+                or path_assignments.get((course, clean_stem))
+                or stem_assignments.get(clean_stem)
             )
 
         if assigned:
-            mod_id = assigned["moduleId"]
-            mod_label = assigned["module"]
-            mod_order = assigned["order"]
-            course = assigned["course"]
-            if assigned.get("custom_title"):
-                title = assigned["custom_title"]
+            mod_id = assigned.module_id
+            mod_label = assigned.module
+            mod_order = assigned.order
+            course = assigned.course
+            if assigned.custom_title:
+                title = assigned.custom_title
         else:
             mod_id, mod_label, mod_order = classify_canvas_module(str(rel_path).replace("\\", "/"), meta, course)
 
-        module_hubs.setdefault(course, {}).setdefault(mod_id, {
-            "id": mod_id,
-            "label": mod_label,
-            "order": mod_order,
-            "course": course
-        })
+        module_hubs.setdefault(course, {})
+        if mod_id not in module_hubs[course]:
+            module_hubs[course][mod_id] = ModuleHub(id=mod_id, label=mod_label, order=mod_order, course=course)
 
-        # Match Cornell Note
         clean_stem = md_file.stem.lower().replace("-", "_").replace(" ", "_")
         cornell_info = cornell_map.get(clean_stem)
         has_cornell = cornell_info is not None
-        cornell_path = cornell_info["html_path"] if cornell_info else ""
-        cornell_cues = cornell_info["cues"] if cornell_info else 0
+        cornell_path = cornell_info.html_path if cornell_info else ""
+        cornell_cues = cornell_info.cues if cornell_info else 0
 
-        # Determine trust tier
         verified = meta.get("verified", None)
         if not verified:
             trust = "Unverified"
@@ -988,21 +618,20 @@ def generate_viz(bundle_root: Path, output_file: Optional[Path] = None, tree_fil
         })
         node_ids.add(concept_id)
 
-    # Pass 1b: Synthesize Canvas Module Hub Nodes
     for course, hubs in module_hubs.items():
-        for mod_id, h_info in hubs.items():
+        for mod_id, hub in hubs.items():
             nodes.append({
                 "data": {
                     "id": mod_id,
-                    "label": h_info["label"],
+                    "label": hub.label,
                     "type": "ModuleHub",
-                    "description": f"Canvas LMS Module container for {h_info['label']}",
-                    "tags": ["canvas-module", h_info["label"].lower().replace(" ", "-")],
+                    "description": f"Canvas LMS Module container for {hub.label}",
+                    "tags": ["canvas-module", hub.label.lower().replace(" ", "-")],
                     "trust": "Machine-Confirmed",
                     "course": course,
-                    "module": h_info["label"],
+                    "module": hub.label,
                     "moduleId": mod_id,
-                    "order": h_info["order"],
+                    "order": hub.order,
                     "degree": 0,
                     "has_cornell": False,
                     "cornell_path": "",
@@ -1011,12 +640,23 @@ def generate_viz(bundle_root: Path, output_file: Optional[Path] = None, tree_fil
             })
             node_ids.add(mod_id)
 
-    # Pass 2: Build Edges (Spine, Containment, Semantic References)
-    edges = []
-    edge_set = set()
-    degree_map = {}
+    return nodes, node_ids, file_to_id, module_hubs
 
-    def add_edge(src, tgt, etype):
+
+def build_graph_edges(
+    nodes: List[Dict[str, Any]],
+    node_ids: Set[str],
+    module_hubs: Dict[str, Dict[str, ModuleHub]],
+    md_files: List[Path],
+    file_to_id: Dict[str, str],
+    bundle_root: Path
+) -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
+    """Build chronological spines, module containment, and cross-reference links."""
+    edges: List[Dict[str, Any]] = []
+    edge_set: Set[Tuple[str, str]] = set()
+    degree_map: Dict[str, int] = {}
+
+    def add_edge(src: str, tgt: str, etype: str) -> None:
         key = (src, tgt)
         if key not in edge_set and src in node_ids and tgt in node_ids and src != tgt:
             edge_set.add(key)
@@ -1031,15 +671,11 @@ def generate_viz(bundle_root: Path, output_file: Optional[Path] = None, tree_fil
             degree_map[src] = degree_map.get(src, 0) + 1
             degree_map[tgt] = degree_map.get(tgt, 0) + 1
 
-    # 1. Chronological Spine per Course: link sequential Module Hubs
-    for course, hubs in module_hubs.items():
-        sorted_hubs = sorted(hubs.values(), key=lambda x: x["order"])
+    for _, hubs in module_hubs.items():
+        sorted_hubs = sorted(hubs.values(), key=lambda x: x.order)
         for i in range(len(sorted_hubs) - 1):
-            h1 = sorted_hubs[i]["id"]
-            h2 = sorted_hubs[i+1]["id"]
-            add_edge(h1, h2, "spine")
+            add_edge(sorted_hubs[i].id, sorted_hubs[i + 1].id, "spine")
 
-    # 2. Module Containment: anchor every content note to its parent Module Hub
     for n in nodes:
         if n["data"]["type"] != "ModuleHub":
             m_id = n["data"].get("moduleId")
@@ -1047,7 +683,6 @@ def generate_viz(bundle_root: Path, output_file: Optional[Path] = None, tree_fil
             if m_id:
                 add_edge(m_id, n_id, "containment")
 
-    # 3. Semantic Cross-References from markdown links
     for md_file in md_files:
         rel_path = md_file.relative_to(bundle_root)
         if md_file.name in RESERVED_FILENAMES or "outputs" in md_file.parts:
@@ -1055,9 +690,7 @@ def generate_viz(bundle_root: Path, output_file: Optional[Path] = None, tree_fil
 
         source_id = str(rel_path.with_suffix("")).replace("\\", "/")
         _, body = parse_frontmatter(md_file)
-        links = extract_links(body)
-
-        for l in links:
+        for l in extract_links(body):
             target_id = None
             cleaned = l.lstrip("/").replace(".md", "")
             if cleaned in node_ids:
@@ -1070,22 +703,95 @@ def generate_viz(bundle_root: Path, output_file: Optional[Path] = None, tree_fil
             if target_id and target_id in node_ids and target_id != source_id:
                 add_edge(source_id, target_id, "reference")
 
-    # Update node degrees
+    return edges, degree_map
+
+
+def generate_cornell_portal(bundle_root: Path, nodes: List[Dict[str, Any]]) -> bool:
+    """Generate standalone Canvas Cornell Notes Study Portal HTML using external template."""
+    portal_path = bundle_root / "cornell_index.html"
+    print(f"\n📖 [Cornell Portal] Building Canvas Study Portal at {portal_path.resolve()}")
+
+    grouped: Dict[str, Dict[str, List[Dict[str, Any]]]] = {}
+    total_cues = 0
+
     for n in nodes:
-        nid = n["data"]["id"]
-        n["data"]["degree"] = degree_map.get(nid, 0)
+        d = n["data"]
+        if d.get("has_cornell") and d.get("cornell_path"):
+            c = d.get("course", "General")
+            m = d.get("module", "Overview")
+            grouped.setdefault(c, {}).setdefault(m, []).append(d)
+            total_cues += d.get("cornell_cues", 0)
 
-    graph_payload = {"nodes": nodes, "edges": edges}
-    graph_json = json.dumps(graph_payload, indent=2)
+    total_cornell_notes = sum(len(items) for c_dict in grouped.values() for items in c_dict.values())
+    template_file = TEMPLATE_DIR / "cornell_portal_template.html"
+    if not template_file.is_file():
+        print(f"❌ Error: Cornell template not found: {template_file}")
+        return False
 
-    # Load template
-    template_path = Path(__file__).parent.parent / "templates" / "viz_template.html"
+    sections_html: List[str] = []
+    for course, mods in sorted(grouped.items()):
+        sections_html.append(f'  <section class="course-section">\n    <div class="course-header"><span>🏛️</span> {course}</div>')
+        for mod_name, items in sorted(mods.items()):
+            sections_html.append(f'    <div class="module-group">\n      <div class="module-header"><span>📅 {mod_name}</span><span style="font-size:12px; color:var(--text-dim);">{len(items)} Study Notes</span></div>\n      <div class="notes-grid">')
+            for itm in items:
+                title = itm.get("label", "Note")
+                cues = itm.get("cornell_cues", 0)
+                html_rel = itm.get("cornell_path", "#")
+                sections_html.append(f'        <div class="note-card">\n          <div>\n            <div class="note-title">{title}</div>\n            <div class="note-badges"><span class="badge-cues">⚡ {cues} Active Recall Cues</span></div>\n          </div>\n          <div class="card-actions"><a href="{html_rel}" class="btn-study" target="_blank">👁️ Self-Quiz Mode &rsaquo;</a></div>\n        </div>')
+            sections_html.append('      </div>\n    </div>')
+        sections_html.append('  </section>')
+
+    content = template_file.read_text(encoding="utf-8")
+    content = content.replace("{{TOTAL_CORNELL_NOTES}}", str(total_cornell_notes))
+    content = content.replace("{{TOTAL_CUES}}", str(total_cues))
+    content = content.replace("{{TOTAL_SUBJECTS}}", str(len(grouped)))
+    content = content.replace("{{COURSE_SECTIONS}}", "\n".join(sections_html))
+
+    portal_path.write_text(content, encoding="utf-8")
+    print(f"  🎉 Cornell Study Portal generated: {portal_path.resolve()}")
+    return True
+
+
+def generate_viz(bundle_root: Path, output_file: Optional[Path] = None, tree_file: Optional[Path] = None) -> bool:
+    """Generate standalone viz.html interactive graph and cornell study portal for OKF bundle."""
+    print(f"\n📊 [Knowledge Graph] Generating Canvas-Structured viz.html for bundle: {bundle_root.resolve()}")
+    if not bundle_root.is_dir():
+        print(f"❌ Error: Not a directory: {bundle_root}")
+        return False
+
+    md_files = list(bundle_root.rglob("*.md"))
+    cornell_map = collect_cornell_map(bundle_root)
+
+    active_tree = tree_file
+    if not active_tree:
+        default_tree = bundle_root / "CURRICULUM_TREE.md"
+        if default_tree.is_file():
+            active_tree = default_tree
+
+    tree_hubs = None
+    path_assignments = None
+    stem_assignments = None
+    if active_tree and active_tree.is_file():
+        tree_hubs, path_assignments, stem_assignments = parse_curriculum_tree(active_tree, bundle_root)
+
+    nodes, node_ids, file_to_id, module_hubs = build_graph_nodes(
+        bundle_root, md_files, cornell_map, tree_hubs, path_assignments, stem_assignments
+    )
+    edges, degree_map = build_graph_edges(nodes, node_ids, module_hubs, md_files, file_to_id, bundle_root)
+
+    for n in nodes:
+        n["data"]["degree"] = degree_map.get(n["data"]["id"], 0)
+
+    template_path = TEMPLATE_DIR / "viz_template.html"
     if not template_path.is_file():
         print(f"❌ Error: viz_template.html missing at {template_path}")
         return False
 
+    graph_payload = {"nodes": nodes, "edges": edges}
+    graph_json = json.dumps(graph_payload, indent=2)
+
     template_html = template_path.read_text(encoding="utf-8")
-    d3_path = Path(__file__).parent.parent / "templates" / "d3.min.js"
+    d3_path = TEMPLATE_DIR / "d3.min.js"
     d3_code = d3_path.read_text(encoding="utf-8") if d3_path.is_file() else ""
     rendered_html = template_html.replace("/* __D3_INLINE__ */", d3_code)
     rendered_html = rendered_html.replace("/* __GRAPH_DATA__ */", graph_json)
@@ -1096,9 +802,18 @@ def generate_viz(bundle_root: Path, output_file: Optional[Path] = None, tree_fil
     print(f"  ✅ Extracted {len(nodes)} total nodes ({len(module_hubs)} course galaxies) and {len(edges)} relation edges")
     print(f"  🎉 Knowledge graph generated: {out_path.resolve()}")
 
-    # Also generate the standalone Canvas-style Cornell Notes Study Portal
-    generate_cornell_portal(bundle_root, nodes, module_hubs, cornell_map)
+    generate_cornell_portal(bundle_root, nodes)
     return True
+
+
+def compile_tree(bundle_root: Path, tree_file: Optional[Path] = None, init: bool = False, output_file: Optional[Path] = None) -> bool:
+    """Compile CURRICULUM_TREE.md outline into interactive knowledge cosmos and study portal."""
+    target_tree = tree_file if tree_file else (bundle_root / "CURRICULUM_TREE.md")
+    if init or not target_tree.is_file():
+        generate_curriculum_tree_template(bundle_root, target_tree)
+
+    return generate_viz(bundle_root, output_file=output_file, tree_file=target_tree)
+
 
 def clean_concept_filename(old_name: str, parent_dir_name: str = "") -> str:
     """Normalize messy filename into clean OKF kebab/snake slug."""
@@ -1107,26 +822,19 @@ def clean_concept_filename(old_name: str, parent_dir_name: str = "") -> str:
         return old_name
 
     stem = Path(old_name).stem
-    # Strip emojis and unicode symbols
     stem = re.sub(r'[\U00010000-\U0010ffff]', '', stem)
     stem = re.sub(r'[^\x00-\x7F]+', '', stem)
-    # Strip common redundant noisy prefixes/suffixes
     stem = re.sub(r'\s*-\s*by\s+Dr.*$', '', stem, flags=re.IGNORECASE)
     stem = re.sub(r'\s*-\s*Passcode.*$', '', stem, flags=re.IGNORECASE)
     stem = re.sub(r'_\d{4}_\d+(nd|rd|th|st)?', '', stem, flags=re.IGNORECASE)
     stem = re.sub(r'\s*worked\s+solutions', '_solutions', stem, flags=re.IGNORECASE)
 
-    # Standardize week numbering
     m_week = re.search(r'\b(?:week|w)[_\s-]*(\d{1,2})\b', stem, re.IGNORECASE)
     week_prefix = f"w{int(m_week.group(1)):02d}_" if m_week else ""
 
-    # Replace punctuation and separators
     cleaned = re.sub(r'[\s_:\-\—\–\/\(\)\,\@\%\&]+', '_', stem).strip('_').lower()
-    
-    # Remove repeated underscores
     cleaned = re.sub(r'_+', '_', cleaned)
 
-    # If already starts with week, don't duplicate
     if re.match(r'^w\d{2}_', cleaned):
         final_slug = cleaned
     else:
@@ -1135,7 +843,7 @@ def clean_concept_filename(old_name: str, parent_dir_name: str = "") -> str:
     return f"{final_slug}.md"
 
 
-def normalize_bundle(bundle_root: Path, dry_run: bool = False):
+def normalize_bundle(bundle_root: Path, dry_run: bool = False) -> bool:
     """Normalize all concept markdown filenames and rewrite cross-references."""
     print(f"\n✨ [OKF Normalize] Scanning bundle: {bundle_root.resolve()}")
     if not bundle_root.is_dir():
@@ -1154,7 +862,6 @@ def normalize_bundle(bundle_root: Path, dry_run: bool = False):
             target_path = md_file.parent / new_name
             rename_map[md_file] = target_path
 
-            # Old relative paths for link rewrites
             old_rel = str(md_file.relative_to(bundle_root)).replace("\\", "/")
             new_rel = str(target_path.relative_to(bundle_root)).replace("\\", "/")
             link_rewrites[f"/{old_rel}"] = f"/{new_rel}"
@@ -1174,12 +881,10 @@ def normalize_bundle(bundle_root: Path, dry_run: bool = False):
             print(f"  ... and {len(rename_map) - 15} more files.")
         return True
 
-    # Step 1: Rename files
     for old_p, new_p in rename_map.items():
         old_p.rename(new_p)
         print(f"  ✏️  Renamed: {old_p.name} -> {new_p.name}")
 
-    # Step 2: Rewrite internal links across all markdown documents
     print("\n  🔗 Rewriting internal links to match normalized filenames...")
     for md_file in bundle_root.rglob("*.md"):
         content = md_file.read_text(encoding="utf-8", errors="replace")
@@ -1190,12 +895,64 @@ def normalize_bundle(bundle_root: Path, dry_run: bool = False):
         if updated != content:
             md_file.write_text(updated, encoding="utf-8")
 
-    # Step 3: Refresh indexes and viz.html
     print("\n  🔄 Rebuilding progressive disclosure indexes and viz.html...")
     refresh_indexes(bundle_root)
     generate_viz(bundle_root)
     print("🎉 Bundle normalized and synchronized successfully!")
     return True
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="okf-architect: Open Knowledge Format (OKF v0.2) architect & validator")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    p_audit = subparsers.add_parser("validate", aliases=["audit"], help="Validate an OKF bundle against spec v0.2")
+    p_audit.add_argument("path", type=str, nargs="?", default=".", help="Path to OKF bundle root")
+
+    p_scaffold = subparsers.add_parser("scaffold", help="Scaffold a new OKF bundle structure")
+    p_scaffold.add_argument("path", type=str, nargs="?", default=".", help="Target directory")
+    p_scaffold.add_argument("--title", type=str, default="Knowledge Bundle", help="Bundle title")
+    p_scaffold.add_argument("--domain", type=str, default="Knowledge", help="Primary domain tag")
+
+    p_index = subparsers.add_parser("index", help="Rebuild index.md files for progressive disclosure")
+    p_index.add_argument("path", type=str, nargs="?", default=".", help="Path to OKF bundle root")
+
+    p_viz = subparsers.add_parser("viz", aliases=["graph"], help="Generate interactive knowledge graph (viz.html)")
+    p_viz.add_argument("path", type=str, nargs="?", default=".", help="Path to OKF bundle root")
+    p_viz.add_argument("--tree", type=str, default=None, help="Path to CURRICULUM_TREE.md outline")
+    p_viz.add_argument("-o", "--output", type=str, default=None, help="Custom output path for HTML")
+
+    p_tree = subparsers.add_parser("compile-tree", aliases=["tree", "curriculum"], help="Compile CURRICULUM_TREE.md outline into interactive knowledge cosmos and study portal")
+    p_tree.add_argument("path", type=str, nargs="?", default=".", help="Path to OKF bundle root")
+    p_tree.add_argument("--tree", type=str, default=None, help="Custom path to CURRICULUM_TREE.md")
+    p_tree.add_argument("--init", action="store_true", help="Initialize or regenerate CURRICULUM_TREE.md outline template from bundle")
+    p_tree.add_argument("-o", "--output", type=str, default=None, help="Custom output path for viz.html")
+
+    p_norm = subparsers.add_parser("normalize", help="Normalize concept filenames to clean OKF kebab/snake slugs")
+    p_norm.add_argument("path", type=str, nargs="?", default=".", help="Path to OKF bundle root")
+    p_norm.add_argument("--dry-run", action="store_true", help="Print changes without renaming")
+
+    args = parser.parse_args()
+    target_path = Path(args.path).resolve()
+
+    if args.command in ("validate", "audit"):
+        success = validate_bundle(target_path)
+        sys.exit(0 if success else 1)
+    elif args.command == "scaffold":
+        scaffold_bundle(target_path, title=args.title, domain=args.domain)
+    elif args.command == "index":
+        refresh_indexes(target_path)
+    elif args.command in ("viz", "graph"):
+        out_f = Path(args.output).resolve() if args.output else None
+        tree_p = Path(args.tree).resolve() if getattr(args, "tree", None) else None
+        generate_viz(target_path, out_f, tree_file=tree_p)
+    elif args.command in ("compile-tree", "tree", "curriculum"):
+        tree_p = Path(args.tree).resolve() if getattr(args, "tree", None) else None
+        out_f = Path(args.output).resolve() if args.output else None
+        compile_tree(target_path, tree_file=tree_p, init=args.init, output_file=out_f)
+    elif args.command == "normalize":
+        normalize_bundle(target_path, dry_run=args.dry_run)
+
 
 if __name__ == "__main__":
     main()
