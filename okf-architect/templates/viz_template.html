@@ -1023,12 +1023,13 @@
           if (currentViewMode === "semantic" && d.type === "ModuleHub") return 0;
           return d.radius + (d.type === "ModuleHub" ? 30 : (d.degree >= 3 ? 14 : 7));
         }).strength(0.85))
-        .force("center", d3.forceCenter(0, 0).strength(0.005))
         .force("clusterX", d3.forceX().x(d => (COURSE_THEMES[d.course] || COURSE_THEMES["General"]).center.x).strength(clusterStrength))
         .force("clusterY", d3.forceY().y(d => (COURSE_THEMES[d.course] || COURSE_THEMES["General"]).center.y).strength(clusterStrength))
         .alphaDecay(0.022);
 
       simulation.on("tick", requestRender);
+      window.graphNodes = nodes;
+      window.graphSimulation = simulation;
 
       // Render Function
       function render() {
@@ -1424,7 +1425,7 @@
           if (!event.subject) return;
           isDraggingNode = true;
           draggedNode = event.subject;
-          simulation.alphaTarget(0.35).restart();
+          simulation.alphaTarget(0.18).restart();
           draggedNode.fx = draggedNode.x;
           draggedNode.fy = draggedNode.y;
         })
