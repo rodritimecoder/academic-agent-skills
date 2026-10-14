@@ -11,6 +11,11 @@
       document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"><\/script>');
     }
   </script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
+  <!-- Marked.js for rich markdown and table rendering -->
+  <script defer src="https://cdn.jsdelivr.net/npm/marked@9.1.6/marked.min.js"></script>
   <style>
     :root {
       --bg: #0b0c10;
@@ -316,6 +321,1031 @@
       transform: translateY(-1px);
     }
 
+    /* Embedded Cornell Reader Modal (Full Screen Tab Experience) */
+    .cornell-modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: #0b0c10;
+      z-index: 99999;
+      display: flex;
+      flex-direction: column;
+      padding: 0;
+      margin: 0;
+      box-sizing: border-box;
+      animation: modalFadeIn 0.15s ease-out;
+    }
+    @keyframes modalFadeIn {
+      from { opacity: 0; transform: scale(0.99); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    .cornell-modal-content {
+      width: 100vw;
+      max-width: 100vw;
+      height: 100vh;
+      background: #0b0c10;
+      border: none;
+      border-radius: 0;
+      box-shadow: none;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      margin: 0;
+      padding: 0;
+    }
+    .cornell-modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 48px;
+      min-height: 48px;
+      padding: 0 16px;
+      background: #141721;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      box-sizing: border-box;
+      gap: 16px;
+    }
+    .cornell-back-btn {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #cdd6f4;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 6px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+    .cornell-back-btn:hover {
+      background: rgba(166, 227, 161, 0.2);
+      border-color: rgba(166, 227, 161, 0.5);
+      color: #a6e3a1;
+    }
+    .cornell-modal-title {
+      font-weight: 600;
+      font-size: 14px;
+      color: #f5f5f7;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      flex: 1;
+      justify-content: center;
+    }
+    .cornell-popout-btn {
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 500;
+      background: rgba(137, 180, 250, 0.1);
+      color: #89b4fa;
+      border: 1px solid rgba(137, 180, 250, 0.25);
+      border-radius: 6px;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+    .cornell-popout-btn:hover {
+      background: rgba(137, 180, 250, 0.2);
+      border-color: #89b4fa;
+      color: #fff;
+    }
+    .cornell-modal-close-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-dim);
+      font-size: 20px;
+      cursor: pointer;
+      line-height: 1;
+      padding: 6px 8px;
+      border-radius: 4px;
+      transition: all 0.15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .cornell-modal-close-btn:hover {
+      background: rgba(243, 139, 168, 0.15);
+      color: #f38ba8;
+    }
+
+    /* ============================================================
+       CORNELL NOTES & ANKI SPACED REPETITION MODES
+       ============================================================ */
+    .cornell-launch-btn {
+      background: linear-gradient(135deg, rgba(166, 227, 161, 0.15), rgba(137, 180, 250, 0.2)) !important;
+      border: 1px solid rgba(166, 227, 161, 0.35) !important;
+      color: #a6e3a1 !important;
+      box-shadow: 0 0 12px rgba(166, 227, 161, 0.2);
+    }
+    .cornell-launch-btn:hover {
+      background: linear-gradient(135deg, rgba(166, 227, 161, 0.3), rgba(137, 180, 250, 0.35)) !important;
+      border-color: #a6e3a1 !important;
+      box-shadow: 0 0 18px rgba(166, 227, 161, 0.4);
+      transform: translateY(-1px);
+    }
+    .anki-launch-btn {
+      background: linear-gradient(135deg, rgba(243, 139, 168, 0.15), rgba(203, 166, 247, 0.2)) !important;
+      border: 1px solid rgba(243, 139, 168, 0.35) !important;
+      color: #f5c2e7 !important;
+      box-shadow: 0 0 12px rgba(243, 139, 168, 0.2);
+    }
+    .anki-launch-btn:hover {
+      background: linear-gradient(135deg, rgba(243, 139, 168, 0.3), rgba(203, 166, 247, 0.35)) !important;
+      border-color: #f38ba8 !important;
+      box-shadow: 0 0 18px rgba(243, 139, 168, 0.4);
+      transform: translateY(-1px);
+    }
+    .anki-action-btn {
+      width: 100%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 9px 14px;
+      background: linear-gradient(135deg, rgba(203, 166, 247, 0.2), rgba(137, 180, 250, 0.2));
+      border: 1px solid rgba(203, 166, 247, 0.4);
+      border-radius: 8px;
+      color: #cba6f7;
+      font-weight: 600;
+      font-size: 12px;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.2s ease;
+      box-shadow: 0 2px 8px rgba(203, 166, 247, 0.15);
+    }
+    .anki-action-btn:hover {
+      background: linear-gradient(135deg, rgba(203, 166, 247, 0.35), rgba(137, 180, 250, 0.35));
+      border-color: #cba6f7;
+      box-shadow: 0 4px 14px rgba(203, 166, 247, 0.35);
+      transform: translateY(-1px);
+      color: #fff;
+    }
+
+    /* ============================================================
+       STUDY & RETENTION KANBAN PIPELINE VIEW (OPTION 1)
+       ============================================================ */
+    .kanban-view {
+      position: absolute;
+      inset: 60px 0 0 0;
+      width: 100vw;
+      height: calc(100vh - 60px);
+      display: flex;
+      flex-direction: column;
+      background: radial-gradient(circle at 50% 15%, #151826, #0b0c10 80%);
+      box-sizing: border-box;
+      z-index: 25;
+      overflow: hidden;
+      animation: modalFadeIn 0.2s ease-out;
+    }
+    .kanban-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 12px 20px;
+      background: rgba(15, 17, 26, 0.7);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      flex-wrap: wrap;
+    }
+    .kanban-course-pills {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .kanban-course-pill {
+      font-size: 11.5px;
+      font-weight: 600;
+      padding: 5px 12px;
+      border-radius: 20px;
+      cursor: pointer;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: #cdd6f4;
+      transition: all 0.2s;
+    }
+    .kanban-course-pill:hover, .kanban-course-pill.active {
+      background: rgba(137, 180, 250, 0.15);
+      border-color: #89b4fa;
+      color: #89b4fa;
+      box-shadow: 0 0 10px rgba(137, 180, 250, 0.25);
+    }
+    .kanban-stats-summary {
+      font-size: 12px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .kanban-columns-grid {
+      flex: 1;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      padding: 16px 20px 20px 20px;
+      box-sizing: border-box;
+      overflow-x: auto;
+      min-height: 0;
+    }
+    .kanban-column {
+      background: rgba(18, 21, 32, 0.65);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-width: 270px;
+      backdrop-filter: blur(12px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    }
+    .kanban-col-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 14px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      font-weight: 700;
+      font-size: 13px;
+    }
+    .col-ingestion-hdr { background: rgba(108, 112, 134, 0.12); color: #a6adc8; border-top: 3px solid #6c7086; }
+    .col-synthesis-hdr { background: rgba(137, 180, 250, 0.12); color: #89b4fa; border-top: 3px solid #89b4fa; }
+    .col-review-hdr { background: rgba(250, 179, 135, 0.12); color: #fab387; border-top: 3px solid #fab387; }
+    .col-mastered-hdr { background: rgba(166, 227, 161, 0.12); color: #a6e3a1; border-top: 3px solid #a6e3a1; }
+    .kanban-col-count {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.08);
+      color: inherit;
+    }
+    .kanban-col-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .kanban-col-body::-webkit-scrollbar {
+      width: 5px;
+    }
+    .kanban-col-body::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 3px;
+    }
+    .kanban-card {
+      background: linear-gradient(145deg, #181c2e, #111320);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 8px;
+      padding: 12px;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      cursor: pointer;
+    }
+    .kanban-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+    .kanban-card-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+    }
+    .kanban-course-tag {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .kanban-module-tag {
+      font-size: 10.5px;
+      color: var(--text-dim);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 65%;
+    }
+    .kanban-card-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #f8fafc;
+      line-height: 1.35;
+    }
+    .kanban-card-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      margin-top: 4px;
+      padding-top: 8px;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .kanban-badge {
+      font-size: 10.5px;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .kanban-btn-action {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #cdd6f4;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .kanban-btn-action:hover {
+      background: rgba(137, 180, 250, 0.2);
+      border-color: #89b4fa;
+      color: #fff;
+    }
+
+    /* Anki Modal Fullscreen Overlay */
+    .anki-modal {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(11, 12, 16, 0.96);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      z-index: 100000;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      animation: modalFadeIn 0.2s ease-out;
+      box-sizing: border-box;
+      color: var(--text);
+    }
+
+    /* Anki Deck Hub View */
+    .anki-hub-container {
+      width: 100%;
+      max-width: 1100px;
+      margin: 0 auto;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      padding: 24px 20px;
+      box-sizing: border-box;
+      overflow-y: auto;
+    }
+    .anki-hub-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .anki-hub-title {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .anki-hub-title h2 {
+      font-size: 22px;
+      font-weight: 700;
+      color: #f5f5f7;
+      letter-spacing: -0.02em;
+    }
+    .anki-hub-title p {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+    .anki-close-btn {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #cdd6f4;
+      font-size: 20px;
+      line-height: 1;
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .anki-close-btn:hover {
+      background: rgba(243, 139, 168, 0.2);
+      border-color: #f38ba8;
+      color: #f38ba8;
+    }
+
+    /* Global SRS Stats Banner */
+    .anki-stats-banner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 14px;
+      background: linear-gradient(145deg, rgba(20, 23, 34, 0.8), rgba(15, 17, 26, 0.9));
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      padding: 16px 20px;
+      margin-bottom: 24px;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+    }
+    .anki-stat-pills {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .anki-stat-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .anki-pill-new { color: #89b4fa; border-color: rgba(137, 180, 250, 0.3); background: rgba(137, 180, 250, 0.1); }
+    .anki-pill-learn { color: #fab387; border-color: rgba(250, 179, 135, 0.3); background: rgba(250, 179, 135, 0.1); }
+    .anki-pill-master { color: #a6e3a1; border-color: rgba(166, 227, 161, 0.3); background: rgba(166, 227, 161, 0.1); }
+    .btn-study-all {
+      background: linear-gradient(135deg, #a6e3a1, #89b4fa);
+      color: #111420;
+      font-weight: 700;
+      font-size: 13px;
+      padding: 10px 18px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s;
+      box-shadow: 0 4px 15px rgba(166, 227, 161, 0.3);
+    }
+    .btn-study-all:hover {
+      box-shadow: 0 6px 22px rgba(166, 227, 161, 0.5);
+      transform: translateY(-2px);
+    }
+
+    /* Course Decks Grid */
+    .anki-deck-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 18px;
+      margin-bottom: 30px;
+    }
+    .anki-course-card {
+      background: linear-gradient(145deg, #141724, #0f111c);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      position: relative;
+      overflow: hidden;
+    }
+    .anki-course-card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5);
+    }
+    .anki-card-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .anki-course-code {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 3px 8px;
+      border-radius: 5px;
+      display: inline-block;
+      margin-bottom: 6px;
+    }
+    .anki-course-name {
+      font-size: 15px;
+      font-weight: 700;
+      color: #fff;
+      line-height: 1.3;
+    }
+    .anki-topics-list {
+      margin: 12px 0 16px 0;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-height: 160px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+    .anki-topic-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 10px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .anki-topic-item:hover {
+      background: rgba(255, 255, 255, 0.08);
+    }
+    .anki-topic-title {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      flex: 1;
+      padding-right: 8px;
+      color: #cdd6f4;
+    }
+    .anki-topic-count {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+    .btn-study-course {
+      width: 100%;
+      padding: 9px;
+      border-radius: 8px;
+      border: none;
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.2s;
+    }
+
+    /* Anki 3D Card Review Arena */
+    .anki-study-view {
+      position: absolute;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background: radial-gradient(circle at 50% 25%, #181c2b, #0b0c10 80%);
+      box-sizing: border-box;
+      z-index: 2;
+    }
+    .anki-study-topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 52px;
+      padding: 0 20px;
+      background: rgba(15, 17, 26, 0.8);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      position: relative;
+    }
+    .anki-progress-track {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      height: 3px;
+      background: rgba(255, 255, 255, 0.08);
+    }
+    .anki-progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #89b4fa, #a6e3a1);
+      width: 0%;
+      transition: width 0.3s ease;
+      box-shadow: 0 0 8px rgba(166, 227, 161, 0.6);
+    }
+    .anki-study-deck-title {
+      font-weight: 600;
+      font-size: 14px;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .anki-study-counter {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    /* 3D Perspective Flip Card Container */
+    .anki-arena-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      box-sizing: border-box;
+      overflow: hidden;
+      perspective: 1200px;
+    }
+    .anki-card-3d {
+      width: 100%;
+      max-width: 800px;
+      height: 520px;
+      position: relative;
+      transform-style: preserve-3d;
+      transition: transform 0.38s cubic-bezier(0.2, 0, 0, 1);
+      border-radius: 16px;
+      cursor: pointer;
+    }
+    .anki-card-3d.flipped {
+      transform: rotateY(180deg);
+    }
+    .anki-card-3d.animating {
+      transition: none !important;
+    }
+    .anki-card-3d.exit-again {
+      animation: cardExitLeft 0.22s cubic-bezier(0.4, 0, 1, 1) forwards;
+    }
+    .anki-card-3d.exit-good {
+      animation: cardExitRight 0.22s cubic-bezier(0.4, 0, 1, 1) forwards;
+    }
+    .anki-card-3d.enter-spring {
+      animation: cardEnterSpring 0.24s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+    @keyframes cardExitLeft {
+      to { transform: translateX(-50px) rotate(-3deg); opacity: 0; }
+    }
+    @keyframes cardExitRight {
+      to { transform: translateX(50px) rotate(3deg); opacity: 0; }
+    }
+    @keyframes cardEnterSpring {
+      from { transform: translateY(14px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    .anki-card-face {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      border-radius: 16px;
+      backface-visibility: hidden;
+      -webkit-backface-visibility: hidden;
+      box-sizing: border-box;
+      padding: 26px 30px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7), 0 0 30px rgba(137, 180, 250, 0.1);
+    }
+    .anki-card-front {
+      background: linear-gradient(150deg, #181c2e, #10121d);
+    }
+    .anki-card-back {
+      background: linear-gradient(150deg, #1e243a, #131726);
+      border-color: rgba(166, 227, 161, 0.35);
+      transform: rotateY(180deg);
+    }
+    .anki-face-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+      flex-shrink: 0;
+    }
+    .anki-badge-tag {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 4px 10px;
+      border-radius: 6px;
+      background: rgba(137, 180, 250, 0.15);
+      border: 1px solid rgba(137, 180, 250, 0.3);
+      color: #89b4fa;
+    }
+    .anki-section-tag {
+      font-size: 12px;
+      color: var(--text-muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 60%;
+    }
+    .anki-question-text {
+      font-size: 21px;
+      font-weight: 600;
+      color: #f8fafc;
+      line-height: 1.45;
+      margin: auto 0;
+      text-align: center;
+      overflow-y: auto;
+      flex: 1;
+      min-height: 0;
+      padding: 10px 0;
+    }
+    .anki-answer-text {
+      font-size: 14px;
+      color: #e2e8f0;
+      line-height: 1.6;
+      margin: 8px 0;
+      overflow-y: auto;
+      padding-right: 8px;
+      flex: 1;
+      min-height: 0;
+    }
+    .anki-answer-text::-webkit-scrollbar,
+    .anki-question-text::-webkit-scrollbar {
+      width: 6px;
+    }
+    .anki-answer-text::-webkit-scrollbar-thumb,
+    .anki-question-text::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 4px;
+    }
+
+    /* Rich Markdown & Table Formatting Inside Anki Cards */
+    .anki-table-wrapper {
+      width: 100%;
+      overflow-x: auto;
+      margin: 12px 0;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: rgba(11, 13, 22, 0.7);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    }
+    .anki-table, .anki-answer-text table, .anki-question-text table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .anki-table th, .anki-answer-text th, .anki-question-text th {
+      background: rgba(137, 180, 250, 0.14);
+      color: #89b4fa;
+      font-weight: 700;
+      padding: 9px 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+      font-size: 12px;
+      letter-spacing: 0.02em;
+    }
+    .anki-table td, .anki-answer-text td, .anki-question-text td {
+      padding: 8px 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      color: #cdd6f4;
+      vertical-align: top;
+    }
+    .anki-table tr:nth-child(even) td, .anki-answer-text tr:nth-child(even) td {
+      background: rgba(255, 255, 255, 0.025);
+    }
+    .anki-table tr:last-child td, .anki-answer-text tr:last-child td {
+      border-bottom: none;
+    }
+    .anki-table td strong {
+      color: #f5f5f7;
+    }
+
+    /* Lists & Typography */
+    .anki-answer-text ul.anki-list, .anki-answer-text ul, .anki-answer-text ol {
+      margin: 10px 0 10px 22px;
+      padding: 0;
+    }
+    .anki-answer-text li {
+      margin-bottom: 5px;
+      line-height: 1.5;
+      color: #cdd6f4;
+    }
+    .anki-answer-text p, .anki-question-text p {
+      margin: 7px 0;
+      line-height: 1.55;
+    }
+    .anki-answer-text code, .anki-question-text code {
+      background: rgba(255, 255, 255, 0.08);
+      color: #f38ba8;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 12px;
+      border: 1px solid rgba(243, 139, 168, 0.2);
+    }
+    .anki-answer-text pre, .anki-question-text pre {
+      background: #0d0f17;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      padding: 12px 14px;
+      overflow-x: auto;
+      margin: 10px 0;
+    }
+    .anki-answer-text pre code {
+      background: transparent;
+      border: none;
+      padding: 0;
+      color: #a6e3a1;
+      font-size: 12.5px;
+    }
+    .anki-answer-text blockquote {
+      border-left: 3px solid #89b4fa;
+      background: rgba(137, 180, 250, 0.08);
+      padding: 8px 14px;
+      margin: 10px 0;
+      border-radius: 0 6px 6px 0;
+      color: #cdd6f4;
+      font-style: italic;
+    }
+
+    /* Obsidian & GitHub Alert Callout Boxes */
+    .anki-callout {
+      margin: 12px 0;
+      padding: 12px 16px;
+      border-radius: 8px;
+      border-left: 4px solid #89b4fa;
+      background: rgba(137, 180, 250, 0.08);
+      font-size: 13.5px;
+      line-height: 1.55;
+      text-align: left;
+    }
+    .anki-callout-title {
+      font-weight: 700;
+      font-size: 11.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .anki-callout-body {
+      color: #cdd6f4;
+      font-size: 13px;
+    }
+    .anki-callout-note { border-left-color: #89b4fa; background: rgba(137, 180, 250, 0.08); }
+    .anki-callout-note .anki-callout-title { color: #89b4fa; }
+    .anki-callout-tip { border-left-color: #a6e3a1; background: rgba(166, 227, 161, 0.08); }
+    .anki-callout-tip .anki-callout-title { color: #a6e3a1; }
+    .anki-callout-warning { border-left-color: #f9e2af; background: rgba(249, 226, 175, 0.08); }
+    .anki-callout-warning .anki-callout-title { color: #f9e2af; }
+    .anki-callout-important, .anki-callout-caution { border-left-color: #f38ba8; background: rgba(243, 139, 168, 0.08); }
+    .anki-callout-important .anki-callout-title, .anki-callout-caution .anki-callout-title { color: #f38ba8; }
+    .anki-card-hint {
+      text-align: center;
+      font-size: 12px;
+      color: var(--text-dim);
+      padding-top: 12px;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    /* Rating Controls Bar */
+    .anki-bottom-bar {
+      height: 76px;
+      background: rgba(15, 17, 26, 0.95);
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 20px;
+      gap: 16px;
+      box-sizing: border-box;
+    }
+    .btn-anki-flip {
+      background: linear-gradient(135deg, #89b4fa, #b4befe);
+      color: #111420;
+      font-weight: 700;
+      font-size: 14px;
+      padding: 12px 32px;
+      border-radius: 10px;
+      border: none;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 4px 16px rgba(137, 180, 250, 0.3);
+      transition: all 0.2s;
+    }
+    .btn-anki-flip:hover {
+      box-shadow: 0 6px 24px rgba(137, 180, 250, 0.5);
+      transform: translateY(-2px);
+    }
+    .anki-grade-buttons {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      max-width: 680px;
+    }
+    .btn-anki-grade {
+      flex: 1;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid transparent;
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      transition: all 0.15s;
+    }
+    .btn-anki-grade span.interval {
+      font-size: 11px;
+      opacity: 0.8;
+      font-weight: normal;
+    }
+    .btn-grade-again {
+      background: rgba(243, 139, 168, 0.12);
+      border-color: rgba(243, 139, 168, 0.35);
+      color: #f38ba8;
+    }
+    .btn-grade-again:hover {
+      background: rgba(243, 139, 168, 0.25);
+      border-color: #f38ba8;
+      transform: translateY(-2px);
+    }
+    .btn-grade-hard {
+      background: rgba(250, 179, 135, 0.12);
+      border-color: rgba(250, 179, 135, 0.35);
+      color: #fab387;
+    }
+    .btn-grade-hard:hover {
+      background: rgba(250, 179, 135, 0.25);
+      border-color: #fab387;
+      transform: translateY(-2px);
+    }
+    .btn-grade-good {
+      background: rgba(166, 227, 161, 0.12);
+      border-color: rgba(166, 227, 161, 0.35);
+      color: #a6e3a1;
+    }
+    .btn-grade-good:hover {
+      background: rgba(166, 227, 161, 0.25);
+      border-color: #a6e3a1;
+      transform: translateY(-2px);
+    }
+    .btn-grade-easy {
+      background: rgba(137, 220, 235, 0.12);
+      border-color: rgba(137, 220, 235, 0.35);
+      color: #89dceb;
+    }
+    .btn-grade-easy:hover {
+      background: rgba(137, 220, 235, 0.25);
+      border-color: #89dceb;
+      transform: translateY(-2px);
+    }
+
+    /* Celebration Screen */
+    .anki-completion-screen {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      gap: 16px;
+      max-width: 500px;
+      padding: 40px;
+      background: linear-gradient(145deg, #181c2e, #10121d);
+      border: 1px solid rgba(166, 227, 161, 0.4);
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8), 0 0 40px rgba(166, 227, 161, 0.2);
+      animation: modalFadeIn 0.3s ease-out;
+    }
+    .anki-completion-screen h2 {
+      font-size: 26px;
+      color: #a6e3a1;
+    }
+
     /* Floating Tool Buttons */
     .btn-icon {
       background: var(--bg-panel);
@@ -585,7 +1615,7 @@
     <div class="hud-left">
       <div class="glass-card">
         <div class="badge-logo">Knowledge Cosmos</div>
-        <div class="stats-label"><span id="nodeCount">0</span> Neurons &bull; <span id="edgeCount">0</span> Synapses</div>
+        <div class="stats-label"><span id="nodeCount">0</span> Nodes &bull; <span id="edgeCount">0</span> Edges</div>
       </div>
 
       <div class="glass-card search-wrapper">
@@ -595,7 +1625,7 @@
     </div>
 
     <div class="hud-right">
-      <div class="view-mode-toggle" id="viewModeToggle" title="Toggle between Canvas Week Constellations, Classic Semantic Obsidian Web, and Radial Sunburst Tree">
+      <div class="view-mode-toggle" id="viewModeToggle" title="Toggle between Canvas Week Constellations, Classic Semantic Obsidian Web, Radial Sunburst, Study Kanban, Cornell Notes, and Anki Decks">
         <button class="mode-btn active" id="btnModeConstellation" onclick="setViewMode('constellation')">
           <span>📅</span> Canvas Constellations
         </button>
@@ -604,6 +1634,15 @@
         </button>
         <button class="mode-btn" id="btnModeSunburst" onclick="setViewMode('sunburst')">
           <span>☀️</span> Radial Sunburst
+        </button>
+        <button class="mode-btn" id="btnModeKanban" onclick="setViewMode('kanban')" title="Study &amp; Retention Pipeline Kanban (Press K)">
+          <span>📋</span> Kanban Board
+        </button>
+        <button class="mode-btn cornell-launch-btn" id="btnModeCornell" onclick="openCornellModal('cornell_index.html', 'Cornell Study Portal &amp; Revision Notes')" title="Open Cornell Notes Study Portal (Press C)">
+          <span>📝</span> Cornell Notes
+        </button>
+        <button class="mode-btn anki-launch-btn" id="btnModeAnki" onclick="openAnkiModal()" title="Study Spaced Repetition Decks (Press A)">
+          <span>🎴</span> Anki Decks
         </button>
       </div>
 
@@ -623,6 +1662,9 @@
     <div class="week-chips-scroll" id="weekChips"></div>
     <button class="cornell-toggle-chip" id="cornellToggleChip" onclick="toggleCornellFilter()" title="Filter to notes with Cornell Revision HTML">
       <span class="chip-dot" style="background:#a6e3a1;"></span>📝 Cornell Notes (<span id="cornellCount">0</span>)
+    </button>
+    <button class="cornell-toggle-chip" onclick="openAnkiModal()" title="Study Anki Spaced Repetition Decks" style="border-color: rgba(203,166,247,0.4); color: #cba6f7;">
+      <span class="chip-dot" style="background:#cba6f7;"></span>🎴 Flashcards (<span id="ankiTotalCardsCount">303</span>)
     </button>
     <a href="cornell_index.html" target="_blank" class="cornell-portal-link" title="Open Canvas Cornell Study Portal">
       📖 Study Portal &rsaquo;
@@ -651,12 +1693,12 @@
     <div class="pop-title" style="margin-top: 6px;">Visual Aesthetics</div>
 
     <div class="toggle-row toggle-active" id="toggleGlowRow">
-      <span>Neuron Halo Bloom</span>
+      <span>Node Halo Bloom</span>
       <div class="toggle-switch"></div>
     </div>
 
     <div class="toggle-row toggle-active" id="togglePulsesRow">
-      <span>Active Synapse Pulse</span>
+      <span>Active Edge Pulse</span>
       <div class="toggle-switch"></div>
     </div>
   </div>
@@ -670,10 +1712,16 @@
 
     <div id="dCourseBadge" class="course-badge">Course Name</div>
 
-    <div class="action-block" id="dCornellBlock" style="display:none; margin: 4px 0 8px 0;">
+    <div class="action-block" id="dCornellBlock" style="display:none; margin: 4px 0 6px 0;">
       <a id="dCornellLink" href="#" target="_blank" class="cornell-action-btn">
         <span>📝</span> Open Interactive Cornell Notes (<span id="dCornellCues">0</span> Cues)
       </a>
+    </div>
+
+    <div class="action-block" id="dAnkiBlock" style="display:none; margin: 0 0 10px 0;">
+      <button id="dAnkiBtn" class="anki-action-btn" type="button">
+        <span>🎴</span> Study Anki Flashcards (<span id="dAnkiCount">0</span> Cards)
+      </button>
     </div>
 
     <div class="meta-block">
@@ -697,8 +1745,238 @@
     </div>
 
     <div class="meta-block">
-      <div class="meta-tag">Connected Synapses (<span id="dLinkCount">0</span>)</div>
+      <div class="meta-tag">Connected Edges (<span id="dLinkCount">0</span>)</div>
       <ul class="connections-list" id="dLinks"></ul>
+    </div>
+  </div>
+
+  <!-- Study & Retention Kanban Board Container -->
+  <div id="kanbanContainer" class="kanban-view" style="display:none;">
+    <div class="kanban-toolbar">
+      <div class="kanban-filters">
+        <div class="kanban-course-pills" id="kanbanCoursePills"></div>
+      </div>
+      <div class="glass-card search-wrapper" style="max-width:320px; flex:1;">
+        <span class="search-icon">&#128269;</span>
+        <input type="text" id="kanbanSearchInput" class="search-input" placeholder="Search topics in pipeline..." oninput="renderKanbanBoard()">
+      </div>
+      <div class="kanban-stats-summary" id="kanbanStatsSummary"></div>
+    </div>
+
+    <!-- 4 Kanban Columns -->
+    <div class="kanban-columns-grid">
+      <!-- Col 1: Ingestion -->
+      <div class="kanban-column" id="colIngestion">
+        <div class="kanban-col-header col-ingestion-hdr">
+          <div class="kanban-col-title">
+            <span>📥</span> 1. Ingestion / Backlog
+          </div>
+          <span class="kanban-col-count" id="countIngestion">0</span>
+        </div>
+        <div class="kanban-col-body" id="bodyIngestion"></div>
+      </div>
+
+      <!-- Col 2: Cornell Synthesized -->
+      <div class="kanban-column" id="colSynthesis">
+        <div class="kanban-col-header col-synthesis-hdr">
+          <div class="kanban-col-title">
+            <span>📝</span> 2. Cornell Synthesized
+          </div>
+          <span class="kanban-col-count" id="countSynthesis">0</span>
+        </div>
+        <div class="kanban-col-body" id="bodySynthesis"></div>
+      </div>
+
+      <!-- Col 3: In Review -->
+      <div class="kanban-column" id="colReview">
+        <div class="kanban-col-header col-review-hdr">
+          <div class="kanban-col-title">
+            <span>🎴</span> 3. Active SRS Review
+          </div>
+          <span class="kanban-col-count" id="countReview">0</span>
+        </div>
+        <div class="kanban-col-body" id="bodyReview"></div>
+      </div>
+
+      <!-- Col 4: Mastered -->
+      <div class="kanban-column" id="colMastered">
+        <div class="kanban-col-header col-mastered-hdr">
+          <div class="kanban-col-title">
+            <span>🏆</span> 4. Mastered &amp; Exam-Ready
+          </div>
+          <span class="kanban-col-count" id="countMastered">0</span>
+        </div>
+        <div class="kanban-col-body" id="bodyMastered"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Embedded Cornell Reader Modal (Full Screen Tab Experience) -->
+  <div id="cornellModal" class="cornell-modal" style="display:none;">
+    <div class="cornell-modal-content">
+      <div class="cornell-modal-header">
+        <button id="cornellModalBack" class="cornell-back-btn" title="Return to Knowledge Cosmos (Esc)">
+          <span>←</span> Back to Cosmos
+        </button>
+        <div id="cornellModalTitle" class="cornell-modal-title">
+          <span>📝</span> Cornell Interactive Notes
+        </div>
+        <div style="display:flex; gap:10px; align-items:center;">
+          <a id="cornellModalPopout" href="#" target="_blank" rel="noopener noreferrer" class="cornell-popout-btn" title="Open in separate browser window">
+            <span>↗</span> Open in New Tab
+          </a>
+          <button id="cornellModalClose" class="cornell-modal-close-btn" title="Close (Esc)">✕</button>
+        </div>
+      </div>
+      <iframe id="cornellIframe" src="" style="width:100vw; height:calc(100vh - 48px); border:none; background:#f8fafc;"></iframe>
+    </div>
+  </div>
+
+  <!-- Anki Spaced Repetition Modal (Obsidian-Style Decks & 3D Cards) -->
+  <div id="ankiModal" class="anki-modal" style="display:none;">
+    <!-- View 1: Deck Hub -->
+    <div id="ankiDeckHub" class="anki-hub-container">
+      <div class="anki-hub-header">
+        <div class="anki-hub-title">
+          <span style="font-size:32px;">🎴</span>
+          <div>
+            <h2>Neural Decks & Spaced Repetition</h2>
+            <p>Obsidian-style active recall flashcards across 4 course galaxies</p>
+          </div>
+        </div>
+        <button class="anki-close-btn" onclick="closeAnkiModal()" title="Return to Knowledge Cosmos (Esc)">&times;</button>
+      </div>
+
+      <!-- Stats & Quick Study Banner -->
+      <div class="anki-stats-banner">
+        <div class="anki-stat-pills">
+          <div class="anki-stat-pill anki-pill-new">
+            <span>✨</span> <span id="ankiStatNew">0</span> New
+          </div>
+          <div class="anki-stat-pill anki-pill-learn">
+            <span>🔥</span> <span id="ankiStatLearn">0</span> In Review
+          </div>
+          <div class="anki-stat-pill anki-pill-master">
+            <span>🏆</span> <span id="ankiStatMaster">0</span> Mastered
+          </div>
+          <div class="anki-stat-pill" style="color:var(--text-muted);">
+            <span>📚</span> <span id="ankiStatTotal">0</span> Total Cards
+          </div>
+        </div>
+        <div style="display:flex; gap:10px; align-items:center;">
+          <button class="btn-study-all" onclick="startAnkiSession('all')">
+            <span>⚡</span> Review All Decks (Shuffle)
+          </button>
+        </div>
+      </div>
+
+      <!-- Search & Filters -->
+      <div style="display:flex; gap:12px; margin-bottom:18px;">
+        <div class="glass-card search-wrapper" style="flex:1;">
+          <span class="search-icon">&#128269;</span>
+          <input type="text" id="ankiSearchInput" class="search-input" placeholder="Search flashcards, topics, formulas..." oninput="filterAnkiDecks(this.value)">
+        </div>
+      </div>
+
+      <!-- Course Decks Grid -->
+      <div class="anki-deck-grid" id="ankiCourseGrid"></div>
+    </div>
+
+    <!-- View 2: 3D Flashcard Study Arena -->
+    <div id="ankiStudyArena" class="anki-study-view" style="display:none;">
+      <div class="anki-study-topbar">
+        <div class="anki-progress-track">
+          <div id="ankiProgressFill" class="anki-progress-fill"></div>
+        </div>
+        <button class="cornell-back-btn" onclick="exitAnkiStudyToDecks()" title="Back to Decks">
+          <span>←</span> Decks
+        </button>
+        <div class="anki-study-deck-title" id="ankiDeckTitle">
+          <span>🎴</span> 48521 FoEET &bull; Topic 1B
+        </div>
+        <div style="display:flex; align-items:center; gap:12px;">
+          <div class="anki-study-counter" id="ankiCardCounter">Card 1 / 10</div>
+          <button class="anki-close-btn" onclick="closeAnkiModal()" title="Close to Cosmos (Esc)">&times;</button>
+        </div>
+      </div>
+
+      <!-- Center 3D Flip Card Arena -->
+      <div class="anki-arena-content" id="ankiArenaBody">
+        <div class="anki-card-3d" id="ankiCardElement" onclick="flipCurrentCard()">
+          <!-- Front Face -->
+          <div class="anki-card-face anki-card-front">
+            <div class="anki-face-meta">
+              <span class="anki-badge-tag" id="ankiFrontBadge">DEFINITION</span>
+              <span class="anki-section-tag" id="ankiFrontSection">Module Section</span>
+            </div>
+            <div class="anki-question-text" id="ankiFrontQuestion">
+              Question loading...
+            </div>
+            <div class="anki-card-hint">
+              <span>💡 Tap card or press <kbd style="background:rgba(255,255,255,0.1); padding:2px 6px; border-radius:4px;">Space</kbd> to reveal answer</span>
+            </div>
+          </div>
+
+          <!-- Back Face -->
+          <div class="anki-card-face anki-card-back">
+            <div class="anki-face-meta">
+              <span class="anki-badge-tag" style="background:rgba(166,227,161,0.15); border-color:rgba(166,227,161,0.3); color:#a6e3a1;">ANSWER &amp; EXPLANATION</span>
+              <span class="anki-section-tag" id="ankiBackSection">Module Section</span>
+            </div>
+            <div class="anki-answer-text" id="ankiBackAnswer">
+              Answer loading...
+            </div>
+            <div class="anki-card-hint" style="color:var(--text-muted);">
+              <span>Rate your recall to schedule next interval:</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Session Completion Overlay (shown at deck end) -->
+        <div id="ankiCompletionScreen" class="anki-completion-screen" style="display:none;">
+          <div style="font-size:56px;">🎉</div>
+          <h2>Deck Completed!</h2>
+          <p id="ankiCompletionSummary" style="color:var(--text-muted); font-size:14px; line-height:1.5;">
+            You reviewed 12 cards with an active recall retention rate of 92%.
+          </p>
+          <div style="display:flex; gap:12px; margin-top:8px;">
+            <button class="btn-study-all" onclick="restartCurrentSession()">
+              <span>🔄</span> Review Deck Again
+            </button>
+            <button class="cornell-back-btn" onclick="exitAnkiStudyToDecks()">
+              <span>🎴</span> Back to Decks
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom Grading & Flip Bar -->
+      <div class="anki-bottom-bar">
+        <!-- Before Flip Button -->
+        <button id="ankiFlipActionBtn" class="btn-anki-flip" onclick="flipCurrentCard()">
+          <span>Show Answer</span> <kbd style="font-size:11px; opacity:0.8; background:rgba(0,0,0,0.2); padding:2px 6px; border-radius:4px;">Space</kbd>
+        </button>
+
+        <!-- After Flip Rating Buttons -->
+        <div id="ankiGradeActionRow" class="anki-grade-buttons" style="display:none;">
+          <button class="btn-anki-grade btn-grade-again" onclick="gradeCurrentCard(1)">
+            <span>[1] Again</span>
+            <span class="interval">&lt; 1 min</span>
+          </button>
+          <button class="btn-anki-grade btn-grade-hard" onclick="gradeCurrentCard(2)">
+            <span>[2] Hard</span>
+            <span class="interval">1 day</span>
+          </button>
+          <button class="btn-anki-grade btn-grade-good" onclick="gradeCurrentCard(3)">
+            <span>[3] Good</span>
+            <span class="interval">3 days</span>
+          </button>
+          <button class="btn-anki-grade btn-grade-easy" onclick="gradeCurrentCard(4)">
+            <span>[4] Easy</span>
+            <span class="interval">7 days</span>
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -830,6 +2108,7 @@
           hasCornell: d.has_cornell || false,
           cornellPath: d.cornell_path || "",
           cornellCues: d.cornell_cues || 0,
+          cornellCards: d.cornell_cards || [],
           radius: (d.type === "ModuleHub") ? 13 : Math.max(3.5, Math.min(13, 3.2 + Math.sqrt(d.degree || 0) * 1.8)),
           x: initX,
           y: initY,
@@ -1037,7 +2316,7 @@
       let simulation = null;
 
       function updateHUDCounts() {
-        if (currentViewMode === "semantic") {
+        if (currentViewMode === "semantic" || currentViewMode === "kanban") {
           const sNodes = nodes.filter(n => n.type !== "ModuleHub");
           const sLinks = links.filter(l => l.type !== "spine" && l.type !== "containment" && l.source.type !== "ModuleHub" && l.target.type !== "ModuleHub");
           document.getElementById("nodeCount").textContent = sNodes.length;
@@ -1121,19 +2400,47 @@
         const btnConstellation = document.getElementById("btnModeConstellation");
         const btnSemantic = document.getElementById("btnModeSemantic");
         const btnSunburst = document.getElementById("btnModeSunburst");
+        const btnKanban = document.getElementById("btnModeKanban");
         const weekFilterBar = document.getElementById("weekFilterBar");
+        const kanbanContainer = document.getElementById("kanbanContainer");
+        const graphContainer = document.getElementById("graphContainer");
 
         if (btnConstellation && btnSemantic) {
           btnConstellation.classList.toggle("active", mode === "constellation");
           btnSemantic.classList.toggle("active", mode === "semantic");
           if (btnSunburst) btnSunburst.classList.toggle("active", mode === "sunburst");
+          if (btnKanban) btnKanban.classList.toggle("active", mode === "kanban");
         }
 
         if (weekFilterBar) {
           weekFilterBar.style.display = (mode === "constellation") ? "flex" : "none";
         }
 
+        const courseChips = document.getElementById("courseChips");
+        const legendBar = document.getElementById("legendBar");
+        if (courseChips) {
+          courseChips.style.display = (mode === "kanban") ? "none" : "flex";
+        }
+        if (legendBar) {
+          legendBar.style.display = (mode === "kanban") ? "none" : "flex";
+        }
+
+        if (kanbanContainer) {
+          kanbanContainer.style.display = (mode === "kanban") ? "flex" : "none";
+        }
+        if (graphContainer) {
+          graphContainer.style.visibility = (mode === "kanban") ? "hidden" : "visible";
+        }
+
         updateHUDCounts();
+
+        if (mode === "kanban") {
+          if (simulation) simulation.stop();
+          if (typeof renderKanbanBoard === "function") {
+            renderKanbanBoard();
+          }
+          return;
+        }
 
         if (simulation) {
           updateSimulationPhysics();
@@ -1742,10 +3049,35 @@
         const cCues = document.getElementById("dCornellCues");
         if (n.hasCornell && n.cornellPath) {
           cBlock.style.display = "block";
-          cLink.href = n.cornellPath;
+          let safeUrl = encodeURI(n.cornellPath);
+          if (window.location.protocol === "file:") {
+            const baseDir = window.location.href.substring(0, window.location.href.lastIndexOf("/") + 1);
+            safeUrl = baseDir + encodeURI(n.cornellPath);
+          }
+          cLink.href = safeUrl;
+          cLink.onclick = function(e) {
+            e.preventDefault();
+            openCornellModal(safeUrl, n.cleanTitle);
+          };
           cCues.textContent = n.cornellCues;
         } else {
           cBlock.style.display = "none";
+          cLink.onclick = null;
+        }
+
+        // Anki Flashcard Button in Drawer
+        const aBlock = document.getElementById("dAnkiBlock");
+        const aBtn = document.getElementById("dAnkiBtn");
+        const aCount = document.getElementById("dAnkiCount");
+        if (n.cornellCards && n.cornellCards.length > 0) {
+          aBlock.style.display = "block";
+          aCount.textContent = n.cornellCards.length;
+          aBtn.onclick = function() {
+            startAnkiSession("node", n);
+          };
+        } else {
+          aBlock.style.display = "none";
+          aBtn.onclick = null;
         }
 
         const cTheme = COURSE_THEMES[n.course] || COURSE_THEMES["General"];
@@ -1876,11 +3208,948 @@
         requestRender();
       };
 
-      // Initialize view mode state
+      // Embedded Cornell Reader Modal Logic
+      function openCornellModal(url, title) {
+        const ankiModal = document.getElementById("ankiModal");
+        if (ankiModal) ankiModal.style.display = "none";
+        const modal = document.getElementById("cornellModal");
+        const iframe = document.getElementById("cornellIframe");
+        const modalTitle = document.getElementById("cornellModalTitle");
+        const popout = document.getElementById("cornellModalPopout");
+
+        if (modalTitle) {
+          modalTitle.innerHTML = `<span>📝</span> ${title || "Cornell Interactive Notes"}`;
+        }
+        if (iframe) {
+          iframe.src = url;
+        }
+        if (popout) {
+          popout.href = url;
+        }
+        if (modal) {
+          modal.style.display = "flex";
+        }
+      }
+      window.openCornellModal = openCornellModal;
+
+      const closeCornellModal = () => {
+        const modal = document.getElementById("cornellModal");
+        const iframe = document.getElementById("cornellIframe");
+        if (iframe) iframe.src = "about:blank";
+        if (modal) modal.style.display = "none";
+      };
+
+      const modalCloseBtn = document.getElementById("cornellModalClose");
+      if (modalCloseBtn) modalCloseBtn.onclick = closeCornellModal;
+
+      const modalBackBtn = document.getElementById("cornellModalBack");
+      if (modalBackBtn) modalBackBtn.onclick = closeCornellModal;
+
+      const cornellModalEl = document.getElementById("cornellModal");
+      if (cornellModalEl) {
+        cornellModalEl.onclick = e => {
+          if (e.target === cornellModalEl) {
+            const iframe = document.getElementById("cornellIframe");
+            if (iframe) iframe.src = "about:blank";
+            cornellModalEl.style.display = "none";
+          }
+        };
+      }
+
+      window.addEventListener("keydown", e => {
+        if (e.key === "Escape") {
+          const modal = document.getElementById("cornellModal");
+          if (modal && modal.style.display !== "none") {
+            const iframe = document.getElementById("cornellIframe");
+            if (iframe) iframe.src = "about:blank";
+            modal.style.display = "none";
+          }
+        }
+      });
+
+      // ============================================================
+      // ANKI SPACED REPETITION & FLASHCARDS ENGINE (OBSIDIAN STYLE)
+      // ============================================================
+      const SRS_STORAGE_KEY = "university_anki_srs_v1";
+
+      function getAnkiSrsData() {
+        try {
+          return JSON.parse(localStorage.getItem(SRS_STORAGE_KEY) || "{}");
+        } catch (e) {
+          return {};
+        }
+      }
+
+      function saveAnkiSrsData(data) {
+        try {
+          localStorage.setItem(SRS_STORAGE_KEY, JSON.stringify(data));
+        } catch (e) {}
+      }
+
+      function getCardStatus(cardId) {
+        const srs = getAnkiSrsData();
+        const record = srs[cardId];
+        if (!record || record.reps === 0) return "new";
+        if (record.interval >= 6) return "mastered";
+        return "learning";
+      }
+
+      function updateCardSrs(cardId, grade) {
+        // Simple SM-2 Spaced Repetition Algorithm
+        const srs = getAnkiSrsData();
+        let record = srs[cardId] || { reps: 0, interval: 1, ease: 2.5, lapses: 0, lastReview: 0 };
+        const now = Date.now();
+
+        if (grade === 1) { // Again (<1m)
+          record.lapses += 1;
+          record.reps = 0;
+          record.interval = 1;
+          record.ease = Math.max(1.3, record.ease - 0.2);
+        } else if (grade === 2) { // Hard (1d)
+          record.reps += 1;
+          record.interval = Math.max(1, Math.round(record.interval * 1.2));
+          record.ease = Math.max(1.3, record.ease - 0.15);
+        } else if (grade === 3) { // Good (3d)
+          record.reps += 1;
+          record.interval = (record.reps === 1) ? 2 : Math.round(record.interval * record.ease);
+        } else if (grade === 4) { // Easy (7d)
+          record.reps += 1;
+          record.interval = (record.reps === 1) ? 4 : Math.round(record.interval * record.ease * 1.3);
+          record.ease = Math.min(3.0, record.ease + 0.15);
+        }
+
+        record.lastReview = now;
+        srs[cardId] = record;
+        saveAnkiSrsData(srs);
+      }
+
+      function renderMathSafe(el) {
+        if (window.renderMathInElement) {
+          try {
+            renderMathInElement(el, {
+              delimiters: [
+                {left: "$$", right: "$$", display: true},
+                {left: "$", right: "$", display: false}
+              ],
+              throwOnError: false
+            });
+          } catch (e) {}
+        }
+      }
+
+      function renderCalloutsHtml(html) {
+        if (!html) return "";
+        // Match blockquotes containing [!TYPE]
+        html = html.replace(/<blockquote>\s*<p>\s*\[!(NOTE|TIP|WARNING|IMPORTANT|CAUTION|DANGER|INFO)\]\s*(?:<br>|\n)?([\s\S]*?)<\/p>\s*<\/blockquote>/gi, function(_, type, content) {
+          const t = type.toUpperCase();
+          let icon = "ℹ️", label = "NOTE", cls = "anki-callout-note";
+          if (t === "TIP") { icon = "💡"; label = "TIP"; cls = "anki-callout-tip"; }
+          else if (t === "WARNING") { icon = "⚠️"; label = "WARNING"; cls = "anki-callout-warning"; }
+          else if (t === "IMPORTANT") { icon = "📌"; label = "IMPORTANT"; cls = "anki-callout-important"; }
+          else if (t === "CAUTION" || t === "DANGER") { icon = "🚨"; label = "CAUTION"; cls = "anki-callout-caution"; }
+          return `<div class="anki-callout ${cls}"><div class="anki-callout-title">${icon} ${label}</div><div class="anki-callout-body">${content}</div></div>`;
+        });
+        // Match raw paragraphs starting with [!TYPE]
+        html = html.replace(/<p>\s*\[!(NOTE|TIP|WARNING|IMPORTANT|CAUTION|DANGER|INFO)\]\s*(?:<br>|\n)?([\s\S]*?)<\/p>/gi, function(_, type, content) {
+          const t = type.toUpperCase();
+          let icon = "ℹ️", label = "NOTE", cls = "anki-callout-note";
+          if (t === "TIP") { icon = "💡"; label = "TIP"; cls = "anki-callout-tip"; }
+          else if (t === "WARNING") { icon = "⚠️"; label = "WARNING"; cls = "anki-callout-warning"; }
+          else if (t === "IMPORTANT") { icon = "📌"; label = "IMPORTANT"; cls = "anki-callout-important"; }
+          else if (t === "CAUTION" || t === "DANGER") { icon = "🚨"; label = "CAUTION"; cls = "anki-callout-caution"; }
+          return `<div class="anki-callout ${cls}"><div class="anki-callout-title">${icon} ${label}</div><div class="anki-callout-body">${content}</div></div>`;
+        });
+        // Clean any remaining standalone [!TYPE] tags safely
+        html = html.replace(/\[!(NOTE|TIP|WARNING|IMPORTANT|CAUTION|DANGER|INFO)\]/gi, "");
+        return html;
+      }
+
+      function formatMarkdownNotes(text) {
+        if (!text) return "";
+        let resultHtml = "";
+        if (window.marked && typeof window.marked.parse === "function") {
+          try {
+            resultHtml = window.marked.parse(text);
+          } catch (e) {}
+        }
+
+        if (!resultHtml) {
+          let normalized = text.replace(/\r\n/g, "\n");
+          const lines = normalized.split("\n");
+          let inTable = false;
+          let tableRows = [];
+          let outLines = [];
+
+          function inlineFormat(s) {
+            if (!s) return "";
+            return s
+              .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+              .replace(/\*([^*]+)\*/g, "<em>$1</em>")
+              .replace(/`([^`]+)`/g, "<code>$1</code>");
+          }
+
+          function flushTable() {
+            if (tableRows.length < 2) {
+              outLines.push(...tableRows);
+              tableRows = [];
+              inTable = false;
+              return;
+            }
+            // Reject degenerate OCR shredded tables (>45% empty cells)
+            const allCells = tableRows.flatMap(tr => tr.split("|").slice(1, -1).map(c => c.trim()));
+            const emptyCount = allCells.filter(c => c === "" || c.startsWith("---")).length;
+            if (allCells.length > 4 && (emptyCount / allCells.length) > 0.45) {
+              const cleanTokens = allCells.filter(c => c && !c.match(/^---+$/)).join(" ");
+              if (cleanTokens) outLines.push(cleanTokens);
+              tableRows = [];
+              inTable = false;
+              return;
+            }
+            const headerCols = tableRows[0].split("|").map(c => c.trim()).filter((c, i, a) => !(i === 0 && c === "") && !(i === a.length - 1 && c === ""));
+            let html = '<div class="anki-table-wrapper"><table class="anki-table"><thead><tr>';
+            for (let h of headerCols) html += "<th>" + inlineFormat(h) + "</th>";
+            html += "</tr></thead><tbody>";
+
+            for (let r = 2; r < tableRows.length; r++) {
+              const rowCols = tableRows[r].split("|").map(c => c.trim()).filter((c, i, a) => !(i === 0 && c === "") && !(i === a.length - 1 && c === ""));
+              if (rowCols.length === 0) continue;
+              html += "<tr>";
+              for (let c of rowCols) html += "<td>" + inlineFormat(c) + "</td>";
+              html += "</tr>";
+            }
+            html += "</tbody></table></div>";
+            outLines.push(html);
+            tableRows = [];
+            inTable = false;
+          }
+
+          for (let line of lines) {
+            let trimmed = line.trim();
+            if (trimmed.startsWith("|") && trimmed.endsWith("|")) {
+              inTable = true;
+              tableRows.push(trimmed);
+            } else {
+              if (inTable) flushTable();
+              outLines.push(line);
+            }
+          }
+          if (inTable) flushTable();
+
+          let finalHtml = [];
+          let inList = false;
+          let inPre = false;
+          let preContent = [];
+
+          for (let l of outLines) {
+            if (l.startsWith('<div class="anki-table-wrapper"')) {
+              if (inList) { finalHtml.push("</ul>"); inList = false; }
+              finalHtml.push(l);
+              continue;
+            }
+            let trimmed = l.trim();
+            if (trimmed.startsWith("```")) {
+              if (inPre) {
+                finalHtml.push("<pre><code>" + preContent.join("\n") + "</code></pre>");
+                preContent = [];
+                inPre = false;
+              } else {
+                if (inList) { finalHtml.push("</ul>"); inList = false; }
+                inPre = true;
+              }
+              continue;
+            }
+            if (inPre) {
+              preContent.push(l);
+              continue;
+            }
+            if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
+              if (!inList) { finalHtml.push('<ul class="anki-list">'); inList = true; }
+              finalHtml.push("<li>" + inlineFormat(trimmed.substring(2)) + "</li>");
+            } else if (trimmed.startsWith("> ")) {
+              if (inList) { finalHtml.push("</ul>"); inList = false; }
+              finalHtml.push("<blockquote>" + inlineFormat(trimmed.substring(2)) + "</blockquote>");
+            } else {
+              if (inList) { finalHtml.push("</ul>"); inList = false; }
+              if (trimmed) finalHtml.push("<p>" + inlineFormat(trimmed) + "</p>");
+            }
+          }
+          if (inList) finalHtml.push("</ul>");
+          if (inPre) finalHtml.push("<pre><code>" + preContent.join("\n") + "</code></pre>");
+
+          resultHtml = finalHtml.join("\n");
+        }
+
+        return renderCalloutsHtml(resultHtml);
+      }
+
+      // Collect all cards from graph nodes
+      function getAllCornellCards() {
+        let cards = [];
+        nodes.forEach(n => {
+          if (n.cornellCards && n.cornellCards.length > 0) {
+            n.cornellCards.forEach(c => {
+              cards.push({
+                ...c,
+                nodeId: n.id,
+                nodeTitle: n.cleanTitle,
+                course: n.course
+              });
+            });
+          }
+        });
+        return cards;
+      }
+
+      function updateAnkiHubStats() {
+        const allCards = getAllCornellCards();
+        let countNew = 0, countLearn = 0, countMaster = 0;
+
+        allCards.forEach(c => {
+          const st = getCardStatus(c.id);
+          if (st === "new") countNew++;
+          else if (st === "learning") countLearn++;
+          else if (st === "mastered") countMaster++;
+        });
+
+        const statTotal = document.getElementById("ankiStatTotal");
+        const statNew = document.getElementById("ankiStatNew");
+        const statLearn = document.getElementById("ankiStatLearn");
+        const statMaster = document.getElementById("ankiStatMaster");
+        const totalNavChip = document.getElementById("ankiTotalCardsCount");
+
+        if (statTotal) statTotal.textContent = allCards.length;
+        if (statNew) statNew.textContent = countNew;
+        if (statLearn) statLearn.textContent = countLearn;
+        if (statMaster) statMaster.textContent = countMaster;
+        if (totalNavChip) totalNavChip.textContent = allCards.length;
+
+        renderCourseDecksGrid();
+      }
+
+      function renderCourseDecksGrid(filterQuery = "") {
+        const grid = document.getElementById("ankiCourseGrid");
+        if (!grid) return;
+        grid.innerHTML = "";
+
+        const query = (filterQuery || "").toLowerCase().trim();
+
+        // Group nodes by course
+        const courses = {};
+        nodes.forEach(n => {
+          if (n.cornellCards && n.cornellCards.length > 0) {
+            if (!courses[n.course]) {
+              courses[n.course] = [];
+            }
+            courses[n.course].push(n);
+          }
+        });
+
+        Object.keys(courses).sort().forEach(courseName => {
+          const courseNodes = courses[courseName];
+          const theme = COURSE_THEMES[courseName] || COURSE_THEMES["General"];
+          const courseCards = [];
+          courseNodes.forEach(cn => courseCards.push(...cn.cornellCards));
+
+          // Filter match check
+          const matchesCourse = courseName.toLowerCase().includes(query);
+          const matchingNodes = courseNodes.filter(cn =>
+            matchesCourse ||
+            cn.cleanTitle.toLowerCase().includes(query) ||
+            cn.cornellCards.some(cc => cc.cue.toLowerCase().includes(query) || cc.notes.toLowerCase().includes(query))
+          );
+
+          if (query && matchingNodes.length === 0) return;
+
+          let cNew = 0, cLearn = 0, cMaster = 0;
+          courseCards.forEach(c => {
+            const st = getCardStatus(c.id);
+            if (st === "new") cNew++;
+            else if (st === "learning") cLearn++;
+            else if (st === "mastered") cMaster++;
+          });
+
+          const cardEl = document.createElement("div");
+          cardEl.className = "anki-course-card";
+          cardEl.style.borderColor = `${theme.color}40`;
+          cardEl.style.boxShadow = `0 8px 30px ${theme.color}15`;
+
+          cardEl.innerHTML = `
+            <div>
+              <div class="anki-card-header">
+                <div>
+                  <span class="anki-course-code" style="background:${theme.color}25; color:${theme.color};">${theme.name}</span>
+                  <div class="anki-course-name">${courseName}</div>
+                </div>
+              </div>
+
+              <div style="display:flex; gap:8px; margin: 8px 0 12px 0;">
+                <span class="anki-stat-pill anki-pill-new" style="font-size:11px; padding:3px 8px;">${cNew} New</span>
+                <span class="anki-stat-pill anki-pill-learn" style="font-size:11px; padding:3px 8px;">${cLearn} Review</span>
+                <span class="anki-stat-pill anki-pill-master" style="font-size:11px; padding:3px 8px;">${cMaster} Mastered</span>
+              </div>
+
+              <div class="anki-topics-list">
+                ${matchingNodes.map(cn => `
+                  <div class="anki-topic-item" onclick="startAnkiSession('node', '${cn.id}')">
+                    <span class="anki-topic-title" title="${cn.cleanTitle}">📝 ${cn.cleanTitle}</span>
+                    <span class="anki-topic-count">${cn.cornellCards.length} cards &rsaquo;</span>
+                  </div>
+                `).join("")}
+              </div>
+            </div>
+
+            <button class="btn-study-course" style="background:linear-gradient(135deg, ${theme.color}, #ffffff15); color:#111420; font-weight:700;" onclick="startAnkiSession('course', '${courseName}')">
+              <span>⚡</span> Study ${theme.name} (${courseCards.length} Cards)
+            </button>
+          `;
+
+          grid.appendChild(cardEl);
+        });
+      }
+
+      function filterAnkiDecks(val) {
+        renderCourseDecksGrid(val);
+      }
+      window.filterAnkiDecks = filterAnkiDecks;
+
+      // Active Study Session State
+      let currentSessionCards = [];
+      let currentCardIndex = 0;
+      let sessionOriginalCount = 0;
+      let isCardFlipped = false;
+      let sessionStats = { reviewed: 0, againCount: 0, goodCount: 0 };
+      let activeSessionMode = "all";
+      let activeSessionPayload = null;
+
+      function openAnkiModal() {
+        const cornellModal = document.getElementById("cornellModal");
+        if (cornellModal) cornellModal.style.display = "none";
+        const modal = document.getElementById("ankiModal");
+        const hub = document.getElementById("ankiDeckHub");
+        const arena = document.getElementById("ankiStudyArena");
+        if (modal) {
+          modal.style.display = "flex";
+          if (hub) hub.style.display = "flex";
+          if (arena) arena.style.display = "none";
+          updateAnkiHubStats();
+        }
+      }
+      window.openAnkiModal = openAnkiModal;
+
+      function closeAnkiModal() {
+        const modal = document.getElementById("ankiModal");
+        if (modal) modal.style.display = "none";
+      }
+      window.closeAnkiModal = closeAnkiModal;
+
+      function exitAnkiStudyToDecks() {
+        const hub = document.getElementById("ankiDeckHub");
+        const arena = document.getElementById("ankiStudyArena");
+        if (hub && arena) {
+          arena.style.display = "none";
+          hub.style.display = "flex";
+          updateAnkiHubStats();
+        }
+      }
+      window.exitAnkiStudyToDecks = exitAnkiStudyToDecks;
+
+      function startAnkiSession(mode, payload) {
+        activeSessionMode = mode;
+        activeSessionPayload = payload;
+
+        let cards = [];
+        let title = "All Decks (Shuffled)";
+
+        if (mode === "all") {
+          cards = getAllCornellCards();
+          // Fisher-Yates shuffle
+          for (let i = cards.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [cards[i], cards[j]] = [cards[j], cards[i]];
+          }
+        } else if (mode === "course") {
+          const courseName = payload;
+          title = courseName;
+          nodes.forEach(n => {
+            if (n.course === courseName && n.cornellCards) {
+              n.cornellCards.forEach(c => cards.push({ ...c, nodeId: n.id, nodeTitle: n.cleanTitle, course: n.course }));
+            }
+          });
+        } else if (mode === "node") {
+          const targetNode = typeof payload === "string" ? nodes.find(n => n.id === payload) : payload;
+          if (targetNode && targetNode.cornellCards) {
+            title = targetNode.cleanTitle;
+            targetNode.cornellCards.forEach(c => cards.push({ ...c, nodeId: targetNode.id, nodeTitle: targetNode.cleanTitle, course: targetNode.course }));
+          }
+        }
+
+        if (cards.length === 0) {
+          alert("No flashcards found for this selection!");
+          return;
+        }
+
+        currentSessionCards = [...cards];
+        currentCardIndex = 0;
+        sessionOriginalCount = cards.length;
+        sessionStats = { reviewed: 0, againCount: 0, goodCount: 0 };
+
+        const cornellModal = document.getElementById("cornellModal");
+        if (cornellModal) cornellModal.style.display = "none";
+        const hub = document.getElementById("ankiDeckHub");
+        const arena = document.getElementById("ankiStudyArena");
+        const modal = document.getElementById("ankiModal");
+        const deckTitle = document.getElementById("ankiDeckTitle");
+        const completionScreen = document.getElementById("ankiCompletionScreen");
+        const cardElem = document.getElementById("ankiCardElement");
+
+        if (modal) modal.style.display = "flex";
+        if (hub) hub.style.display = "none";
+        if (arena) arena.style.display = "flex";
+        if (deckTitle) deckTitle.innerHTML = `<span>🎴</span> ${title}`;
+        if (completionScreen) completionScreen.style.display = "none";
+        if (cardElem) cardElem.style.display = "block";
+
+        renderCurrentCard();
+      }
+      window.startAnkiSession = startAnkiSession;
+
+      function renderCurrentCard() {
+        if (currentCardIndex >= currentSessionCards.length) {
+          showSessionCompletion();
+          return;
+        }
+
+        isCardFlipped = false;
+        const card = currentSessionCards[currentCardIndex];
+        const cardElem = document.getElementById("ankiCardElement");
+        const flipBtn = document.getElementById("ankiFlipActionBtn");
+        const gradeRow = document.getElementById("ankiGradeActionRow");
+        const counter = document.getElementById("ankiCardCounter");
+        const fillBar = document.getElementById("ankiProgressFill");
+
+        // Reset Card Transform & Classes
+        cardElem.classList.remove("flipped", "exit-again", "exit-good", "animating", "enter-spring");
+        void cardElem.offsetWidth; // Force reflow so new animation cleanly attaches
+        cardElem.classList.add("animating", "enter-spring");
+        setTimeout(() => {
+          cardElem.classList.remove("animating", "enter-spring");
+        }, 250);
+
+        // Update front face
+        const frontBadge = document.getElementById("ankiFrontBadge");
+        const frontSection = document.getElementById("ankiFrontSection");
+        const frontQ = document.getElementById("ankiFrontQuestion");
+
+        if (frontBadge) frontBadge.textContent = (card.badge || "CONCEPT").toUpperCase();
+        if (frontSection) frontSection.textContent = card.section || card.nodeTitle;
+        if (frontQ) frontQ.innerHTML = formatMarkdownNotes(card.cue);
+
+        // Update back face
+        const backSection = document.getElementById("ankiBackSection");
+        const backA = document.getElementById("ankiBackAnswer");
+
+        if (backSection) backSection.textContent = card.nodeTitle || card.section;
+        if (backA) backA.innerHTML = formatMarkdownNotes(card.notes);
+
+        // Render KaTeX Formulas on front and back
+        renderMathSafe(frontQ);
+        renderMathSafe(backA);
+
+        // Update Bottom Bar
+        if (flipBtn) flipBtn.style.display = "inline-flex";
+        if (gradeRow) gradeRow.style.display = "none";
+
+        // Update Progress
+        if (counter) counter.textContent = `Card ${currentCardIndex + 1} of ${currentSessionCards.length}`;
+        if (fillBar) {
+          const progressPercent = Math.min(100, Math.round(((currentCardIndex) / sessionOriginalCount) * 100));
+          fillBar.style.width = `${progressPercent}%`;
+        }
+      }
+
+      function flipCurrentCard() {
+        if (isCardFlipped) return;
+        isCardFlipped = true;
+
+        const cardElem = document.getElementById("ankiCardElement");
+        const flipBtn = document.getElementById("ankiFlipActionBtn");
+        const gradeRow = document.getElementById("ankiGradeActionRow");
+
+        if (cardElem) cardElem.classList.add("flipped");
+        if (flipBtn) flipBtn.style.display = "none";
+        if (gradeRow) gradeRow.style.display = "flex";
+      }
+      window.flipCurrentCard = flipCurrentCard;
+
+      function gradeCurrentCard(grade) {
+        if (!isCardFlipped) {
+          flipCurrentCard();
+          return;
+        }
+
+        const card = currentSessionCards[currentCardIndex];
+        const cardElem = document.getElementById("ankiCardElement");
+        updateCardSrs(card.id, grade);
+        sessionStats.reviewed += 1;
+
+        cardElem.classList.add("animating");
+        if (grade === 1) { // Again
+          sessionStats.againCount += 1;
+          // Re-queue card to the end of the session
+          currentSessionCards.push(card);
+          cardElem.classList.add("exit-again");
+        } else {
+          sessionStats.goodCount += 1;
+          cardElem.classList.add("exit-good");
+        }
+
+        setTimeout(() => {
+          currentCardIndex += 1;
+          renderCurrentCard();
+        }, 220);
+      }
+      window.gradeCurrentCard = gradeCurrentCard;
+
+      function showSessionCompletion() {
+        const cardElem = document.getElementById("ankiCardElement");
+        const flipBtn = document.getElementById("ankiFlipActionBtn");
+        const gradeRow = document.getElementById("ankiGradeActionRow");
+        const completionScreen = document.getElementById("ankiCompletionScreen");
+        const summary = document.getElementById("ankiCompletionSummary");
+        const fillBar = document.getElementById("ankiProgressFill");
+
+        if (cardElem) cardElem.style.display = "none";
+        if (flipBtn) flipBtn.style.display = "none";
+        if (gradeRow) gradeRow.style.display = "none";
+        if (fillBar) fillBar.style.width = "100%";
+
+        const retention = sessionStats.reviewed > 0
+          ? Math.round((sessionStats.goodCount / sessionStats.reviewed) * 100)
+          : 100;
+
+        if (summary) {
+          summary.innerHTML = `
+            Mastered <strong>${sessionOriginalCount}</strong> cards in this session.<br>
+            Total reviews: <strong>${sessionStats.reviewed}</strong> &bull; Lapses reviewed: <strong>${sessionStats.againCount}</strong><br>
+            Active recall accuracy score: <span style="color:#a6e3a1; font-weight:700;">${retention}%</span>
+          `;
+        }
+
+        if (completionScreen) completionScreen.style.display = "flex";
+      }
+
+      function restartCurrentSession() {
+        startAnkiSession(activeSessionMode, activeSessionPayload);
+      }
+      window.restartCurrentSession = restartCurrentSession;
+
+      // ============================================================
+      // STUDY & RETENTION KANBAN PIPELINE (OPTION 1)
+      // ============================================================
+      let activeKanbanCourse = "ALL";
+      let kanbanPillsInitialized = false;
+
+      function escapeHtml(str) {
+        if (!str) return "";
+        return String(str)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
+      function initKanbanCoursePills() {
+        const container = document.getElementById("kanbanCoursePills");
+        if (!container) return;
+        container.innerHTML = "";
+
+        const nonHubNodes = nodes.filter(n => n.type !== "ModuleHub");
+
+        // All Courses Pill
+        const allPill = document.createElement("div");
+        allPill.className = `kanban-course-pill ${activeKanbanCourse === "ALL" ? "active" : ""}`;
+        allPill.textContent = `All Galaxies (${nonHubNodes.length})`;
+        allPill.onclick = () => filterKanbanCourse("ALL");
+        container.appendChild(allPill);
+
+        Object.keys(COURSE_THEMES).forEach(cKey => {
+          const cTheme = COURSE_THEMES[cKey];
+          const count = nonHubNodes.filter(n => n.course === cKey).length;
+          if (count === 0) return;
+
+          const pill = document.createElement("div");
+          pill.className = `kanban-course-pill ${activeKanbanCourse === cKey ? "active" : ""}`;
+          pill.style.setProperty("--pill-color", cTheme.color);
+          pill.innerHTML = `<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${cTheme.color}; margin-right:6px;"></span>${cTheme.name} (${count})`;
+          pill.onclick = () => filterKanbanCourse(cKey);
+          container.appendChild(pill);
+        });
+        kanbanPillsInitialized = true;
+      }
+
+      function filterKanbanCourse(courseKey) {
+        activeKanbanCourse = courseKey;
+        initKanbanCoursePills();
+        renderKanbanBoard();
+      }
+      window.filterKanbanCourse = filterKanbanCourse;
+
+      function inspectNodeFromKanban(nodeId) {
+        const node = nodes.find(n => n.id === nodeId);
+        if (!node) return;
+        if (node.hasCornell && node.cornellUrl) {
+          openCornellModal(node.cornellUrl, node.label);
+        } else {
+          setViewMode("constellation");
+          selectNode(node);
+        }
+      }
+      window.inspectNodeFromKanban = inspectNodeFromKanban;
+
+      function renderKanbanCard(node) {
+        const theme = COURSE_THEMES[node.course] || COURSE_THEMES["General"] || { color: "#89b4fa", name: node.course };
+        const cards = node.cornellCards || [];
+        const cardCount = cards.length;
+
+        let badgeHtml = "";
+        if (!node.hasCornell) {
+          badgeHtml = `<span class="kanban-badge" style="color: #a6adc8;"><span>📥</span> Backlog</span>`;
+        } else if (cardCount === 0) {
+          badgeHtml = `<span class="kanban-badge" style="color: #89b4fa;"><span>📝</span> Cornell Notes</span>`;
+        } else {
+          let m = 0, l = 0, nw = 0;
+          cards.forEach(c => {
+            const st = getCardStatus(c.id);
+            if (st === "mastered") m++;
+            else if (st === "learning") l++;
+            else nw++;
+          });
+          if (m === cardCount) {
+            badgeHtml = `<span class="kanban-badge" style="color: #a6e3a1;"><span>🏆</span> ${m}/${cardCount} Mastered</span>`;
+          } else if (l > 0 || m > 0) {
+            badgeHtml = `<span class="kanban-badge" style="color: #fab387;"><span>🔄</span> ${l} Learning &bull; ${m} Mastered</span>`;
+          } else {
+            badgeHtml = `<span class="kanban-badge" style="color: #89b4fa;"><span>🎴</span> ${cardCount} Unreviewed</span>`;
+          }
+        }
+
+        const moduleName = node.module ? node.module.replace(/_/g, " ") : (node.week || "");
+
+        let actionBtns = "";
+        if (node.hasCornell && node.cornellUrl) {
+          actionBtns += `<button class="kanban-btn-action" title="Read Interactive Cornell Notes" onclick="event.stopPropagation(); openCornellModal('${node.cornellUrl}', '${escapeHtml(node.label)}')"><span>📝</span> Notes</button>`;
+        }
+        if (cardCount > 0) {
+          actionBtns += `<button class="kanban-btn-action" title="Start Spaced Repetition Session" onclick="event.stopPropagation(); startAnkiSession('node', window.graphNodes.find(n => n.id === '${node.id}'))"><span>🎴</span> Study</button>`;
+        }
+
+        return `
+          <div class="kanban-card" onclick="inspectNodeFromKanban('${node.id}')">
+            <div class="kanban-card-meta">
+              <span class="kanban-course-tag" style="background:${theme.color}22; color:${theme.color}; border:1px solid ${theme.color}55;">
+                ${escapeHtml(node.course || "General")}
+              </span>
+              <span class="kanban-module-tag" title="${escapeHtml(moduleName)}">${escapeHtml(moduleName)}</span>
+            </div>
+            <div class="kanban-card-title">${escapeHtml(node.label)}</div>
+            <div class="kanban-card-footer">
+              ${badgeHtml}
+              <div style="display:flex; gap:6px;">
+                ${actionBtns}
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      function renderKanbanBoard() {
+        if (!kanbanPillsInitialized) {
+          initKanbanCoursePills();
+        }
+
+        const searchInput = document.getElementById("kanbanSearchInput");
+        const query = (searchInput ? searchInput.value : "").toLowerCase().trim();
+
+        const bodyIngestion = document.getElementById("bodyIngestion");
+        const bodySynthesis = document.getElementById("bodySynthesis");
+        const bodyReview = document.getElementById("bodyReview");
+        const bodyMastered = document.getElementById("bodyMastered");
+
+        const countIngestion = document.getElementById("countIngestion");
+        const countSynthesis = document.getElementById("countSynthesis");
+        const countReview = document.getElementById("countReview");
+        const countMastered = document.getElementById("countMastered");
+        const statsSummary = document.getElementById("kanbanStatsSummary");
+
+        if (!bodyIngestion || !bodySynthesis || !bodyReview || !bodyMastered) return;
+
+        let studyNodes = nodes.filter(n => n.type !== "ModuleHub");
+
+        if (activeKanbanCourse !== "ALL") {
+          studyNodes = studyNodes.filter(n => n.course === activeKanbanCourse);
+        }
+
+        if (query) {
+          studyNodes = studyNodes.filter(n =>
+            (n.label && n.label.toLowerCase().includes(query)) ||
+            (n.course && n.course.toLowerCase().includes(query)) ||
+            (n.module && n.module.toLowerCase().includes(query))
+          );
+        }
+
+        const col1 = []; // Ingestion / Backlog (no cornell)
+        const col2 = []; // Cornell Synthesized (has cornell, but either 0 cards or all cards new)
+        const col3 = []; // Active SRS Review (learning or partial mastered)
+        const col4 = []; // Mastered & Exam-Ready (has cards, all cards mastered)
+
+        studyNodes.forEach(node => {
+          if (!node.hasCornell) {
+            col1.push(node);
+          } else {
+            const cards = node.cornellCards || [];
+            if (cards.length === 0) {
+              col2.push(node);
+            } else {
+              let mastered = 0;
+              let learning = 0;
+              cards.forEach(c => {
+                const s = getCardStatus(c.id);
+                if (s === "mastered") mastered++;
+                else if (s === "learning") learning++;
+              });
+
+              if (mastered === cards.length) {
+                col4.push(node);
+              } else if (learning > 0 || mastered > 0) {
+                col3.push(node);
+              } else {
+                col2.push(node);
+              }
+            }
+          }
+        });
+
+        // Update counts
+        if (countIngestion) countIngestion.textContent = col1.length;
+        if (countSynthesis) countSynthesis.textContent = col2.length;
+        if (countReview) countReview.textContent = col3.length;
+        if (countMastered) countMastered.textContent = col4.length;
+
+        if (statsSummary) {
+          const totalFiltered = studyNodes.length;
+          const masteredPct = totalFiltered > 0 ? Math.round((col4.length / totalFiltered) * 100) : 0;
+          statsSummary.innerHTML = `
+            <span>Retention Velocity: <strong style="color:#a6e3a1;">${masteredPct}% Exam-Ready</strong></span>
+            <span>&bull;</span>
+            <span>Total Topics: <strong>${totalFiltered}</strong></span>
+          `;
+        }
+
+        // Render card lists
+        bodyIngestion.innerHTML = col1.length > 0
+          ? col1.map(renderKanbanCard).join("")
+          : `<div style="padding:20px 10px; text-align:center; color:var(--text-dim); font-size:12px;">No backlog topics</div>`;
+
+        bodySynthesis.innerHTML = col2.length > 0
+          ? col2.map(renderKanbanCard).join("")
+          : `<div style="padding:20px 10px; text-align:center; color:var(--text-dim); font-size:12px;">No unreviewed synthesized topics</div>`;
+
+        bodyReview.innerHTML = col3.length > 0
+          ? col3.map(renderKanbanCard).join("")
+          : `<div style="padding:20px 10px; text-align:center; color:var(--text-dim); font-size:12px;">No active reviews in progress</div>`;
+
+        bodyMastered.innerHTML = col4.length > 0
+          ? col4.map(renderKanbanCard).join("")
+          : `<div style="padding:20px 10px; text-align:center; color:var(--text-dim); font-size:12px;">No mastered topics yet</div>`;
+      }
+      window.renderKanbanBoard = renderKanbanBoard;
+
+      // Global Keyboard Shortcuts
+      window.addEventListener("keydown", e => {
+        const ankiModal = document.getElementById("ankiModal");
+        if (ankiModal && ankiModal.style.display !== "none") {
+          const arena = document.getElementById("ankiStudyArena");
+          const isStudying = (arena && arena.style.display !== "none");
+
+          if (isStudying) {
+            if (e.code === "Space" || e.key === "Enter") {
+              e.preventDefault();
+              if (!isCardFlipped) {
+                flipCurrentCard();
+              }
+            } else if (e.key === "1") {
+              gradeCurrentCard(1);
+            } else if (e.key === "2") {
+              gradeCurrentCard(2);
+            } else if (e.key === "3") {
+              gradeCurrentCard(3);
+            } else if (e.key === "4") {
+              gradeCurrentCard(4);
+            } else if (e.key === "Escape") {
+              exitAnkiStudyToDecks();
+            }
+          } else {
+            if (e.key === "Escape") {
+              closeAnkiModal();
+            }
+          }
+        } else {
+          // Check if Cornell modal is open
+          const cornellModal = document.getElementById("cornellModal");
+          if (cornellModal && cornellModal.style.display !== "none") {
+            if (e.key === "Escape") {
+              closeCornellModal();
+              return;
+            }
+          }
+
+          if (e.key === "Escape") {
+            if (currentViewMode === "kanban") {
+              setViewMode("constellation");
+              return;
+            }
+          }
+
+          // Toggle Kanban Board when pressing 'K' outside input fields
+          if ((e.key === "k" || e.key === "K") && !["INPUT", "TEXTAREA"].includes(document.activeElement.tagName)) {
+            e.preventDefault();
+            setViewMode(currentViewMode === "kanban" ? "constellation" : "kanban");
+          }
+          // Toggle Anki Mode when pressing 'A' outside input fields
+          else if ((e.key === "a" || e.key === "A") && !["INPUT", "TEXTAREA"].includes(document.activeElement.tagName)) {
+            e.preventDefault();
+            openAnkiModal();
+          }
+          // Toggle Cornell Notes Portal when pressing 'C' outside input fields
+          else if ((e.key === "c" || e.key === "C") && !["INPUT", "TEXTAREA"].includes(document.activeElement.tagName)) {
+            e.preventDefault();
+            const modal = document.getElementById("cornellModal");
+            if (modal && modal.style.display !== "none") {
+              closeCornellModal();
+            } else {
+              openCornellModal("cornell_index.html", "Cornell Study Portal & Revision Notes");
+            }
+          }
+        }
+      });
+
+      // Initialize view mode state after all functions and models are defined
       setViewMode(currentViewMode, false);
 
       // Expose for testing and external inspection
-      window.__graph = { nodes, selectNode, simulation, requestRender, setViewMode };
+      window.__graph = {
+        nodes,
+        selectNode,
+        simulation,
+        requestRender,
+        setViewMode,
+        openCornellModal,
+        openAnkiModal,
+        startAnkiSession,
+        renderKanbanBoard,
+        filterKanbanCourse
+      };
     });
   </script>
 </body>
