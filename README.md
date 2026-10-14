@@ -98,6 +98,7 @@ pip install 'markitdown[all]' requests
 | [`markitdown-cli`](markitdown-cli/) | Document Parser | Converts PPTX slide decks, PDF worksheets, DOCX, XLSX to Markdown | `pip install 'markitdown[all]'` |
 | [`cornell-notes`](cornell-notes/) | Study & Revision | Formats markdown notes into interactive self-quiz Cornell HTML & Anki flashcards | Python stdlib (zero-dep) |
 | [`okf-architect`](okf-architect/) | Knowledge Architecture & Cosmos | Virtual curriculum trees (`CURRICULUM_TREE.md`), dual-mode graph cosmos (`viz.html`), and Cornell study portal (`cornell_index.html`) | Python stdlib (zero-dep) |
+| [`academic-icm`](academic-icm/) | Pipeline Orchestrator | Complete ICM orchestrator (`status`, `audit`, `scaffold`, `compile`, `serve`) enforcing strict stem inheritance | Python stdlib (zero-dep) |
 
 ---
 
