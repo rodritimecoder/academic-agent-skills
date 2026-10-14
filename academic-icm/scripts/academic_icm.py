@@ -229,16 +229,47 @@ def cmd_audit(args: argparse.Namespace) -> int:
         clean_stem = info["clean_stem"]
         src = info["source"]
         
-        # Check 1: Stem alignment
+        # Check 1: Stem alignment & Source resolution
         if src:
-            src_p = jf.parent.parent / src
+            src_name = Path(src).name
+            subject_root = jf.parent.parent.parent if jf.parent.parent.name == "outputs" else jf.parent.parent
+            src_p = subject_root / src
+            resolved_p = None
+            if src_p.is_file():
+                resolved_p = src_p
+            elif (vault_root / src).is_file():
+                resolved_p = vault_root / src
+            else:
+                # Case-insensitive / dash-insensitive search within subject directory
+                src_target = re.sub(r'[-_\s]+', '_', Path(src).stem.lower())
+                for f in subject_root.rglob("*.md"):
+                    f_norm = re.sub(r'[-_\s]+', '_', f.stem.lower())
+                    if f_norm == src_target or (len(src_target) > 8 and src_target in f_norm):
+                        resolved_p = f
+                        break
+
             src_stem = Path(src).stem.lower().replace("-", "_").replace(" ", "_")
             if src_stem != clean_stem:
                 print(f"  ⚠️  [Stem Mismatch] {jf.name}: JSON stem '{clean_stem}' != source stem '{src_stem}'")
                 warnings += 1
-            if not src_p.is_file() and not (vault_root / src).is_file():
+
+            if not resolved_p:
                 print(f"  ❌ [Broken Source] {jf.name}: Source file not found on disk: {src}")
                 issues += 1
+            else:
+                rel_fix = str(resolved_p.relative_to(subject_root)).replace("\\", "/")
+                if rel_fix != src:
+                    if getattr(args, "fix_sources", False):
+                        try:
+                            raw_j = json.loads(jf.read_text(encoding="utf-8"))
+                            raw_j["source"] = rel_fix
+                            jf.write_text(json.dumps(raw_j, indent=2, ensure_ascii=False), encoding="utf-8")
+                            print(f"  ✨ [Fixed Source] {jf.name}: Updated source to '{rel_fix}'")
+                        except Exception as e:
+                            print(f"  ❌ Failed to update {jf.name}: {e}")
+                    else:
+                        print(f"  💡 [Fixable Path] {jf.name}: Source '{src}' -> normalized relative '{rel_fix}'")
+                        warnings += 1
         else:
             print(f"  ⚠️  [Missing Source] {jf.name}: 'source' field is empty in JSON.")
             warnings += 1
@@ -519,6 +550,7 @@ def main() -> int:
     # audit
     p_audit = subparsers.add_parser("audit", help="Deep audit of stem alignment and JSON schema")
     p_audit.add_argument("vault", nargs="?", default=None, help="Path to notes vault root")
+    p_audit.add_argument("--fix-sources", action="store_true", help="Auto-fix broken/absolute source paths to portable relative paths")
 
     # scaffold
     p_scaffold = subparsers.add_parser("scaffold", help="Generate a matching _cornell.json template from markdown source")
