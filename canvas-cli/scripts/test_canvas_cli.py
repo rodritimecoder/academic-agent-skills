@@ -165,5 +165,39 @@ src = open(str(CLI_PATH)).read()
 for dead in ("def put(", "def delete(", "resp.status != 204", "time.sleep(0"):
     check(f"removed dead code: {dead!r}", dead not in src)
 
+# ── 8. Deterministic Token Reduction (table, project, out, limit) ───────────
+sample_data = [
+    {"id": 101, "name": "Assignment 1", "due_at": "2026-03-30T23:59:00Z", "points": 100, "extra": "bloat"},
+    {"id": 102, "name": "Assignment 2", "due_at": "2026-04-15T23:59:00Z", "points": 50, "extra": "bloat"}
+]
+
+projected = cli.project_data(sample_data, ["id", "name", "points"])
+check("project_data filters strictly to requested keys",
+      all(set(d.keys()) == {"id", "name", "points"} for d in projected), str(projected))
+
+tbl = cli.format_table(sample_data)
+check("format_table renders markdown pipe table",
+      "| id  |" in tbl and "| Assignment 1" in tbl and "|---" in tbl, tbl)
+
+tmp_out = "/tmp/test_canvas_out.json"
+if os.path.exists(tmp_out):
+    os.remove(tmp_out)
+calls, out_text = run_cli(["--out", tmp_out, "courses"],
+                          {"https://x/api/v1/courses?per_page=100": (sample_data, None)})
+check("--out writes response to disk", os.path.exists(tmp_out))
+check("--out prints concise receipt with preview", "saved_to" in out_text and "count" in out_text, out_text)
+if os.path.exists(tmp_out):
+    os.remove(tmp_out)
+
+calls, out_text = run_cli(["--table", "--project", "id,name", "courses"],
+                          {"https://x/api/v1/courses?per_page=100": (sample_data, None)})
+check("--table with --project prints clean markdown table",
+      "| id  | name         |" in out_text and "extra" not in out_text, out_text)
+
+calls, out_text = run_cli(["--limit", "1", "courses"],
+                          {"https://x/api/v1/courses?per_page=100": (sample_data, None)})
+parsed = json.loads(out_text)
+check("--limit truncates output records", len(parsed) == 1 and parsed[0]["id"] == 101, out_text)
+
 print("\n" + ("ALL PASS" if not fails else f"{len(fails)} FAILURES: {fails}"))
 sys.exit(1 if fails else 0)

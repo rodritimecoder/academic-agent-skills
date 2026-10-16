@@ -86,15 +86,22 @@ The source notes already exist. The LLM understands the source structure, synthe
 ## CLI Reference
 
 ```bash
-# Format notes to HTML (automatically reads sidecar .srs.json if present):
-python3 /home/rodri/.gemini/config/skills/cornell-notes/format_notes.py <input.json>
+# 1. Format notes to HTML with compact Markdown table receipt:
+python3 /home/rodri/.gemini/config/skills/cornell-notes/format_notes.py <input.json> --table
 
-# Generate Anki flashcard TSV (<input_stem>_anki.tsv):
-python3 /home/rodri/.gemini/config/skills/cornell-notes/format_notes.py <input.json> --anki
+# 2. Inspect high-level section outline (cues count + summary preview) without rendering HTML (~60 tokens):
+python3 /home/rodri/.gemini/config/skills/cornell-notes/format_notes.py <input.json> --outline [--table] [--limit 5]
 
-# Check SRS status (cards due today, retention stats):
-python3 /home/rodri/.gemini/config/skills/cornell-notes/srs_review.py status <input.json>
+# 3. Document statistics without rendering:
+python3 /home/rodri/.gemini/config/skills/cornell-notes/format_notes.py <input.json> --stats [--json]
 
-# Start an interactive CLI spaced repetition quiz (SM-2: 1-day fail / 3-day pass):
+# 4. Generate Anki flashcard TSV (<input_stem>_anki.tsv) with table receipt:
+python3 /home/rodri/.gemini/config/skills/cornell-notes/format_notes.py <input.json> --anki --table
+
+# 5. Check SRS status across notes (compact Markdown table / JSON):
+python3 /home/rodri/.gemini/config/skills/cornell-notes/srs_review.py status <input.json or folder> --table
+python3 /home/rodri/.gemini/config/skills/cornell-notes/srs_review.py status <folder> --json --project title due_today new
+
+# 6. Start an interactive CLI spaced repetition quiz (SM-2: 1-day fail / 3-day pass):
 python3 /home/rodri/.gemini/config/skills/cornell-notes/srs_review.py review <input.json>
 ```

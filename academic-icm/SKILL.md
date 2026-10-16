@@ -1,17 +1,42 @@
 ---
 name: academic-icm
 description: >
-  Academic ICM (Interpretable Context Methodology) Pipeline Orchestrator. Unifies Canvas LMS
-  ingestion, MarkItDown parsing, Cornell active-recall notes, and OKF curriculum architecture.
-  Use whenever asked to check university notes status, audit stem naming alignment, scaffold
-  new Cornell notes from markdown sources, compile the Knowledge Cosmos (viz.html) and Study Portal,
-  or repair orphaned notes across university course directories.
+  Unified Academic ICM (Interpretable Context Methodology) Suite & Orchestrator. Unifies Canvas LMS
+  ingestion (canvas-cli), Zoom cloud lecture & slide extraction (zoom-recorder), active-recall Cornell
+  notes (cornell-notes), and OKF curriculum architecture into a single late-binding academic hub.
 ---
 
 # Academic ICM (`academic-icm`)
 
-> **Interpretable Context Methodology (ICM) Pipeline Orchestrator for University Knowledge Workspaces.**  
-> Solves the seam between raw Canvas LMS downloads, Markdown conversions, Cornell study sheets, and the OKF Knowledge Cosmos graph.
+> **Unified Academic Intelligence Suite & ICM Pipeline Orchestrator for University Knowledge Workspaces.**  
+> Solves the seam between raw Canvas LMS downloads, Zoom lecture recordings, Markdown conversions, Cornell study sheets, and the OKF Knowledge Cosmos graph.
+
+---
+
+## 🏛️ Integrated Academic Modules & Commands
+
+`academic-icm` serves as the single late-binding hub for all university academic workflows:
+
+```bash
+# 1. Canvas LMS API Integration (courses, assignments, grades, modules, announcements)
+academic-icm canvas courses --summary
+academic-icm canvas modules <course_id>
+# Or via backward-compatible shim: canvas-cli ...
+
+# 2. Zoom Cloud Recording & Slide Keyframe Extraction
+academic-icm zoom --url <zoom_rec_url> [--passcode <code>] [--keyframes] [--ocr]
+# Or via backward-compatible shim: zoom-recorder ...
+
+# 3. Active-Recall Cornell Notes HTML & Anki TSV Generation
+academic-icm cornell <notes_cornell.json> [--anki]
+# Or via backward-compatible shim: cornell-notes ...
+
+# 4. Spaced Repetition (SRS) Review Engine
+academic-icm srs review <notes_cornell.json>
+
+# 5. List Integrated Modules & Rubrics
+academic-icm modules
+```
 
 ---
 

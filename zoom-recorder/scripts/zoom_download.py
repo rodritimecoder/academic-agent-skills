@@ -2,13 +2,14 @@
 """
 zoom_download.py - Download transcripts, audio, and keyframes from Zoom cloud recordings.
 
-Supports:
+Features:
 - Public and password-protected Zoom cloud recordings (utsmeet.zoom.us, *.zoom.us).
 - Unwraps Mimecast and Microsoft SafeLinks protection URLs.
 - Password validation without requiring Zoom OAuth / Developer Admin credentials.
 - Automatic extraction and formatting of transcripts (VTT, TXT, Markdown).
-- Selective keyframe extraction using ffmpeg without downloading the entire 1-hour video.
-- Optional audio download and local fallback ASR (via audiocpp-asr) if native VTT is unavailable.
+- High-density transcript outline/agenda extraction (--outline / --agenda).
+- Selective keyframe extraction using ffmpeg without downloading the entire video.
+- Token shielding: --table (-t), --project, --limit (-n), --info-only, and structured receipts.
 """
 
 import argparse
@@ -18,7 +19,7 @@ import re
 import subprocess
 import sys
 import urllib.parse
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, Optional, Tuple, List
 import requests
 
 DEFAULT_USER_AGENT = (
@@ -30,36 +31,194 @@ DEFAULT_USER_AGENT = (
 def unwrap_protected_url(raw_url: str) -> str:
     """Unwrap Mimecast, Outlook Safelinks, or direct URL."""
     url = raw_url.strip()
-    
+
     # Outlook Safelinks
     if "protection.outlook.com" in url and "url=" in url:
         parsed = urllib.parse.urlparse(url)
         qs = urllib.parse.parse_qs(parsed.query)
         if "url" in qs:
             return unwrap_protected_url(qs["url"][0])
-            
+
     # Mimecast protection URL
     if "mimecastprotect.com" in url and "domain=" in url:
         parsed = urllib.parse.urlparse(url)
         qs = urllib.parse.parse_qs(parsed.query)
         if "domain" in qs:
             return unwrap_protected_url(qs["domain"][0])
-            
+
     return url
+
+
+def parse_time_str(ts: str) -> float:
+    """Convert timestamp 'HH:MM:SS.mmm' or 'MM:SS.mmm' to seconds."""
+    parts = ts.strip().split(":")
+    if len(parts) == 3:
+        return float(parts[0]) * 3600 + float(parts[1]) * 60 + float(parts[2])
+    elif len(parts) == 2:
+        return float(parts[0]) * 60 + float(parts[1])
+    return float(parts[0])
+
+
+def format_seconds(secs: float) -> str:
+    """Format seconds into HH:MM:SS or MM:SS."""
+    secs = int(round(secs))
+    h = secs // 3600
+    m = (secs % 3600) // 60
+    s = secs % 60
+    if h > 0:
+        return f"{h:02d}:{m:02d}:{s:02d}"
+    return f"{m:02d}:{s:02d}"
+
+
+def format_duration(secs: float) -> str:
+    """Format seconds into human duration (e.g., '1h 14m 20s' or '45s')."""
+    secs = int(round(secs))
+    h = secs // 3600
+    m = (secs % 3600) // 60
+    s = secs % 60
+    parts = []
+    if h > 0:
+        parts.append(f"{h}h")
+    if m > 0:
+        parts.append(f"{m}m")
+    if s > 0 or not parts:
+        parts.append(f"{s}s")
+    return " ".join(parts)
+
+
+def parse_vtt_cues(vtt_text: str) -> List[Dict[str, Any]]:
+    """Parse WebVTT into structured cues: start_sec, end_sec, speaker, text."""
+    lines = vtt_text.strip().splitlines()
+    timestamp_re = re.compile(
+        r"(\d{2}:\d{2}:\d{2}(?:\.\d{3})?|\d{2}:\d{2}(?:\.\d{3})?)\s*-->\s*(\d{2}:\d{2}:\d{2}(?:\.\d{3})?|\d{2}:\d{2}(?:\.\d{3})?)"
+    )
+    voice_tag_re = re.compile(r"^<v\s+([^>]+)>(.*?)(?:</v>)?$", re.DOTALL)
+    tag_strip_re = re.compile(r"<[^>]+>")
+
+    cues = []
+    i = 0
+    while i < len(lines):
+        line = lines[i].strip()
+        i += 1
+        if not line or line.startswith("WEBVTT") or line.isdigit():
+            continue
+
+        m_time = timestamp_re.search(line)
+        if m_time:
+            start_sec = parse_time_str(m_time.group(1))
+            end_sec = parse_time_str(m_time.group(2))
+
+            text_lines = []
+            while i < len(lines) and lines[i].strip() and not timestamp_re.search(lines[i]):
+                text_lines.append(lines[i].strip())
+                i += 1
+
+            raw_text = " ".join(text_lines).strip()
+            speaker = ""
+            vm = voice_tag_re.match(raw_text)
+            if vm:
+                speaker = vm.group(1).strip()
+                raw_text = vm.group(2).strip()
+            elif ":" in raw_text:
+                parts = raw_text.split(":", 1)
+                if len(parts[0]) < 40 and not any(p in parts[0] for p in ["http", "www", "/"]):
+                    speaker = parts[0].strip()
+                    raw_text = parts[1].strip()
+
+            clean_text = tag_strip_re.sub("", raw_text).strip()
+            if clean_text:
+                cues.append({
+                    "start": start_sec,
+                    "end": end_sec,
+                    "speaker": speaker,
+                    "text": clean_text
+                })
+    return cues
+
+
+def build_vtt_outline(cues: List[Dict[str, Any]], pause_threshold: float = 20.0, monologue_threshold: float = 300.0) -> Dict[str, Any]:
+    """Group cues into structured outline blocks with speaker stats and topic snippets."""
+    if not cues:
+        return {
+            "total_duration": "0s",
+            "total_duration_seconds": 0,
+            "total_words": 0,
+            "speakers": {},
+            "entries": []
+        }
+
+    total_start = cues[0]["start"]
+    total_end = cues[-1]["end"]
+    total_duration_sec = max(0.0, total_end - total_start)
+    speaker_counts: Dict[str, int] = {}
+
+    entries = []
+    curr_speaker = cues[0]["speaker"]
+    curr_start = cues[0]["start"]
+    curr_end = cues[0]["end"]
+    curr_text_parts = [cues[0]["text"]]
+
+    def flush_entry():
+        nonlocal curr_start, curr_end, curr_speaker, curr_text_parts
+        if not curr_text_parts:
+            return
+        full_text = " ".join(curr_text_parts).strip()
+        words = len(full_text.split())
+        spk = curr_speaker or "Speaker"
+        speaker_counts[spk] = speaker_counts.get(spk, 0) + words
+
+        preview = full_text[:95].rsplit(" ", 1)[0] if len(full_text) > 95 else full_text
+        if len(full_text) > len(preview):
+            preview += "..."
+
+        entries.append({
+            "time": format_seconds(curr_start),
+            "speaker": spk,
+            "duration": format_duration(curr_end - curr_start),
+            "words": words,
+            "preview": preview
+        })
+        curr_text_parts = []
+
+    for cue in cues[1:]:
+        speaker_change = bool(cue["speaker"] and cue["speaker"] != curr_speaker)
+        pause_gap = (cue["start"] - curr_end) >= pause_threshold
+        monologue_limit = (cue["end"] - curr_start) >= monologue_threshold
+
+        if speaker_change or pause_gap or monologue_limit:
+            flush_entry()
+            curr_speaker = cue["speaker"]
+            curr_start = cue["start"]
+            curr_end = cue["end"]
+            curr_text_parts = [cue["text"]]
+        else:
+            curr_end = cue["end"]
+            curr_text_parts.append(cue["text"])
+
+    flush_entry()
+    total_words = sum(e["words"] for e in entries)
+
+    return {
+        "total_duration": format_duration(total_duration_sec),
+        "total_duration_seconds": int(round(total_duration_sec)),
+        "total_words": total_words,
+        "speakers": speaker_counts,
+        "entries": entries
+    }
 
 
 def parse_vtt_to_markdown(vtt_text: str, title: str = "Recording Transcript") -> str:
     """Convert WebVTT transcript to clean readable Markdown notes format."""
     lines = vtt_text.strip().splitlines()
     md_lines = [f"# {title}", "", "> Extracted automatically from Zoom Cloud Recording.", ""]
-    
+
     timestamp_re = re.compile(
         r"(\d{2}:\d{2}:\d{2}(?:\.\d{3})?|\d{2}:\d{2}(?:\.\d{3})?)\s*-->\s*(\d{2}:\d{2}:\d{2}(?:\.\d{3})?|\d{2}:\d{2}(?:\.\d{3})?)"
     )
-    
+
     current_speaker = None
     current_time = ""
-    current_text_buf = []
+    current_text_buf: List[str] = []
 
     def flush_block():
         nonlocal current_speaker, current_time, current_text_buf
@@ -74,30 +233,61 @@ def parse_vtt_to_markdown(vtt_text: str, title: str = "Recording Transcript") ->
     while i < len(lines):
         line = lines[i].strip()
         i += 1
-        
+
         if not line or line.startswith("WEBVTT") or line.isdigit():
             continue
-            
+
         m_time = timestamp_re.search(line)
         if m_time:
             flush_block()
-            current_time = m_time.group(1).split(".")[0] # clean seconds
+            current_time = m_time.group(1).split(".")[0]
             continue
-            
-        # Check if line contains "Speaker: Text"
+
         if ":" in line:
             parts = line.split(":", 1)
-            # heuristic: speaker names usually < 40 chars and without special punctuation
             if len(parts[0]) < 40 and not any(p in parts[0] for p in ["http", "www", "/"]):
                 flush_block()
                 current_speaker = parts[0].strip()
                 current_text_buf.append(parts[1].strip())
                 continue
-                
+
         current_text_buf.append(line)
 
     flush_block()
     return "\n".join(md_lines) + "\n"
+
+
+def render_table(rows: List[Dict[str, Any]], columns: List[str], headers: Optional[List[str]] = None) -> str:
+    """Render a list of dictionaries as a Markdown pipe table."""
+    if not rows:
+        return "*(no records)*\n"
+    if headers is None:
+        headers = [col.replace("_", " ").title() for col in columns]
+    col_widths = [len(h) for h in headers]
+    for r in rows:
+        for idx, col in enumerate(columns):
+            val_str = str(r.get(col, "")).replace("\n", " ")
+            if len(val_str) > col_widths[idx]:
+                col_widths[idx] = len(val_str)
+
+    header_line = "| " + " | ".join(h.ljust(col_widths[i]) for i, h in enumerate(headers)) + " |"
+    sep_line = "| " + " | ".join("-" * col_widths[i] for i in range(len(headers))) + " |"
+    row_lines = []
+    for r in rows:
+        row_str = "| " + " | ".join(str(r.get(col, "")).replace("\n", " ").ljust(col_widths[i]) for i, col in enumerate(columns)) + " |"
+        row_lines.append(row_str)
+    return "\n".join([header_line, sep_line] + row_lines) + "\n"
+
+
+def render_kv_table(data: Dict[str, Any], project_keys: Optional[List[str]] = None) -> str:
+    """Render key-value dict as a 2-column Property/Value Markdown table."""
+    items = []
+    for k, v in data.items():
+        if project_keys and k.lower() not in project_keys:
+            continue
+        label = k.replace("_", " ").title()
+        items.append({"property": label, "value": str(v)})
+    return render_table(items, ["property", "value"], ["Property", "Value"])
 
 
 class ZoomRecorderClient:
@@ -109,46 +299,41 @@ class ZoomRecorderClient:
         })
 
     def get_recording_info(self, zoom_url: str, passcode: Optional[str] = None) -> Dict[str, Any]:
-        """
-        Unlocks and retrieves complete recording info, play links, and transcript URLs.
-        """
+        """Unlocks and retrieves complete recording info, play links, and transcript URLs."""
         unwrapped = unwrap_protected_url(zoom_url)
         parsed = urllib.parse.urlparse(unwrapped)
         base_url = f"{parsed.scheme}://{parsed.netloc}"
-        
+
         self.session.headers.update({"Referer": unwrapped})
         resp = self.session.get(unwrapped)
         if resp.status_code != 200:
             raise RuntimeError(f"Failed to access URL: HTTP {resp.status_code}")
 
-        # Check if URL is /rec/play or /rec/share
         is_share = "/rec/share/" in unwrapped or "/rec/share" in parsed.path
-        
+
         meeting_id_match = re.search(r'meetingId:\s*[\'"]([^\'"]+)[\'"]', resp.text)
         if not meeting_id_match:
-            # Fallback search in JSON or window.__data__
             meeting_id_match = re.search(r'\"meetingId\":\s*\"([^\"]+)\"', resp.text)
-            
+
         meeting_id = meeting_id_match.group(1) if meeting_id_match else ""
-        
-        # 1. Fetch initial share-info / play-info
+
         if is_share:
             share_info_url = f"{base_url}/nws/recording/1.0/play/share-info/{meeting_id}"
             share_info_resp = self.session.get(share_info_url).json()
             if not share_info_resp.get("status"):
                 raise RuntimeError(f"Share info error: {share_info_resp.get('errorMessage')}")
-                
+
             result = share_info_resp.get("result", {})
-            need_password = result.get("componentName") == "need-password" or result.get("needRedirect") and "need-password" in result.get("redirectUrl", "")
-            
-            # If passcode protected, perform the unlock sequence
+            need_password = result.get("componentName") == "need-password" or (
+                result.get("needRedirect") and "need-password" in result.get("redirectUrl", "")
+            )
+
             if need_password:
                 if not passcode:
-                    raise ValueError(f"Recording requires a passcode. Provide --passcode <passcode>")
-                
+                    raise ValueError("Recording requires a passcode. Provide --passcode <passcode>")
+
                 target_meeting_id = result.get("meetingId") or meeting_id
-                
-                # Context validation
+
                 ctx_url = f"{base_url}/nws/recording/1.0/validate-context"
                 ctx_payload = {
                     "meetingId": target_meeting_id,
@@ -159,8 +344,7 @@ class ZoomRecorderClient:
                 }
                 ctx_res = self.session.post(ctx_url, data=ctx_payload).json()
                 encrypt_meet_id = ctx_res.get("result", {}).get("encryptMeetId", target_meeting_id)
-                
-                # Password validation
+
                 val_url = f"{base_url}/nws/recording/1.0/validate-meeting-passwd"
                 val_payload = {
                     "id": encrypt_meet_id,
@@ -171,31 +355,26 @@ class ZoomRecorderClient:
                 val_res = self.session.post(val_url, data=val_payload).json()
                 if not val_res.get("status"):
                     raise RuntimeError(f"Passcode rejected: {val_res.get('errorMessage', 'Incorrect passcode')}")
-                
-                # Query share-info again now that session is unlocked
+
                 share_info_resp = self.session.get(share_info_url).json()
                 result = share_info_resp.get("result", {})
-            
+
             redirect_url = result.get("redirectUrl", "")
             if not redirect_url:
                 raise RuntimeError("Could not retrieve playback redirect URL from share info.")
             play_url = urllib.parse.urljoin(base_url, redirect_url)
             play_resp = self.session.get(play_url)
         else:
-            # Direct /rec/play URL
             play_resp = resp
             play_url = unwrapped
 
-        # Extract fileId from play page
         file_id_match = re.search(r'fileId:\s*[\'"]([^\'"]*)[\'"]', play_resp.text)
         if not file_id_match or not file_id_match.group(1):
             file_id_match = re.search(r'\"fileId\":\s*\"([^\"]+)\"', play_resp.text)
-            
+
         file_id = file_id_match.group(1) if file_id_match else ""
         if not file_id:
-            # Check if need-password on play URL
             if "need-password" in play_resp.text and passcode:
-                # Direct play password validation
                 m_meet = re.search(r'meetingId:\s*[\'"]([^\'"]+)[\'"]', play_resp.text)
                 if m_meet:
                     ctx_res = self.session.post(f"{base_url}/nws/recording/1.0/validate-context", data={
@@ -219,18 +398,16 @@ class ZoomRecorderClient:
         if not file_id:
             raise RuntimeError("Unable to extract playback fileId from Zoom player.")
 
-        # Call play/info/{file_id}
         info_api_url = f"{base_url}/nws/recording/1.0/play/info/{file_id}?continueMode=true"
         info_res = self.session.get(info_api_url).json()
         if not info_res.get("status"):
             raise RuntimeError(f"Play info API error: {info_res.get('errorMessage')}")
 
         data = info_res.get("result", {})
-        
-        # If direct play requires passcode validation:
+
         if data.get("componentName") == "need-password" or (data.get("needRedirect") and "need-password" in str(data.get("redirectUrl"))):
             if not passcode:
-                raise ValueError(f"Recording requires a passcode. Provide --passcode <passcode>")
+                raise ValueError("Recording requires a passcode. Provide --passcode <passcode>")
             target_meeting_id = data.get("meetingId") or meeting_id
             ctx_res = self.session.post(f"{base_url}/nws/recording/1.0/validate-context", data={
                 "meetingId": target_meeting_id,
@@ -248,23 +425,23 @@ class ZoomRecorderClient:
             }).json()
             if not val_res.get("status"):
                 raise RuntimeError(f"Passcode rejected: {val_res.get('errorMessage', 'Incorrect passcode')}")
-            # Refetch unlocked play/info
+
             info_res = self.session.get(info_api_url).json()
             data = info_res.get("result", {})
 
         topic = data.get("meet", {}).get("topic") or "Zoom Cloud Recording"
         duration = data.get("duration", 0)
-        
-        # Build clean direct URLs
+
         transcript_url = None
         if data.get("transcriptUrl"):
             transcript_url = urllib.parse.urljoin(base_url, data["transcriptUrl"])
-            
+
         video_url = data.get("viewMp4WithshareUrl") or data.get("viewMp4Url") or data.get("shareMp4Url")
 
         return {
             "topic": topic,
             "duration": duration,
+            "duration_str": format_duration(duration),
             "file_id": file_id,
             "has_transcript": data.get("hasTranscript", False),
             "transcript_url": transcript_url,
@@ -281,10 +458,7 @@ class ZoomRecorderClient:
         return resp.text
 
     def extract_keyframes(self, video_url: str, output_dir: str, scene_threshold: float = 0.35, max_frames: int = 50):
-        """
-        Extract visual keyframes (slide changes) from video URL stream using ffmpeg.
-        Pipes through authenticated requests session to bypass CloudFront 403 Forbidden checks.
-        """
+        """Extract visual keyframes from video stream using ffmpeg."""
         os.makedirs(output_dir, exist_ok=True)
         out_pattern = os.path.join(output_dir, "slide_%03d.png")
         filter_str = f"select='gt(scene,{scene_threshold})',scale=1280:-1"
@@ -314,17 +488,10 @@ class ZoomRecorderClient:
             except (BrokenPipeError, OSError):
                 pass
             proc.wait()
-        print(f"[+] Keyframe extraction complete.")
+        print("[+] Keyframe extraction complete.")
 
     def run_ocr_on_frame(self, image_path: str, model_type: str = "lighton") -> str:
-        """
-        Run local OCR vision model on an extracted video frame.
-        Supports:
-        - 'lighton': LightOnOCR-3-1B (ultra fast, multi-column, LaTeX equations)
-        - 'xiaomi': Xiaomi-OCR-0 (Qwen-VL reasoning OCR)
-        - 'deskforge': DeskForge-Qwen3.5-4B (document formatting)
-        - 'ovis': OvisOCR2-5B
-        """
+        """Run local OCR vision model on an extracted video frame."""
         llama_cli = "/run/media/rodri/AI/llama.cpp/build/bin/llama-mtmd-cli"
         models_map = {
             "lighton": (
@@ -367,7 +534,6 @@ class ZoomRecorderClient:
             "-n", "512"
         ]
         res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        # Filter out banner and log lines
         out_lines = []
         for line in res.stdout.splitlines():
             if any(term in line for term in ["WARNING:", "WARN:", "mtmd", "init:", "main:", "find_slot:"]):
@@ -386,7 +552,12 @@ def main():
     parser.add_argument("--scene-threshold", type=float, default=0.35, help="Scene change sensitivity for keyframes (0.0 - 1.0)")
     parser.add_argument("--ocr", action="store_true", help="Run local vision OCR on extracted keyframes")
     parser.add_argument("--ocr-model", choices=["lighton", "navidc", "xiaomi", "deskforge", "ovis", "all"], default="lighton", help="Vision model for OCR")
-    parser.add_argument("--json", action="store_true", help="Print recording metadata in JSON format")
+    parser.add_argument("--json", action="store_true", help="Output JSON format")
+    parser.add_argument("--table", "-t", action="store_true", help="Output Markdown table format")
+    parser.add_argument("--project", default="", help="Comma-separated fields to project in output")
+    parser.add_argument("--outline", "--agenda", action="store_true", help="Extract high-density chronological agenda/outline table")
+    parser.add_argument("--info-only", "--info", action="store_true", help="Retrieve recording metadata only without downloading files")
+    parser.add_argument("--limit", "-n", type=int, default=0, help="Cap number of outline rows returned")
 
     args = parser.parse_args()
 
@@ -397,38 +568,97 @@ def main():
         print(f"[-] Error retrieving recording info: {e}", file=sys.stderr)
         sys.exit(1)
 
-    if args.json:
-        print(json.dumps({
-            "topic": info["topic"],
-            "duration": info["duration"],
-            "has_transcript": info["has_transcript"],
-            "transcript_url": info["transcript_url"],
-            "video_url_available": bool(info["video_url"]),
-        }, indent=2))
+    project_keys = [k.strip().lower() for k in args.project.split(",") if k.strip()] if args.project else None
 
+    # 1. Info-only mode
+    if args.info_only:
+        meta_payload = {
+            "topic": info["topic"],
+            "duration": info["duration_str"],
+            "duration_seconds": info["duration"],
+            "has_transcript": info["has_transcript"],
+            "transcript_url": info["transcript_url"] or "",
+            "video_url_available": bool(info["video_url"]),
+            "file_id": info["file_id"],
+        }
+        if project_keys:
+            meta_payload = {k: v for k, v in meta_payload.items() if k.lower() in project_keys}
+
+        if args.table or not args.json:
+            print(render_kv_table(meta_payload, project_keys))
+        else:
+            print(json.dumps(meta_payload, indent=2))
+        return
+
+    # 2. Outline mode
+    if args.outline:
+        if not info.get("transcript_url"):
+            print("[-] No native transcript available to build outline.", file=sys.stderr)
+            sys.exit(1)
+        vtt_content = client.fetch_transcript(info["transcript_url"])
+        cues = parse_vtt_cues(vtt_content)
+        outline = build_vtt_outline(cues)
+        entries = outline["entries"]
+        if args.limit and args.limit > 0:
+            entries = entries[:args.limit]
+
+        cols = ["time", "speaker", "duration", "words", "preview"]
+        if project_keys:
+            cols = [c for c in cols if c in project_keys]
+            if not cols:
+                cols = ["time", "speaker", "preview"]
+
+        if args.json:
+            out_json = {
+                "topic": info["topic"],
+                "total_duration": outline["total_duration"],
+                "total_words": outline["total_words"],
+                "speakers": outline["speakers"],
+                "entries": entries,
+            }
+            if project_keys:
+                out_json = {k: v for k, v in out_json.items() if k.lower() in project_keys}
+            print(json.dumps(out_json, indent=2))
+        else:
+            header_summary = (
+                f"### Outline: {info['topic']}\n"
+                f"- **Duration**: {outline['total_duration']} | **Words**: {outline['total_words']:,} | "
+                f"**Speakers**: {', '.join(outline['speakers'].keys())}\n"
+            )
+            print(header_summary)
+            print(render_table(entries, cols))
+        return
+
+    # 3. Standard download flow
     os.makedirs(args.out_dir, exist_ok=True)
     slug = re.sub(r'[^a-zA-Z0-9_\-]+', '_', info["topic"]).strip("_") or "zoom_recording"
+    saved_files = []
 
-    # Download transcript
     if info.get("transcript_url"):
-        print(f"[*] Found native Zoom transcript for: {info['topic']}")
+        if not (args.json or args.table):
+            print(f"[*] Found native Zoom transcript for: {info['topic']}")
         vtt_content = client.fetch_transcript(info["transcript_url"])
-        
+        words_count = len(vtt_content.split())
+
         if args.format in ["vtt", "all"]:
             vtt_path = os.path.join(args.out_dir, f"{slug}.vtt")
             with open(vtt_path, "w", encoding="utf-8") as f:
                 f.write(vtt_content)
-            print(f"[+] Saved VTT transcript: {vtt_path}")
+            saved_files.append({"format": "vtt", "path": vtt_path, "words": words_count})
+            if not (args.json or args.table):
+                print(f"[+] Saved VTT transcript: {vtt_path}")
 
         if args.format in ["md", "all"]:
             md_content = parse_vtt_to_markdown(vtt_content, title=info["topic"])
+            md_words = len(md_content.split())
             md_path = os.path.join(args.out_dir, f"{slug}_transcript.md")
             with open(md_path, "w", encoding="utf-8") as f:
                 f.write(md_content)
-            print(f"[+] Saved Markdown transcript: {md_path}")
+            saved_files.append({"format": "md", "path": md_path, "words": md_words})
+            if not (args.json or args.table):
+                print(f"[+] Saved Markdown transcript: {md_path}")
 
         if args.format == "txt":
-            # Strip timestamps
             txt_lines = []
             for line in vtt_content.splitlines():
                 if not line or line.startswith("WEBVTT") or line.isdigit() or "-->" in line:
@@ -437,24 +667,28 @@ def main():
             txt_path = os.path.join(args.out_dir, f"{slug}_transcript.txt")
             with open(txt_path, "w", encoding="utf-8") as f:
                 f.write("\n".join(txt_lines) + "\n")
-            print(f"[+] Saved TXT transcript: {txt_path}")
+            saved_files.append({"format": "txt", "path": txt_path, "words": len(" ".join(txt_lines).split())})
+            if not (args.json or args.table):
+                print(f"[+] Saved TXT transcript: {txt_path}")
     else:
-        print("[-] No native VTT transcript found hosted on Zoom for this recording.")
-        if info.get("video_url"):
-            print("[*] Video stream URL is available for keyframe extraction or local ASR.")
+        if not (args.json or args.table):
+            print("[-] No native VTT transcript found hosted on Zoom for this recording.")
+            if info.get("video_url"):
+                print("[*] Video stream URL is available for keyframe extraction or local ASR.")
 
     # Keyframes extraction
     if args.keyframes or args.ocr:
         if info.get("video_url"):
             slides_dir = os.path.join(args.out_dir, f"{slug}_slides")
             client.extract_keyframes(info["video_url"], slides_dir, scene_threshold=args.scene_threshold)
-            
+
             if args.ocr:
                 import glob
                 frames = sorted(glob.glob(os.path.join(slides_dir, "*.png")))
-                print(f"[*] Running OCR on {len(frames)} extracted slide frames...")
+                if not (args.json or args.table):
+                    print(f"[*] Running OCR on {len(frames)} extracted slide frames...")
                 models_to_test = ["lighton", "navidc", "xiaomi", "deskforge", "ovis"] if args.ocr_model == "all" else [args.ocr_model]
-                
+
                 ocr_out_file = os.path.join(args.out_dir, f"{slug}_slides_ocr.md")
                 with open(ocr_out_file, "w", encoding="utf-8") as out_f:
                     out_f.write(f"# Slide OCR: {info['topic']}\n\n")
@@ -462,12 +696,30 @@ def main():
                         f_name = os.path.basename(frame_path)
                         out_f.write(f"## Slide: {f_name}\n\n")
                         for m_type in models_to_test:
-                            print(f"    - Processing {f_name} with {m_type}...")
+                            if not (args.json or args.table):
+                                print(f"    - Processing {f_name} with {m_type}...")
                             ocr_text = client.run_ocr_on_frame(frame_path, model_type=m_type)
                             out_f.write(f"### Model: {m_type}\n\n{ocr_text}\n\n")
-                print(f"[+] Saved visual OCR results: {ocr_out_file}")
+                saved_files.append({"format": "ocr_md", "path": ocr_out_file, "words": 0})
+                if not (args.json or args.table):
+                    print(f"[+] Saved visual OCR results: {ocr_out_file}")
         else:
             print("[-] Cannot extract keyframes: video URL not found.", file=sys.stderr)
+
+    # Output receipts if table or json requested
+    if args.table:
+        print(f"### Recording: {info['topic']}")
+        print(render_table(saved_files, ["format", "path", "words"], ["Format", "File Path", "Words"]))
+    elif args.json:
+        receipt = {
+            "status": "ok",
+            "topic": info["topic"],
+            "duration": info["duration_str"],
+            "saved_files": saved_files,
+        }
+        if project_keys:
+            receipt = {k: v for k, v in receipt.items() if k.lower() in project_keys}
+        print(json.dumps(receipt, indent=2))
 
 
 if __name__ == "__main__":

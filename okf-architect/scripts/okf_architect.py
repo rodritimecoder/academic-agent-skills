@@ -42,6 +42,7 @@ class CornellInfo:
     cues: int
     sections: int
     source: str
+    cards: List[Dict[str, Any]]
 
 
 def parse_frontmatter(file_path: Path) -> Tuple[Dict[str, Any], str]:
@@ -353,10 +354,42 @@ def classify_canvas_module(rel_path_str: str, meta: Dict[str, Any], course_name:
     return f"{course_name}/mod_overview", "Course Overview", 0
 
 
+def normalize_stem(s: str) -> str:
+    """Normalize note stem by standardizing week prefixes, double underscores, and case."""
+    s = s.lower().replace("-", "_").replace(" ", "_")
+    m = re.match(r'^(?:w(?:eek)?_?(\d+)_+)+', s)
+    if m:
+        w_num = int(m.group(1))
+        rest = s[m.end():]
+        s = f"w{w_num:02d}_{rest}"
+    s = re.sub(r"_+", "_", s)
+    return s.strip("_")
+
+
+def sanitize_cornell_card(cue: str, notes: str) -> Tuple[str, str]:
+    """Sanitize video timestamps, slide footers, and OCR table artifacts from flashcards."""
+    # Strip video timestamp references
+    notes = re.sub(r'\*\*Video Walkthrough Timestamp\*\*:\s*`?\[[\d:]+\]`?\s*', '', notes)
+    notes = re.sub(r'^\[[\d: -]+\]\s*', '', notes)
+    # Strip lecture slide footers like 10/11/2022 48520 E&C: Frequency Response 8
+    notes = re.sub(r'\|\s*\d{1,2}/\d{1,2}/\d{4}\s*\|[^|]+\|\s*\d+\s*\|\s*', '', notes)
+    notes = re.sub(r'\d{1,2}/\d{1,2}/\d{4}\s+48520\s+E&C:[^\n]+', '', notes)
+    # Strip isolated private unicode bullets (e.g. \uf000-\uf8ff)
+    notes = re.sub(r'[\uf000-\uf8ff]', '', notes)
+    # Clean generic repetitive cues like 'What is the key principle or formula in Second Order Circuits?'
+    m_cue = re.match(r'^What is the key principle or formula in (.+)\??$', cue.strip(), re.IGNORECASE)
+    if m_cue:
+        concept = m_cue.group(1).strip().rstrip('?')
+        cue = f"What are the key governing principles and equations for {concept}?"
+    return cue.strip(), notes.strip()
+
+
 def collect_cornell_map(bundle_root: Path) -> Dict[str, CornellInfo]:
     """Scan bundle for generated Cornell notes JSON and HTML sidecars."""
     cornell_map: Dict[str, CornellInfo] = {}
-    for jf in bundle_root.rglob("*_cornell.json"):
+    # Search for all *_cornell.json (case-insensitive for safety)
+    json_files = [p for p in bundle_root.rglob("*.json") if p.name.lower().endswith(("_cornell.json", "_cornell_cornell.json"))]
+    for jf in json_files:
         if "outputs" in jf.parts:
             try:
                 c_data = json.loads(jf.read_text(encoding="utf-8"))
@@ -364,20 +397,50 @@ def collect_cornell_map(bundle_root: Path) -> Dict[str, CornellInfo]:
                 html_candidate = jf.parent.parent / "html" / f"{jf.stem}.html"
                 if not html_candidate.is_file():
                     html_candidate = jf.with_suffix(".html")
+                if not html_candidate.is_file():
+                    # Check case-insensitive or double _cornell
+                    alt = jf.parent.parent / "html" / f"{jf.name.replace('.json', '.html')}"
+                    if alt.is_file():
+                        html_candidate = alt
                 if html_candidate.is_file():
                     rel_html = str(html_candidate.relative_to(bundle_root)).replace("\\", "/")
-                    cues_count = sum(len(s.get("entries", [])) for s in c_data.get("sections", []))
+                    clean_jf_stem = re.sub(r'_cornell(_cornell)?$', '', jf.stem, flags=re.IGNORECASE).lower().replace("-", "_").replace(" ", "_")
+                    cards_list: List[Dict[str, Any]] = []
+                    for sec_idx, sec in enumerate(c_data.get("sections", [])):
+                        heading = sec.get("heading", "")
+                        for e_idx, entry in enumerate(sec.get("entries", [])):
+                            cue_text = entry.get("cue", "").strip()
+                            notes_text = entry.get("notes", "").strip()
+                            badge_text = entry.get("badge", "concept")
+                            if cue_text:
+                                clean_cue, clean_notes = sanitize_cornell_card(cue_text, notes_text)
+                                cards_list.append({
+                                    "id": f"{clean_jf_stem}_{sec_idx}_{e_idx}",
+                                    "section": heading,
+                                    "badge": badge_text,
+                                    "cue": clean_cue,
+                                    "notes": clean_notes
+                                })
+
                     info = CornellInfo(
                         html_path=rel_html,
-                        title=c_data.get("title", jf.stem.replace("_cornell", "").replace("_", " ").title()),
-                        cues=cues_count,
+                        title=c_data.get("title", clean_jf_stem.replace("_", " ").title()),
+                        cues=len(cards_list),
                         sections=len(c_data.get("sections", [])),
-                        source=src
+                        source=src,
+                        cards=cards_list
                     )
+                    # Index under original and normalized stems
+                    cornell_map[clean_jf_stem] = info
+                    cornell_map[normalize_stem(clean_jf_stem)] = info
                     if src:
                         src_stem = Path(src).stem.lower().replace("-", "_").replace(" ", "_")
-                        cornell_map[src_stem] = info
-                    cornell_map[jf.stem.replace("_cornell", "").lower()] = info
+                        # Only index by src_stem if it has a week prefix or is specific
+                        # to prevent generic filenames like "tutorial_solutions" from colliding across weeks
+                        w_match = re.search(r'\b(?:week|w)[_\s-]*\d+\b', src_stem)
+                        if w_match:
+                            cornell_map[src_stem] = info
+                            cornell_map[normalize_stem(src_stem)] = info
             except Exception:
                 pass
     return cornell_map
@@ -619,7 +682,8 @@ def build_graph_nodes(
             title = f"[{course_code}{w_badge}] {cleaned_check.title()}: {mod_label}"
 
         clean_stem = md_file.stem.lower().replace("-", "_").replace(" ", "_")
-        cornell_info = cornell_map.get(clean_stem)
+        norm_stem = normalize_stem(clean_stem)
+        cornell_info = cornell_map.get(clean_stem) or cornell_map.get(norm_stem)
         has_cornell = cornell_info is not None
         cornell_path = cornell_info.html_path if cornell_info else ""
         cornell_cues = cornell_info.cues if cornell_info else 0
@@ -647,7 +711,8 @@ def build_graph_nodes(
                 "degree": 0,
                 "has_cornell": has_cornell,
                 "cornell_path": cornell_path,
-                "cornell_cues": cornell_cues
+                "cornell_cues": cornell_cues,
+                "cornell_cards": cornell_info.cards if cornell_info else []
             }
         })
         node_ids.add(concept_id)
@@ -669,7 +734,8 @@ def build_graph_nodes(
                     "degree": 0,
                     "has_cornell": False,
                     "cornell_path": "",
-                    "cornell_cues": 0
+                    "cornell_cues": 0,
+                    "cornell_cards": []
                 }
             })
             node_ids.add(mod_id)

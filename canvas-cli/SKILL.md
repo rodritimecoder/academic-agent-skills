@@ -28,23 +28,38 @@ CLI=~/.gemini/config/skills/canvas-cli/scripts/canvas_cli.py
 python3 $CLI <command> [args]
 ```
 
-Output is always JSON (the `courses --syllabus` output is the raw syllabus body).
-Use `--help` on any command for its arguments. Every list command follows all
-pages automatically, so results are never truncated at 100 items.
+### Deterministic Token Shielding (Kem Glitch Architecture)
+To eliminate context bloat and token exhaust in agent loops, always use the deterministic projection flags:
+- `--table` (`-t`): Formats output as a high-density Markdown table (**~95% token reduction** compared to raw JSON).
+- `--project <keys>` (`-p`): Strictly limits fields to a comma-separated list (e.g. `--project id,name,due_at`).
+- `--out <file>` (`-o`): Buffers bulk JSON payloads directly to disk and prints a concise 1-line receipt with preview.
+- `--limit <N>` (`-n`): Caps the number of returned records.
+- `--format [table|json|ids]`: Select exact rendering format.
 
 ## Commands
 
+### ⚡ Urgent Action Items & Deadlines (Cross-Course)
+```bash
+# 1. Actionable student todo items across all enrolled courses (ultra-compact)
+python3 $CLI todo --table
+
+# 2. Upcoming deadlines in the next 14 days across all active courses
+python3 $CLI upcoming --table
+python3 $CLI upcoming --days 7 --table
+```
+
+### Courses
 Find course IDs first — they are the argument to nearly everything else:
 
 ```bash
-# All enrolled courses (use --summary for compact JSON output, ideal for LLMs)
-python3 $CLI courses --summary
+# Active enrolled courses rendered as a compact token-efficient table
+python3 $CLI courses --enrollment-state active --summary --table
 
-# Filter courses by enrollment state
-python3 $CLI courses --enrollment-state active --summary
+# Project strictly course ID and code
+python3 $CLI courses --project id,course_code --table
 
-# One course, with your grade totals
-python3 $CLI courses --course-id 12345 --include total_scores
+# Buffer 100 courses to disk to shield agent context
+python3 $CLI courses --out /tmp/all_courses.json
 
 # Course syllabus / reading list (returns the raw body, not JSON)
 python3 $CLI courses --course-id 12345 --syllabus

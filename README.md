@@ -19,45 +19,45 @@
 <summary><b>Click to view ASCII Architecture Diagram</b></summary>
 
 ```
-  ┌────────────────────────────────────────────────────────┐
-  │         University Data Ingestion & Harvesting         │
-  └───────────────────────────┬────────────────────────────┘
-                              │
-     ┌────────────────────────┼────────────────────────┐
-     ▼                        ▼                        ▼
-┌──────────────┐       ┌──────────────┐       ┌──────────────┐
-│  canvas-cli  │       │zoom-recorder │       │    yt-dlp    │
-│ LMS modules, │       │Cloud lecture │       │ YouTube head │
-│ assignments, │       │transcripts,  │       │ teacher/lab  │
-│ course files │       │passcodes     │       │ videos       │
-└──────┬───────┘       └──────┬───────┘       └──────┬───────┘
-       │                      │                      │
-       └──────────────────────┼──────────────────────┘
-                              │
-                              ▼
-        ┌──────────────────────────────────────────────┐
-        │        Universal Document Transformation     │
-        │               markitdown-cli                 │
-        │    PDFs, PPTX slides, DOCX, XLSX, HTML, Zip  │
-        └─────────────────────┬────────────────────────┘
-                              │
-                              ▼
-        ┌──────────────────────────────────────────────┐
-        │        Active-Recall & Revision Output       │
-        │                 cornell-notes                │
-        │   Interactive self-quiz HTML & Anki cards    │
-        └─────────────────────┬────────────────────────┘
-                              │
-                              ▼
-        ┌──────────────────────────────────────────────┐
-        │    Curriculum Architecture & Cosmos Graph    │
-        │                 okf-architect                │
-        │  • CURRICULUM_TREE.md Virtual Outline Tree   │
-        │  • Dual-Mode Knowledge Cosmos (viz.html)     │
-        │    [Canvas Constellations ⟷ Semantic Web]    │
-        │  • Unified Canvas Cornell Study Portal       │
-        │  • OKF v0.2 Specification Certification      │
-        └──────────────────────────────────────────────┘
+  ┌────────────────────────────────────────────────────────────────────────┐
+  │                 University Data Ingestion & Harvesting                 │
+  └───────────────────────────────────┬────────────────────────────────────┘
+                                      │
+     ┌──────────────────┬─────────────┴────────────┬──────────────────┐
+     ▼                  ▼                          ▼                  ▼
+┌──────────────┐ ┌──────────────┐          ┌──────────────┐    ┌──────────────┐
+│  canvas-cli  │ │  edstem-cli  │          │zoom-recorder │    │    yt-dlp    │
+│ LMS modules, │ │ Forum Q&A,   │          │Cloud lecture │    │ YouTube head │
+│ assignments, │ │ threads, and │          │transcripts,  │    │ teacher/lab  │
+│ course files │ │ announcements│          │passcodes     │    │ videos       │
+└──────┬───────┘ └──────┬───────┘          └──────┬───────┘    └──────┬───────┘
+       │                │                         │                   │
+       └────────────────┴────────────┬────────────┴───────────────────┘
+                                     │
+                                     ▼
+        ┌──────────────────────────────────────────────────────────────┐
+        │              Universal Document Transformation               │
+        │                        markitdown-cli                        │
+        │           PDFs, PPTX slides, DOCX, XLSX, HTML, Zip           │
+        └────────────────────────────┬─────────────────────────────────┘
+                                     │
+                                     ▼
+        ┌──────────────────────────────────────────────────────────────┐
+        │               Active-Recall & Revision Output                │
+        │                        cornell-notes                         │
+        │          Interactive self-quiz HTML & Anki cards             │
+        └────────────────────────────┬─────────────────────────────────┘
+                                     │
+                                     ▼
+        ┌──────────────────────────────────────────────────────────────┐
+        │            Curriculum Architecture & Cosmos Graph            │
+        │                        okf-architect                         │
+        │         • CURRICULUM_TREE.md Virtual Outline Tree            │
+        │         • Dual-Mode Knowledge Cosmos (viz.html)              │
+        │           [Canvas Constellations ⟷ Semantic Web]             │
+        │         • Unified Canvas Cornell Study Portal                │
+        │         • OKF v0.2 Specification Certification               │
+        └──────────────────────────────────────────────────────────────┘
 ```
 
 </details>
@@ -94,6 +94,7 @@ pip install 'markitdown[all]' requests
 | Skill | Category | Primary Function | Setup Required |
 |---|---|---|---|
 | [`canvas-cli`](canvas-cli/) | LMS Harvester | Enrolled courses, assignments, syllabus, modules, files | Canvas API token in `canvas-cli/.env` |
+| [`edstem-cli`](edstem-cli/) | Discussion & Forum Q&A | Forum threads, announcements, questions, classmate/tutor answers | Ed token in `edstem-cli/.env` |
 | [`zoom-recorder`](zoom-recorder/) | Lecture Transcripts | Passcode-protected Zoom cloud transcripts (`.md`/`.vtt`) & slide keyframes | None (Zero API admin keys required) |
 | [`markitdown-cli`](markitdown-cli/) | Document Parser | Converts PPTX slide decks, PDF worksheets, DOCX, XLSX to Markdown | `pip install 'markitdown[all]'` |
 | [`cornell-notes`](cornell-notes/) | Study & Revision | Formats markdown notes into interactive self-quiz Cornell HTML & Anki flashcards | Python stdlib (zero-dep) |
@@ -105,7 +106,7 @@ pip install 'markitdown[all]' requests
 ## 🚀 Usage Guide
 
 ### 1. `canvas-cli` — Canvas LMS Data Harvester
-Zero third-party HTTP dependencies (built on Python standard library `urllib`).
+Zero third-party HTTP dependencies (built on Python standard library `urllib`). Features deterministic token shields (`--table`, `--project`, `--limit`, `--format`).
 
 **Setup**:
 Copy `canvas-cli/.env.example` to `canvas-cli/.env`:
@@ -120,11 +121,14 @@ CANVAS_URL=https://your-school.instructure.com
 
 **Common Agent Commands**:
 ```bash
-# List all active enrolled courses
-python3 canvas-cli/scripts/canvas_cli.py courses --summary
+# List all active enrolled courses as compact Markdown table
+python3 canvas-cli/scripts/canvas_cli.py courses --summary --table
 
-# List modules & weekly content items for a course
-python3 canvas-cli/scripts/canvas_cli.py modules <course_id>
+# Check actionable upcoming assignments & quizzes across all courses
+python3 canvas-cli/scripts/canvas_cli.py upcoming --limit 10
+
+# Inspect modules & weekly content items for a course
+python3 canvas-cli/scripts/canvas_cli.py modules <course_id> --table
 
 # Fetch course syllabus
 python3 canvas-cli/scripts/canvas_cli.py courses --course-id <course_id> --syllabus
@@ -132,12 +136,48 @@ python3 canvas-cli/scripts/canvas_cli.py courses --course-id <course_id> --sylla
 
 ---
 
-### 2. `zoom-recorder` — Cloud Lecture & Tutorial Extractor
+### 2. `edstem-cli` — Ed Discussion & Course Forum Gateway
+Zero third-party dependencies (Python standard library `urllib`). Slashes thread dumps from 30k tokens down to ~350 tokens (98% token reduction) with dense tables and pre-flight projection.
+
+**Setup**:
+Copy `edstem-cli/.env.example` to `edstem-cli/.env`:
+```bash
+cp edstem-cli/.env.example edstem-cli/.env
+```
+Fill in your token:
+```
+ED_API_TOKEN=your_ed_api_token_here
+```
+
+**Common Agent Commands**:
+```bash
+# List enrolled Ed courses
+python3 edstem-cli/scripts/ed_cli.py courses --table
+
+# List recent threads in a course as a compact Markdown table
+python3 edstem-cli/scripts/ed_cli.py threads <course_id> --table --limit 15
+
+# Search forum for specific assignments or questions
+python3 edstem-cli/scripts/ed_cli.py search <course_id> "assignment 2" --table
+
+# Read a thread with answers and comments in clean Markdown
+python3 edstem-cli/scripts/ed_cli.py thread <thread_id> --table
+```
+
+---
+
+### 3. `zoom-recorder` — Cloud Lecture & Tutorial Extractor
 - Connects directly to university passcode-protected Zoom cloud recordings (`*.zoom.us`, `utsmeet.zoom.us`) using web playback session tokens.
 - Unwraps **Microsoft SafeLinks** and **Mimecast** protection URLs automatically.
-- No Zoom admin API developer credentials needed.
+- Includes **`--outline` / `--agenda`** token shield to collapse 50k VTT transcripts down to ~200-token chronological tables.
 
 ```bash
+# Extract high-density lecture agenda outline (~200 tokens)
+python3 zoom-recorder/scripts/zoom_download.py \
+  --url "https://utsmeet.zoom.us/rec/share/..." \
+  --passcode "Passcode123" \
+  --outline
+
 # Download clean Markdown transcript from a passcode-protected Zoom lecture
 python3 zoom-recorder/scripts/zoom_download.py \
   --url "https://utsmeet.zoom.us/rec/share/..." \
@@ -154,12 +194,18 @@ python3 zoom-recorder/examples/canvas_zoom_pipeline.py \
 
 ---
 
-### 3. `markitdown-cli` — Universal Document-to-Markdown Parser
-Converts lecture slide decks (`.pptx`), tutorial worksheets (`.pdf`), lab guides (`.docx`), and spreadsheets into clean Markdown:
+### 4. `markitdown-cli` — Universal Document-to-Markdown Parser
+Converts lecture slide decks (`.pptx`), tutorial worksheets (`.pdf`), lab guides (`.docx`), and spreadsheets into clean Markdown. Features AST outline extraction (`--outline` / `--toc`, ~80 tokens), section slicing (`--section`), and regex search (`--grep`):
 
 ```bash
-python3 markitdown-cli/scripts/markitdown_cli.py lecture_slides.pptx -o lecture_notes.md
-python3 markitdown-cli/scripts/markitdown_cli.py tutorial_sheet.pdf -o tutorial_notes.md
+# Inspect document heading outline without dumping 30k text into context (~80 tokens)
+python3 markitdown-cli/scripts/markitdown_cli.py lecture_slides.pptx --outline
+
+# Extract only a specific chapter or section
+python3 markitdown-cli/scripts/markitdown_cli.py syllabus.pdf --section "Grading Scheme"
+
+# Full document conversion with compact receipt
+python3 markitdown-cli/scripts/markitdown_cli.py tutorial_sheet.pdf -o tutorial_notes.md --table
 ```
 
 ---

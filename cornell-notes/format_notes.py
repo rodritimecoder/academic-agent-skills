@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """
 format_notes.py - Deterministic Cornell Notes HTML generator & Study Exporter.
 
@@ -496,7 +497,8 @@ def render_cornell_html(data: dict, template_path: Path, srs_path: Path | None =
             crumb_parts.append(f'<span class="crumb-course">{html.escape(course_val)}</span>')
         if module_val:
             crumb_parts.append(f'<span class="crumb-module">{html.escape(module_val)}</span>')
-        breadcrumb_html = f'<div class="document-breadcrumb">{" <span class=\\"crumb-sep\\">&rsaquo;</span> ".join(crumb_parts)}</div>'
+        crumb_sep = ' <span class="crumb-sep">&rsaquo;</span> '
+        breadcrumb_html = f'<div class="document-breadcrumb">{crumb_sep.join(crumb_parts)}</div>'
 
     rendered = template_str.replace("{{PAGE_TITLE}}", title_safe)
     rendered = rendered.replace("{{TITLE}}", title_safe)
@@ -506,6 +508,30 @@ def render_cornell_html(data: dict, template_path: Path, srs_path: Path | None =
     rendered = rendered.replace("{{SECTIONS_HTML}}", sections_final)
 
     return rendered
+
+
+def render_table(rows: list[dict], columns: list[str] | None = None, headers: list[str] | None = None) -> str:
+    if not rows:
+        return "*(no records)*\n"
+    if columns is None:
+        columns = list(rows[0].keys())
+    if headers is None:
+        headers = [col.replace("_", " ").title() for col in columns]
+
+    col_widths = [len(h) for h in headers]
+    for r in rows:
+        for idx, col in enumerate(columns):
+            val_str = str(r.get(col, "")).replace("\n", " ").strip()
+            if len(val_str) > col_widths[idx]:
+                col_widths[idx] = len(val_str)
+
+    header_line = "| " + " | ".join(h.ljust(col_widths[i]) for i, h in enumerate(headers)) + " |"
+    sep_line = "| " + " | ".join("-" * col_widths[i] for i in range(len(headers))) + " |"
+    row_lines = []
+    for r in rows:
+        row_str = "| " + " | ".join(str(r.get(col, "")).replace("\n", " ").strip().ljust(col_widths[i]) for i, col in enumerate(columns)) + " |"
+        row_lines.append(row_str)
+    return "\n".join([header_line, sep_line] + row_lines) + "\n"
 
 
 def determine_output_path(input_json_path: Path, output_arg: str | None) -> Path:
@@ -538,6 +564,37 @@ def main():
         "--template",
         help="Custom path to template.html. Defaults to template.html in script's directory."
     )
+    parser.add_argument(
+        "-t", "--table",
+        action="store_true",
+        help="Emit receipt or outline as compact Markdown table."
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit receipt or outline as structured JSON."
+    )
+    parser.add_argument(
+        "--outline",
+        action="store_true",
+        help="Display high-level outline table (sections, cues, summary) without rendering HTML."
+    )
+    parser.add_argument(
+        "--stats",
+        action="store_true",
+        help="Display document summary statistics without rendering HTML."
+    )
+    parser.add_argument(
+        "-p", "--project",
+        nargs="*",
+        help="Filter fields in outline or receipt table/JSON."
+    )
+    parser.add_argument(
+        "-n", "--limit",
+        type=int,
+        default=0,
+        help="Limit number of outline entries."
+    )
 
     args = parser.parse_args()
 
@@ -563,7 +620,66 @@ def main():
             print(f"  - {err}", file=sys.stderr)
         sys.exit(1)
 
-    # Locate template.html
+    # 1. Outline Mode (Token Shield)
+    if args.outline:
+        rows = []
+        for s in data.get("sections", []):
+            summary_raw = s.get("summary", "") or ""
+            summary_preview = (summary_raw[:55] + "...") if len(summary_raw) > 55 else summary_raw
+            rows.append({
+                "section": s.get("heading", "General"),
+                "cues": len(s.get("entries", [])),
+                "summary": summary_preview
+            })
+        if args.limit and args.limit > 0:
+            rows = rows[:args.limit]
+        if args.json:
+            if args.project:
+                p_keys = [k.lower() for k in args.project]
+                rows = [{k: v for k, v in r.items() if k.lower() in p_keys} for r in rows]
+            print(json.dumps(rows, indent=2, ensure_ascii=False))
+            return
+        cols = ["section", "cues", "summary"]
+        if args.project:
+            p_keys = [k.lower() for k in args.project]
+            cols = [c for c in cols if c.lower() in p_keys] or cols
+        table_rows = [{k: r.get(k, "") for k in cols} for r in rows]
+        print(f"### Cornell Notes Outline: {data.get('title', input_path.stem)}\n")
+        print(render_table(table_rows, cols))
+        return
+
+    # 2. Stats Mode (Token Shield)
+    if args.stats:
+        total_cues = sum(len(s.get("entries", [])) for s in data.get("sections", []))
+        total_summaries = sum(1 for s in data.get("sections", []) if s.get("summary"))
+        stats_obj = {
+            "title": data.get("title", ""),
+            "source": data.get("source", ""),
+            "sections": len(data.get("sections", [])),
+            "cues": total_cues,
+            "summaries": total_summaries
+        }
+        if args.json:
+            if args.project:
+                p_keys = [k.lower() for k in args.project]
+                stats_obj = {k: v for k, v in stats_obj.items() if k.lower() in p_keys}
+            print(json.dumps(stats_obj, indent=2, ensure_ascii=False))
+            return
+        rows = [
+            {"metric": "Title", "value": stats_obj["title"] or "(untitled)"},
+            {"metric": "Source", "value": stats_obj["source"] or "N/A"},
+            {"metric": "Sections", "value": str(stats_obj["sections"])},
+            {"metric": "Cue-Note Pairs", "value": str(stats_obj["cues"])},
+            {"metric": "Summaries", "value": str(stats_obj["summaries"])},
+        ]
+        if args.project:
+            p_keys = [k.lower() for k in args.project]
+            rows = [r for r in rows if r["metric"].lower() in p_keys]
+        print(f"### Cornell Notes Statistics: {input_path.name}\n")
+        print(render_table(rows, ["metric", "value"], ["Metric", "Value"]))
+        return
+
+    # 3. HTML Rendering
     script_dir = Path(__file__).resolve().parent
     template_path = Path(args.template) if args.template else (script_dir / "template.html")
     if not template_path.exists():
@@ -583,18 +699,52 @@ def main():
         output_path.parent.mkdir(parents=True, exist_ok=True)
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(html_content)
-        print(f"Successfully generated Cornell Notes HTML: {output_path.resolve()}")
     except Exception as e:
         print(f"Error writing output file '{output_path}': {e}", file=sys.stderr)
         sys.exit(1)
 
+    tsv_path = None
     if args.anki:
         tsv_path = input_path.parent / f"{input_path.stem}_anki.tsv"
         try:
             export_anki_tsv(data, tsv_path)
-            print(f"Successfully exported Anki flashcards: {tsv_path.resolve()}")
         except Exception as e:
             print(f"Error writing Anki TSV file: {e}", file=sys.stderr)
+            tsv_path = None
+
+    # Emit Token-Shielded Receipt or human output
+    total_cues = sum(len(s.get("entries", [])) for s in data.get("sections", []))
+    receipt = {
+        "title": data.get("title", ""),
+        "sections": len(data.get("sections", [])),
+        "cues": total_cues,
+        "html_file": str(output_path.resolve()),
+        "html_size_kb": round(output_path.stat().st_size / 1024, 1),
+        "anki_tsv": str(tsv_path.resolve()) if tsv_path else None,
+    }
+
+    if args.json:
+        if args.project:
+            p_keys = [k.lower() for k in args.project]
+            receipt = {k: v for k, v in receipt.items() if k.lower() in p_keys}
+        print(json.dumps(receipt, indent=2, ensure_ascii=False))
+        return
+
+    if args.table:
+        rows = [
+            {"metric": "Document Title", "value": receipt["title"] or "(untitled)"},
+            {"metric": "Sections", "value": str(receipt["sections"])},
+            {"metric": "Cue-Note Pairs", "value": str(receipt["cues"])},
+            {"metric": "Generated HTML", "value": f"{output_path.name} ({receipt['html_size_kb']} KB)"},
+            {"metric": "Anki Cards", "value": f"{tsv_path.name} ({total_cues} cards)" if tsv_path else "Disabled"},
+        ]
+        print(f"### Cornell Notes Receipt\n")
+        print(render_table(rows, ["metric", "value"], ["Metric", "Value"]))
+        return
+
+    print(f"Successfully generated Cornell Notes HTML: {output_path.resolve()}")
+    if tsv_path:
+        print(f"Successfully exported Anki flashcards: {tsv_path.resolve()}")
 
 
 if __name__ == "__main__":

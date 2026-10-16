@@ -272,20 +272,41 @@ def discover_notes_files(target: Path) -> list[Path]:
     return []
 
 
-def cmd_status_all(target: Path):
+def render_table(rows: list[dict], columns: list[str] | None = None, headers: list[str] | None = None) -> str:
+    if not rows:
+        return "*(no records)*\n"
+    if columns is None:
+        columns = list(rows[0].keys())
+    if headers is None:
+        headers = [col.replace("_", " ").title() for col in columns]
+
+    col_widths = [len(h) for h in headers]
+    for r in rows:
+        for idx, col in enumerate(columns):
+            val_str = str(r.get(col, "")).replace("\n", " ").strip()
+            if len(val_str) > col_widths[idx]:
+                col_widths[idx] = len(val_str)
+
+    header_line = "| " + " | ".join(h.ljust(col_widths[i]) for i, h in enumerate(headers)) + " |"
+    sep_line = "| " + " | ".join("-" * col_widths[i] for i in range(len(headers))) + " |"
+    row_lines = []
+    for r in rows:
+        row_str = "| " + " | ".join(str(r.get(col, "")).replace("\n", " ").strip().ljust(col_widths[i]) for i, col in enumerate(columns)) + " |"
+        row_lines.append(row_str)
+    return "\n".join([header_line, sep_line] + row_lines) + "\n"
+
+
+def cmd_status_all(target: Path, as_table: bool = False, as_json: bool = False, project_keys: list[str] | None = None, limit: int = 0):
     notes_files = discover_notes_files(target)
     if not notes_files:
-        print(f"No '*_cornell.json' notes found in {target}")
+        if as_json:
+            print("[]")
+        else:
+            print(f"No '*_cornell.json' notes found in {target}")
         return
 
     today = date.today().isoformat()
-    total_cards = 0
-    total_due = 0
-    total_new = 0
-
-    print(f"\n=======================================================")
-    print(f"📚 Spaced Repetition Status across {len(notes_files)} note document(s)")
-    print(f"=======================================================")
+    records = []
 
     for nf in notes_files:
         srs_path = nf.with_suffix(".srs.json")
@@ -296,16 +317,57 @@ def cmd_status_all(target: Path):
             state = load_srs_state(srs_path)
             due_count = sum(1 for c in cards if c["id"] in state and state[c["id"]].get("due_date", today) <= today)
             new_count = sum(1 for c in cards if c["id"] not in state)
-
-            total_cards += len(cards)
-            total_due += due_count
-            total_new += new_count
-
-            title = data.get("title", nf.stem)
-            print(f"• {title}")
-            print(f"    Cards: {len(cards)} | Due Today: \033[1;33m{due_count}\033[0m | New: {new_count}")
+            reviewed_count = len(cards) - new_count
+            records.append({
+                "file": nf.name,
+                "title": data.get("title", nf.stem),
+                "cards": len(cards),
+                "due_today": due_count,
+                "new": new_count,
+                "reviewed": reviewed_count,
+                "path": str(nf.resolve())
+            })
         except Exception as e:
-            print(f"• {nf.name}: Error reading ({e})")
+            records.append({
+                "file": nf.name,
+                "title": "Error",
+                "cards": 0,
+                "due_today": 0,
+                "new": 0,
+                "reviewed": 0,
+                "path": str(nf.resolve()),
+                "error": str(e)
+            })
+
+    if limit and limit > 0:
+        records = records[:limit]
+
+    if as_json:
+        if project_keys:
+            records = [{k: v for k, v in r.items() if k.lower() in project_keys} for r in records]
+        print(json.dumps(records, indent=2, ensure_ascii=False))
+        return
+
+    if as_table:
+        cols = ["file", "title", "cards", "due_today", "new", "reviewed"]
+        if project_keys:
+            cols = [c for c in cols if c.lower() in project_keys] or cols
+        table_rows = [{k: r.get(k, "") for k in cols} for r in records]
+        print(f"### Spaced Repetition (SRS) Status ({len(records)} note documents)\n")
+        print(render_table(table_rows, cols))
+        return
+
+    total_cards = sum(r["cards"] for r in records)
+    total_due = sum(r["due_today"] for r in records)
+    total_new = sum(r["new"] for r in records)
+
+    print(f"\n=======================================================")
+    print(f"📚 Spaced Repetition Status across {len(notes_files)} note document(s)")
+    print(f"=======================================================")
+
+    for r in records:
+        print(f"• {r['title']}")
+        print(f"    Cards: {r['cards']} | Due Today: \033[1;33m{r['due_today']}\033[0m | New: {r['new']}")
 
     print(f"-------------------------------------------------------")
     print(f"Total across all subjects: {total_cards} cards")
@@ -425,6 +487,10 @@ def main():
 
     status_parser = subparsers.add_parser("status", help="Show review stats and due cards (file or folder)")
     status_parser.add_argument("notes_target", help="Path to Cornell JSON file or folder containing Cornell notes")
+    status_parser.add_argument("-t", "--table", action="store_true", help="Emit review stats as compact Markdown table")
+    status_parser.add_argument("--json", action="store_true", help="Emit review stats as structured JSON")
+    status_parser.add_argument("-p", "--project", nargs="*", help="Filter fields in output table or JSON")
+    status_parser.add_argument("-n", "--limit", type=int, default=0, help="Limit number of documents inspected")
 
     review_parser = subparsers.add_parser("review", help="Launch interactive CLI review session (file or folder)")
     review_parser.add_argument("notes_target", help="Path to Cornell JSON file or folder containing Cornell notes")
@@ -437,7 +503,8 @@ def main():
         sys.exit(1)
 
     if args.command == "status":
-        cmd_status_all(target)
+        project_keys = [k.lower() for k in args.project] if args.project else None
+        cmd_status_all(target, as_table=args.table, as_json=args.json, project_keys=project_keys, limit=args.limit)
     elif args.command == "review":
         cmd_review_all(target)
 

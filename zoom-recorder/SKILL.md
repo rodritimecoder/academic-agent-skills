@@ -67,7 +67,28 @@ python3 ~/.gemini/config/skills/zoom-recorder/scripts/zoom_download.py \
 | `--format` | Output format: `md` (Markdown), `vtt` (raw WebVTT), `txt` (plain text), `all` | `md` |
 | `--keyframes` | Stream video with ffmpeg to extract slide changes | Disabled |
 | `--scene-threshold` | Sensitivity for slide change scene detection (`0.0` - `1.0`) | `0.35` |
-| `--json` | Print extracted recording metadata to stdout as JSON | Disabled |
+| `--table, -t` | Render output as high-density Markdown pipe tables | Disabled |
+| `--outline, --agenda` | Extract high-density chronological agenda/outline table (~200 tokens) | Disabled |
+| `--info-only, --info` | Retrieve recording metadata only without downloading files | Disabled |
+| `--project <fields>` | Comma-separated fields to project in output (e.g. `topic,duration`) | Disabled |
+| `--limit, -n <N>` | Cap the number of outline rows returned | `0` (unlimited) |
+| `--json` | Print extracted recording metadata or outline to stdout as JSON | Disabled |
+
+### Token-Shielded Inspection (Glitch Cat / ICM Architecture)
+
+```bash
+# 1. Inspect recording metadata without downloading any files:
+python3 ~/.gemini/config/skills/zoom-recorder/scripts/zoom_download.py \
+  --url "https://utsmeet.zoom.us/rec/share/..." \
+  --passcode "Secret123" \
+  --info-only --table
+
+# 2. Extract a 20-line compact lecture outline (~200 tokens instead of 50k token transcript):
+python3 ~/.gemini/config/skills/zoom-recorder/scripts/zoom_download.py \
+  --url "https://utsmeet.zoom.us/rec/share/..." \
+  --passcode "Secret123" \
+  --outline --table --limit 15
+```
 
 ---
 

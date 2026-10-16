@@ -30,6 +30,14 @@ DEFAULT_NOTES_DIR = Path("/run/media/rodri/AI/University/notes")
 
 # Dynamic discovery of companion engines
 def find_engine_path(skill_name: str, script_name: str) -> Optional[Path]:
+    academic_root = Path(__file__).resolve().parent.parent
+    internal_cand = academic_root / "modules" / skill_name / "scripts" / script_name
+    if internal_cand.is_file():
+        return internal_cand
+    internal_root = academic_root / "modules" / skill_name / script_name
+    if internal_root.is_file():
+        return internal_root
+
     candidate_roots = [
         Path("/run/media/rodri/AI/skills"),
         Path.home() / ".gemini" / "config" / "skills",
@@ -533,15 +541,71 @@ def cmd_serve(args: argparse.Namespace) -> int:
         print("\nServer stopped.")
     return 0
 
+def cmd_modules() -> int:
+    academic_root = Path(__file__).resolve().parent.parent
+    skills_root = academic_root.parent
+    print("\n📚 [Academic ICM] Integrated Suites & Modules:\n")
+    module_names = ["canvas-cli", "zoom-recorder", "cornell-notes"]
+    for m_name in module_names:
+        m_dir = skills_root / m_name
+        skill_file = m_dir / "SKILL.md"
+        desc = "Integrated standalone academic module"
+        if skill_file.is_file():
+            content = skill_file.read_text(encoding="utf-8")
+            m_desc = re.search(r"^description:\s*([^\n]+)", content, re.MULTILINE)
+            if m_desc:
+                desc = m_desc.group(1).strip('"\' >')
+        print(f"  • {m_name:<18} : {desc[:80]}...")
+    print("\n  Direct CLI commands:")
+    print("    academic-icm canvas [...]   - Canvas LMS API client (courses, grades, modules)")
+    print("    academic-icm zoom [...]     - Zoom recording download & slide scraper")
+    print("    academic-icm cornell [...]  - Markdown to active-recall Cornell HTML & Anki")
+    print("    academic-icm srs [...]      - Spaced repetition review runner")
+    print("  Or via backward-compatible shims in ~/.local/bin/ (canvas-cli, zoom-recorder, cornell-notes)\n")
+    return 0
+
 # ==============================================================================
 # MAIN ENTRYPOINT
 # ==============================================================================
 def main() -> int:
+    if len(sys.argv) > 1 and sys.argv[1] in ("canvas", "zoom", "cornell", "srs", "modules"):
+        mod = sys.argv[1]
+        rem = sys.argv[2:]
+        if mod == "canvas":
+            script = find_engine_path("canvas-cli", "canvas_cli.py")
+            if not script:
+                sys.exit("❌ Error: canvas_cli.py not found.")
+            return subprocess.run([sys.executable, str(script)] + rem).returncode
+        elif mod == "zoom":
+            script = find_engine_path("zoom-recorder", "zoom_download.py")
+            if not script:
+                sys.exit("❌ Error: zoom_download.py not found.")
+            return subprocess.run([sys.executable, str(script)] + rem).returncode
+        elif mod == "cornell":
+            script = find_engine_path("cornell-notes", "format_notes.py")
+            if not script:
+                sys.exit("❌ Error: format_notes.py not found.")
+            return subprocess.run([sys.executable, str(script)] + rem).returncode
+        elif mod == "srs":
+            script = find_engine_path("cornell-notes", "srs_review.py")
+            if not script:
+                sys.exit("❌ Error: srs_review.py not found.")
+            return subprocess.run([sys.executable, str(script)] + rem).returncode
+        elif mod == "modules":
+            return cmd_modules()
+
     parser = argparse.ArgumentParser(
         prog="academic-icm",
         description="Academic ICM Pipeline Orchestrator (Interpretable Context Methodology)"
     )
     subparsers = parser.add_subparsers(dest="command", help="Available subcommands")
+
+    # Integrated module proxies
+    subparsers.add_parser("canvas", help="Canvas LMS API client (courses, grades, assignments, modules)")
+    subparsers.add_parser("zoom", help="Download transcripts, audio, and slides from Zoom recordings")
+    subparsers.add_parser("cornell", help="Compile Markdown into print-ready Cornell Notes HTML & Anki")
+    subparsers.add_parser("srs", help="Spaced repetition review engine for Cornell notes")
+    subparsers.add_parser("modules", help="List integrated academic modules and rubrics")
 
     # status
     p_status = subparsers.add_parser("status", help="Show curriculum coverage and orphaned notes")
