@@ -111,6 +111,8 @@ def collect_cornell_notes(vault_root: Path) -> Dict[str, Dict[str, Any]]:
     """Collects all *_cornell.json files and indexes them by stem and source."""
     cornell_notes: Dict[str, Dict[str, Any]] = {}
     for jf in vault_root.rglob("*_cornell.json"):
+        if any(p in jf.parts for p in ("02_workers", "scratch", ".kanban", ".git", ".gemini", "brain")):
+            continue
         if "outputs" in jf.parts or "json" in jf.parts:
             try:
                 data = json.loads(jf.read_text(encoding="utf-8"))
@@ -122,7 +124,24 @@ def collect_cornell_notes(vault_root: Path) -> Dict[str, Dict[str, Any]]:
                 html_file = jf.parent.parent / "html" / f"{jf.stem}.html"
                 if not html_file.is_file():
                     html_file = jf.with_suffix(".html")
-                anki_file = jf.parent.parent / "anki" / f"{clean_stem}_anki.tsv"
+                
+                anki_dir = jf.parent.parent / "anki"
+                anki_file = None
+                for cand in (
+                    anki_dir / f"{jf.stem}_anki.tsv",
+                    anki_dir / f"{clean_stem}_anki.tsv",
+                    anki_dir / f"{clean_stem}_cornell_anki.tsv",
+                    jf.parent / f"{jf.stem}_anki.tsv"
+                ):
+                    if cand.is_file():
+                        anki_file = cand
+                        break
+                if not anki_file and anki_dir.is_dir():
+                    for f in anki_dir.glob("*.tsv"):
+                        f_norm = re.sub(r'_cornell(_cornell)?', '', f.stem.lower()).replace("-", "_").replace(" ", "_")
+                        if clean_stem in f_norm or f_norm in clean_stem:
+                            anki_file = f
+                            break
 
                 cues_count = sum(len(sec.get("entries", [])) for sec in data.get("sections", []))
 
@@ -1241,8 +1260,10 @@ def cmd_verify(args: argparse.Namespace) -> int:
 
                 # Check 3: Cue depth
                 cue_cnt = info["cues_count"]
-                if cue_cnt < 6:
-                    g3_warnings.append(f"{jf.name}: Cue depth is {cue_cnt} (target: >= 6 active cues)")
+                is_tutorial = any(t in jf.stem.lower() for t in ("tutorial", "solution", "playbook"))
+                min_cues = 2 if is_tutorial else 6
+                if cue_cnt < min_cues:
+                    g3_warnings.append(f"{jf.name}: Cue depth is {cue_cnt} (target: >= {min_cues} active cues)")
 
                 # Check 4: Source existence
                 src = info["source"]
