@@ -88,6 +88,19 @@
                 };
               }
             }
+            if (videoObj && !videoObj.passcode && typeof WORKED_SOLUTIONS_DB !== "undefined") {
+              const cleanVUrl = (videoObj.src || "").split("#")[0];
+              for (const sol of Object.values(WORKED_SOLUTIONS_DB)) {
+                if (sol.videoSrc && (cleanVUrl.includes(sol.videoSrc) || sol.videoSrc.includes(cleanVUrl))) {
+                  videoObj.passcode = sol.passcode;
+                  break;
+                }
+                if (sol.fallbackSrc && (cleanVUrl.includes(sol.fallbackSrc) || sol.fallbackSrc.includes(cleanVUrl))) {
+                  videoObj.passcode = sol.passcode;
+                  break;
+                }
+              }
+            }
             let videoBtnHtml = "";
             if (videoObj) {
               const vJson = escapeHtml(JSON.stringify(videoObj));

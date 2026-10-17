@@ -453,12 +453,38 @@ def extract_video_info(
                 "label": f"Solution @ {time_str}"
             }
         elif "zoom.us" in raw_url:
+            clean_zurl = raw_url.split('#')[0]
+            passcode = ""
+            sol_db_path = TEMPLATE_DIR / "viz" / "data" / "worked_solutions_db.json"
+            if sol_db_path.is_file():
+                try:
+                    sol_data = json.loads(sol_db_path.read_text(encoding="utf-8"))
+                    for key, sol in sol_data.items():
+                        v_src = sol.get("videoSrc", "")
+                        fb_src = sol.get("fallbackSrc", "")
+                        if v_src and (clean_zurl in v_src or v_src in clean_zurl):
+                            passcode = sol.get("passcode", "")
+                            break
+                        if fb_src and (clean_zurl in fb_src or fb_src in clean_zurl):
+                            passcode = sol.get("passcode", "")
+                            break
+                    if not passcode:
+                        m_w = re.search(r'\b(?:week|w)[_\s-]*0?(\d+)\b', f"{jf.stem} {cue} {notes}", re.IGNORECASE)
+                        if m_w:
+                            w_target = m_w.group(1)
+                            for key, sol in sol_data.items():
+                                m_sol_w = re.search(r'week_0?(\d+)', key, re.IGNORECASE)
+                                if m_sol_w and m_sol_w.group(1) == w_target:
+                                    passcode = sol.get("passcode", "")
+                                    break
+                except Exception:
+                    pass
             video_data = {
                 "type": "zoom",
                 "src": raw_url,
                 "time_str": time_str,
                 "seconds": sec,
-                "passcode": "",
+                "passcode": passcode,
                 "label": f"Zoom @ {time_str}"
             }
         else:
@@ -474,8 +500,8 @@ def extract_video_info(
                         for key, sol in sol_data.items():
                             m_w = re.search(r'week_?(\d+)', key, re.IGNORECASE)
                             w_num = m_w.group(1) if m_w else ""
-                            if (key in search_target or 
-                                (w_num and (f"week {w_num}" in search_target or f"week_{w_num}" in search_target or f"week{w_num}" in search_target or f"w{w_num}" in search_target))):
+                            matches_week = bool(w_num and re.search(rf'\b(?:week|w)[_\s-]*0?{w_num}\b', search_target, re.IGNORECASE))
+                            if key in search_target or matches_week:
                                 if sol.get("videoSrc") and sol["videoSrc"].startswith("http"):
                                     resolved_zoom = {
                                         "type": "zoom",

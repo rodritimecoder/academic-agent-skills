@@ -9,19 +9,43 @@
 
         // Resolve real Zoom Cloud URL if caller supplied a relative path, .vtt, or .md
         const db = (typeof window !== "undefined" && window.WORKED_SOLUTIONS_DB) ? window.WORKED_SOLUTIONS_DB : null;
-        if (db && (!targetUrl.startsWith("http") || targetUrl.toLowerCase().endsWith(".vtt") || targetUrl.toLowerCase().endsWith(".md"))) {
-          const matchTarget = `${targetUrl} ${title || ""}`.toLowerCase();
-          for (const [key, sol] of Object.entries(db)) {
-            const mWeek = key.match(/week_(\d+)/i);
-            const wNum = mWeek ? mWeek[1] : null;
-            if (matchTarget.includes(key) || (wNum && (matchTarget.includes(`week ${wNum}`) || matchTarget.includes(`week_${wNum}`) || matchTarget.includes(`w0${wNum}`) || matchTarget.includes(`w${wNum}`)))) {
-              if (sol.videoSrc && sol.videoSrc.startsWith("http")) targetUrl = sol.videoSrc;
-              if (sol.fallbackSrc && (!targetUrl || !targetUrl.startsWith("http"))) targetUrl = sol.fallbackSrc;
-              if (!targetPasscode && sol.passcode) targetPasscode = sol.passcode;
-              break;
+        if (db) {
+          // 1. Direct URL match to retrieve passcode if missing
+          if (!targetPasscode && targetUrl && targetUrl.startsWith("http")) {
+            const cleanTarget = targetUrl.split("#")[0];
+            for (const sol of Object.values(db)) {
+              if (sol.videoSrc && (cleanTarget.includes(sol.videoSrc) || sol.videoSrc.includes(cleanTarget))) {
+                if (sol.passcode) { targetPasscode = sol.passcode; break; }
+              }
+              if (sol.fallbackSrc && (cleanTarget.includes(sol.fallbackSrc) || sol.fallbackSrc.includes(cleanTarget))) {
+                if (sol.passcode) { targetPasscode = sol.passcode; break; }
+              }
+            }
+          }
+
+          // 2. Resolve targetUrl only if placeholder or relative
+          if (!targetUrl.startsWith("http") || targetUrl.toLowerCase().endsWith(".vtt") || targetUrl.toLowerCase().endsWith(".md")) {
+            const matchTarget = `${targetUrl} ${title || ""}`.toLowerCase();
+            for (const [key, sol] of Object.entries(db)) {
+              const mWeek = key.match(/week_(\d+)/i);
+              const wNum = mWeek ? mWeek[1] : null;
+              const matchesWeek = wNum && new RegExp(`\\b(?:week|w)[_\\s-]*0?${wNum}\\b`, "i").test(matchTarget);
+              if (matchTarget.includes(key) || matchesWeek) {
+                if (sol.videoSrc && sol.videoSrc.startsWith("http")) targetUrl = sol.videoSrc;
+                if (sol.fallbackSrc && (!targetUrl || !targetUrl.startsWith("http"))) targetUrl = sol.fallbackSrc;
+                if (!targetPasscode && sol.passcode) targetPasscode = sol.passcode;
+                break;
+              }
             }
           }
         }
+
+        currentActiveVideo = {
+          ...(currentActiveVideo || {}),
+          src: targetUrl,
+          passcode: targetPasscode,
+          title: title || (currentActiveVideo && currentActiveVideo.title) || "Zoom Cloud Recording"
+        };
 
         zoomCard.style.display = "block";
         const zTitle = document.getElementById("zoomCardTitle");
@@ -93,36 +117,58 @@
         // Auto-resolve real Zoom Cloud URL and Passcode from WORKED_SOLUTIONS_DB
         const db = (typeof window !== "undefined" && window.WORKED_SOLUTIONS_DB) ? window.WORKED_SOLUTIONS_DB : null;
         if (db) {
-          const combinedStr = `${vSrc} ${videoData.title || ""} ${videoData.label || ""}`.toLowerCase();
-          for (const [key, sol] of Object.entries(db)) {
-            const mWeek = key.match(/week_(\d+)/i);
-            const wNum = mWeek ? mWeek[1] : null;
-            const matchesKey = combinedStr.includes(key);
-            const matchesWeek = wNum && (
-              combinedStr.includes(`week ${wNum}`) ||
-              combinedStr.includes(`week_${wNum}`) ||
-              combinedStr.includes(`week-${wNum}`) ||
-              combinedStr.includes(`w0${wNum}`) ||
-              combinedStr.includes(`w${wNum}`)
-            );
+          // 1. Direct URL match to retrieve passcode/metadata
+          if (vSrc && vSrc.startsWith("http")) {
+            const cleanSrc = vSrc.split("#")[0];
+            for (const sol of Object.values(db)) {
+              if (sol.videoSrc && (cleanSrc.includes(sol.videoSrc) || sol.videoSrc.includes(cleanSrc))) {
+                if (!vPasscode && sol.passcode) vPasscode = sol.passcode;
+                if (!vFallback && sol.fallbackSrc) vFallback = sol.fallbackSrc;
+                if (!vType && sol.type) vType = sol.type;
+                break;
+              }
+              if (sol.fallbackSrc && (cleanSrc.includes(sol.fallbackSrc) || sol.fallbackSrc.includes(cleanSrc))) {
+                if (!vPasscode && sol.passcode) vPasscode = sol.passcode;
+                if (!vType && sol.type) vType = sol.type;
+                break;
+              }
+            }
+          }
 
-            if (matchesKey || matchesWeek) {
-              if (sol.videoSrc && sol.videoSrc.startsWith("http")) {
-                vSrc = sol.videoSrc;
+          // 2. Only resolve/overwrite vSrc if vSrc is missing or a placeholder (.vtt, .md, relative)
+          if (!vSrc.startsWith("http") && (vSrc.toLowerCase().endsWith(".vtt") || vSrc.toLowerCase().endsWith(".md") || !vSrc)) {
+            const searchTarget = `${vSrc} ${videoData.title || ""} ${videoData.label || ""}`.toLowerCase();
+            for (const [key, sol] of Object.entries(db)) {
+              const mWeek = key.match(/week_(\d+)/i);
+              const wNum = mWeek ? mWeek[1] : null;
+              const matchesWeek = wNum && new RegExp(`\\b(?:week|w)[_\\s-]*0?${wNum}\\b`, "i").test(searchTarget);
+              if (searchTarget.includes(key) || matchesWeek) {
+                if (sol.videoSrc && sol.videoSrc.startsWith("http")) {
+                  vSrc = sol.videoSrc;
+                }
+                if (sol.passcode && !vPasscode) {
+                  vPasscode = sol.passcode;
+                }
+                if (sol.fallbackSrc && !vFallback) {
+                  vFallback = sol.fallbackSrc;
+                }
+                if (sol.type && !vType) {
+                  vType = sol.type;
+                }
+                break;
               }
-              if (sol.passcode && !vPasscode) {
-                vPasscode = sol.passcode;
-              }
-              if (sol.fallbackSrc && !vFallback) {
-                vFallback = sol.fallbackSrc;
-              }
-              if (sol.type) {
-                vType = sol.type;
-              }
-              break;
             }
           }
         }
+
+        // Keep currentActiveVideo in sync with resolved URL and passcode
+        currentActiveVideo = {
+          ...videoData,
+          src: vSrc,
+          passcode: vPasscode,
+          fallbackSrc: vFallback,
+          type: vType
+        };
 
         if (!vType) {
           if (vSrc.includes("youtube.com") || vSrc.includes("youtu.be")) vType = "youtube";
