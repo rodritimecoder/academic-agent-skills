@@ -740,6 +740,13 @@ def find_media_and_transcript_for_note(vault_root: Path, json_path: Path, note_d
     passcode: Optional[str] = None
     q_map: Dict[str, str] = {}
 
+    # 0. Explicit note video metadata takes highest precedence
+    if "video" in note_data and isinstance(note_data["video"], dict):
+        v = note_data["video"]
+        if v.get("src"):
+            media_target = v["src"]
+            passcode = v.get("passcode")
+
     # 1. Search for transcript in module folder
     search_dirs = []
     if module_dir and module_dir.is_dir():
@@ -767,30 +774,29 @@ def find_media_and_transcript_for_note(vault_root: Path, json_path: Path, note_d
             transcript_path = md_transcripts[0]
             break
 
-    # 2. Check for local MP4 in course_dir / "videos"
-    videos_dir = course_dir / "videos"
-    if videos_dir.is_dir():
-        mp4_files = list(videos_dir.glob("*.mp4")) + list(videos_dir.glob("*.m4a")) + list(videos_dir.glob("*.mkv"))
-        if mp4_files:
-            matched_mp4 = None
-            speaker_token = ""
-            if transcript_path:
-                speaker_token = transcript_path.stem.lower().replace("-", "_").replace(" ", "_")
-            for mp4 in mp4_files:
-                mp4_stem = mp4.stem.lower().replace("-", "_").replace(" ", "_")
-                if week_token and week_token in mp4_stem:
-                    matched_mp4 = mp4
-                    break
-                if speaker_token and (speaker_token in mp4_stem or mp4_stem in speaker_token):
-                    matched_mp4 = mp4
-                    break
-
-            if matched_mp4:
+    # 2. Check for local MP4 in course_dir / "videos" (only if no explicit video declared)
+    if not media_target:
+        videos_dir = course_dir / "videos"
+        if videos_dir.is_dir():
+            mp4_files = list(videos_dir.glob("*.mp4")) + list(videos_dir.glob("*.m4a")) + list(videos_dir.glob("*.mkv"))
+            if mp4_files and week_token:
+                matched_mp4 = None
                 try:
-                    rel_mp4 = matched_mp4.relative_to(vault_root)
-                    media_target = str(rel_mp4)
+                    w_int = int(week_token)
+                    w_regex = re.compile(rf"\b(?:week|w)[_\s-]*0?{w_int}(?!\d)", re.I)
+                    for mp4 in mp4_files:
+                        if w_regex.search(mp4.stem):
+                            matched_mp4 = mp4
+                            break
                 except ValueError:
-                    media_target = str(matched_mp4)
+                    pass
+
+                if matched_mp4:
+                    try:
+                        rel_mp4 = matched_mp4.relative_to(vault_root)
+                        media_target = str(rel_mp4)
+                    except ValueError:
+                        media_target = str(matched_mp4)
 
     # 3. Check for Zoom recording files if no local MP4
     if not media_target:
