@@ -3,14 +3,16 @@
 academic_icm.py — Academic ICM Pipeline Orchestrator
 
 Orchestrates the university knowledge pipeline adhering to Interpretable Context Methodology (ICM):
-  1. Ingestion & Normalization: canvas-cli -> markitdown-cli
-  2. Active-Recall Distillation: cornell-notes (strict stem inheritance)
-  3. Curriculum Architecture: okf-architect -> CURRICULUM_TREE.md -> viz.html & cornell_index.html
+  1. Ingestion & Normalization: canvas-cli -> zoom-recorder -> markitdown-cli
+  2. Knowledge Graph & Multimodal Memory: graph-memory (EmbeddingGemma-2 768d multimodal vector)
+  3. Active-Recall Distillation: cornell-notes (strict stem inheritance)
+  4. Curriculum Architecture & Gates: okf-architect -> CURRICULUM_TREE.md -> viz.html & cornell_index.html
 
 Commands:
   academic-icm status [vault]         - Audit coverage %, missing nodes, and orphaned notes
   academic-icm audit [vault]          - Lint stem naming, JSON schema, and KaTeX math formulas
   academic-icm verify [week]          - Run 5-stage ICM verification gates & unbiased 0-context judge
+  academic-icm graph <action> [...]   - Multimodal RAG search, graph recall & indexing (Stage 2)
   academic-icm scaffold <source_md>   - Auto-scaffold matching _cornell.json template from markdown source
   academic-icm build-note <json_file> - Compile _cornell.json into .html study sheet and .tsv Anki deck
   academic-icm compile [vault]        - Recompile CURRICULUM_TREE.md into Knowledge Cosmos and Study Portal
@@ -18,6 +20,7 @@ Commands:
   academic-icm stamp-video [target]   - Auto-stamp Cornell cues with video/recording timestamps
   academic-icm serve [vault] [--port] - Start local HTTP preview server for study portal
 """
+
 
 import sys
 import os
@@ -1686,7 +1689,7 @@ def cmd_modules() -> int:
 
 def cmd_graph(args: argparse.Namespace) -> int:
     action = getattr(args, "graph_action", "search")
-    graph_bin = shutil.which("graph-memory") or "/run/media/rodri/AI/skills/glitch-cat/graph-memory/graph_memory.py"
+    graph_bin = find_engine_path("graph-memory", "graph_memory.py") or shutil.which("graph-memory") or "/run/media/rodri/AI/skills/glitch-cat/graph-memory/graph_memory.py"
     cmd = [sys.executable, str(graph_bin)] if str(graph_bin).endswith(".py") else [str(graph_bin)]
 
     if action == "index":
@@ -1720,9 +1723,10 @@ def main() -> int:
         mod = sys.argv[1]
         rem = sys.argv[2:]
         if mod == "graph":
-            graph_bin = shutil.which("graph-memory") or "/run/media/rodri/AI/skills/glitch-cat/graph-memory/graph_memory.py"
+            graph_bin = find_engine_path("graph-memory", "graph_memory.py") or shutil.which("graph-memory") or "/run/media/rodri/AI/skills/glitch-cat/graph-memory/graph_memory.py"
             cmd = [sys.executable, str(graph_bin)] if str(graph_bin).endswith(".py") else [str(graph_bin)]
             return subprocess.run(cmd + rem).returncode
+
         elif mod == "canvas":
             script = find_engine_path("canvas-cli", "canvas_cli.py")
             if not script:

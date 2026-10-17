@@ -27,15 +27,38 @@ academic-icm canvas modules <course_id>
 academic-icm zoom --url <zoom_rec_url> [--passcode <code>] [--keyframes] [--ocr]
 # Or via backward-compatible shim: zoom-recorder ...
 
-# 3. Active-Recall Cornell Notes HTML & Anki TSV Generation
+# 3. Knowledge Graph & Multimodal Memory (Stage 2: EmbeddingGemma-2 768d vector)
+academic-icm graph index [--corpus <dir>]
+academic-icm graph search "Thevenin equivalent" --table
+academic-icm graph recall "Supernode" --hops 3
+academic-icm graph build-graph
+
+# 4. Active-Recall Cornell Notes HTML & Anki TSV Generation (Stage 3)
 academic-icm cornell <notes_cornell.json> [--anki]
 # Or via backward-compatible shim: cornell-notes ...
 
-# 4. Spaced Repetition (SRS) Review Engine
+# 5. Spaced Repetition (SRS) Review Engine
 academic-icm srs review <notes_cornell.json>
 
-# 5. List Integrated Modules & Rubrics
+# 6. List Integrated Modules & Rubrics
 academic-icm modules
+```
+
+---
+
+## 🏛️ The 4-Stage Architecture of Academic ICM
+
+```
+┌─────────────────┐       ┌─────────────────┐       ┌─────────────────┐       ┌─────────────────┐
+│   Canvas LMS    │ ────> │   MarkItDown    │ ────> │  Graph Memory   │ ────> │  Cornell Notes  │
+│  (Data Source)  │       │ (Doc Converter) │       │ (RAG & KG Walk) │       │  (Active Study) │
+└─────────────────┘       └─────────────────┘       └─────────────────┘       └─────────────────┘
+  canvas-cli                markitdown-cli            graph-memory              cornell-notes
+  - API downloads           - PDF/PPTX/DOCX/XLSX      - 768d Multimodal Vector  - 6–8 Active cues
+  - Course pages            - Clean Markdown            (EmbeddingGemma-2)      - Interactive HTML
+  - Quizzes & Files         - Math & Code syntax      - Hybrid BM25 + Vector    - Anki TSV decks
+  - Zoom recordings                                   - Video & Slide Indexing  - SRS review CLI
+                                                      - SQLite Knowledge Graph
 ```
 
 ---
@@ -43,6 +66,7 @@ academic-icm modules
 ## 🏛️ The 4 Invariants of Academic ICM
 
 1. **Strict Stem Inheritance (No Creative Renaming)**:
+
    - When generating Cornell notes from a source Markdown note, the output stem **must** match the source Markdown file stem:
      - Source: `Week_1/markdown/48520_topic_1_and_2.md`
      - Output JSON: `outputs/json/48520_topic_1_and_2_cornell.json`
