@@ -462,13 +462,41 @@ def extract_video_info(
                 "label": f"Zoom @ {time_str}"
             }
         else:
-            video_data = {
-                "type": "mp4",
-                "src": raw_url.split('#')[0],
-                "time_str": time_str,
-                "seconds": sec,
-                "label": f"Video @ {time_str}"
-            }
+            clean_url = raw_url.split('#')[0]
+            # Intercept accidental .vtt or .md transcript files and resolve to real Zoom cloud links
+            if clean_url.lower().endswith('.vtt') or clean_url.lower().endswith('.md'):
+                resolved_zoom = None
+                sol_db_path = TEMPLATE_DIR / "viz" / "data" / "worked_solutions_db.json"
+                if sol_db_path.is_file():
+                    try:
+                        sol_data = json.loads(sol_db_path.read_text(encoding="utf-8"))
+                        search_target = f"{clean_url} {jf.stem} {cue} {notes}".lower()
+                        for key, sol in sol_data.items():
+                            m_w = re.search(r'week_?(\d+)', key, re.IGNORECASE)
+                            w_num = m_w.group(1) if m_w else ""
+                            if (key in search_target or 
+                                (w_num and (f"week {w_num}" in search_target or f"week_{w_num}" in search_target or f"week{w_num}" in search_target or f"w{w_num}" in search_target))):
+                                if sol.get("videoSrc") and sol["videoSrc"].startswith("http"):
+                                    resolved_zoom = {
+                                        "type": "zoom",
+                                        "src": sol["videoSrc"],
+                                        "time_str": time_str,
+                                        "seconds": sec,
+                                        "passcode": sol.get("passcode", ""),
+                                        "label": f"Zoom @ {time_str}"
+                                    }
+                                    break
+                    except Exception:
+                        pass
+                video_data = resolved_zoom
+            else:
+                video_data = {
+                    "type": "mp4",
+                    "src": clean_url,
+                    "time_str": time_str,
+                    "seconds": sec,
+                    "label": f"Video @ {time_str}"
+                }
 
     # 2. Implicit timestamp references (e.g. [Timestamp: 00:11:00] or **Video Walkthrough Timestamp**: [00:11:00])
     if not video_data:
