@@ -401,9 +401,126 @@ def normalize_stem(s: str) -> str:
     return s.strip("_")
 
 
+def parse_time_to_seconds(ts: str) -> int:
+    """Convert timestamp 'HH:MM:SS', 'MM:SS', or 'SS' to total integer seconds."""
+    parts = ts.strip().split(":")
+    try:
+        if len(parts) == 3:
+            return int(parts[0]) * 3600 + int(parts[1]) * 60 + int(float(parts[2]))
+        elif len(parts) == 2:
+            return int(parts[0]) * 60 + int(float(parts[1]))
+        elif len(parts) == 1:
+            return int(float(parts[0]))
+    except Exception:
+        pass
+    return 0
+
+
+def extract_video_info(
+    cue: str, notes: str, jf: Path, bundle_root: Path
+) -> Tuple[str, str, Optional[Dict[str, Any]]]:
+    """Detect and parse video timestamp badges and walkthrough clips."""
+    video_data: Optional[Dict[str, Any]] = None
+    combined = f"{cue} {notes}"
+
+    # 1. Explicit Markdown badge: [▶ 14:20](URL) or [▶ 01:14:20](URL) or [▶ Solution @ 14:20](URL)
+    m_exp = re.search(r'\[▶\s*([0-9:]+[^\]]*)\]\(([^)]+)\)', cue) or re.search(r'\[▶\s*([0-9:]+[^\]]*)\]\(([^)]+)\)', notes)
+    if m_exp:
+        raw_ts = m_exp.group(1).strip()
+        raw_url = m_exp.group(2).strip()
+
+        cue = re.sub(r'\[▶\s*([0-9:]+[^\]]*)\]\(([^)]+)\)', '', cue).strip()
+        notes = re.sub(r'\[▶\s*([0-9:]+[^\]]*)\]\(([^)]+)\)', '', notes).strip()
+
+        m_time = re.search(r'(\d{1,2}:\d{2}(?::\d{2})?)', raw_ts)
+        time_str = m_time.group(1) if m_time else raw_ts
+        sec = parse_time_to_seconds(time_str)
+
+        m_yt = re.search(r'(?:youtu\.be/|youtube\.com/(?:watch\?v=|embed/))([a-zA-Z0-9_-]{11})', raw_url)
+        if m_yt:
+            yt_id = m_yt.group(1)
+            m_t = re.search(r'[?&#]t=(?:(\d+)m)?(?:(\d+)s)?', raw_url) or re.search(r'[?&](?:start|t)=(\d+)', raw_url)
+            if m_t:
+                if m_t.group(1) and m_t.group(2):
+                    sec = int(m_t.group(1)) * 60 + int(m_t.group(2))
+                elif m_t.group(1):
+                    sec = int(m_t.group(1))
+            video_data = {
+                "type": "youtube",
+                "src": f"https://www.youtube-nocookie.com/embed/{yt_id}?start={sec}&autoplay=1",
+                "time_str": time_str,
+                "seconds": sec,
+                "label": f"Solution @ {time_str}"
+            }
+        elif "zoom.us" in raw_url:
+            video_data = {
+                "type": "zoom",
+                "src": raw_url,
+                "time_str": time_str,
+                "seconds": sec,
+                "passcode": "",
+                "label": f"Zoom @ {time_str}"
+            }
+        else:
+            video_data = {
+                "type": "mp4",
+                "src": raw_url.split('#')[0],
+                "time_str": time_str,
+                "seconds": sec,
+                "label": f"Video @ {time_str}"
+            }
+
+    # 2. Implicit timestamp references (e.g. [Timestamp: 00:11:00] or **Video Walkthrough Timestamp**: [00:11:00])
+    if not video_data:
+        m_imp = re.search(r'\[Timestamp:\s*([0-9:]+)\]', combined, re.IGNORECASE) or \
+                re.search(r'\*\*Video Walkthrough Timestamp\*\*:\s*`?\[([0-9:]+)\]`?', combined, re.IGNORECASE) or \
+                re.search(r'\[([0-9]{1,2}:\d{2}:\d{2})\]', combined)
+        if m_imp:
+            time_str = (m_imp.group(1) if m_imp.lastindex >= 1 and m_imp.group(1) else m_imp.group(0).strip("[]`"))
+            sec = parse_time_to_seconds(time_str)
+
+            course_dir = None
+            for p in jf.parents:
+                if p.parent == bundle_root:
+                    course_dir = p
+                    break
+
+            if course_dir:
+                mp4_files = list(course_dir.glob("videos/*.mp4")) or list(course_dir.glob("*.mp4"))
+                if mp4_files:
+                    rel_mp4 = str(mp4_files[0].relative_to(bundle_root)).replace("\\", "/")
+                    video_data = {
+                        "type": "mp4",
+                        "src": rel_mp4,
+                        "time_str": time_str,
+                        "seconds": sec,
+                        "label": f"Walkthrough ({time_str})"
+                    }
+                else:
+                    zoom_mds = list(course_dir.rglob("*video*recording*.md")) or list(course_dir.rglob("*recording*.md"))
+                    if zoom_mds:
+                        try:
+                            z_text = zoom_mds[0].read_text(encoding="utf-8")
+                            m_zurl = re.search(r'(https://[a-zA-Z0-9.-]*zoom\.us/rec/[^\s\)>]+)', z_text)
+                            m_pass = re.search(r'Passcode:\s*([^\s\n\r]+)', z_text, re.IGNORECASE)
+                            if m_zurl:
+                                video_data = {
+                                    "type": "zoom",
+                                    "src": m_zurl.group(1),
+                                    "time_str": time_str,
+                                    "seconds": sec,
+                                    "passcode": m_pass.group(1) if m_pass else "",
+                                    "label": f"Zoom ({time_str})"
+                                }
+                        except Exception:
+                            pass
+
+    return cue.strip(), notes.strip(), video_data
+
+
 def sanitize_cornell_card(cue: str, notes: str) -> Tuple[str, str]:
     """Sanitize video timestamps, slide footers, and OCR table artifacts from flashcards."""
-    # Strip video timestamp references
+    # Strip video timestamp references from displayed text
     notes = re.sub(r'\*\*Video Walkthrough Timestamp\*\*:\s*`?\[[\d:]+\]`?\s*', '', notes)
     notes = re.sub(r'^\[[\d: -]+\]\s*', '', notes)
     # Strip lecture slide footers like 10/11/2022 48520 E&C: Frequency Response 8
@@ -450,7 +567,8 @@ def collect_cornell_map(bundle_root: Path) -> Dict[str, CornellInfo]:
                             notes_text = entry.get("notes", "").strip()
                             badge_text = entry.get("badge", "concept")
                             if cue_text:
-                                clean_cue, clean_notes = sanitize_cornell_card(cue_text, notes_text)
+                                raw_cue, raw_notes, video_payload = extract_video_info(cue_text, notes_text, jf, bundle_root)
+                                clean_cue, clean_notes = sanitize_cornell_card(raw_cue, raw_notes)
                                 card_item = {
                                     "id": f"{clean_jf_stem}_{sec_idx}_{e_idx}",
                                     "section": heading,
@@ -458,6 +576,8 @@ def collect_cornell_map(bundle_root: Path) -> Dict[str, CornellInfo]:
                                     "cue": clean_cue,
                                     "notes": clean_notes
                                 }
+                                if video_payload:
+                                    card_item["video"] = video_payload
                                 cards_list.append(card_item)
                                 sec_entries.append(card_item)
                         sections_list.append({

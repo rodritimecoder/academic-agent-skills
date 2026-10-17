@@ -833,6 +833,161 @@
     }
 
     /* ============================================================
+       FLOATING SOLUTION VIDEO DRAWER (PiP PLAYER)
+       ============================================================ */
+    .video-drawer {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      width: 440px;
+      max-width: calc(100vw - 48px);
+      background: rgba(17, 20, 29, 0.96);
+      backdrop-filter: blur(18px);
+      border: 1px solid rgba(137, 180, 250, 0.35);
+      border-radius: 12px;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7), 0 0 20px rgba(137, 180, 250, 0.15);
+      z-index: 999999;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .video-drawer.minimized {
+      width: 320px;
+    }
+    .video-drawer.minimized .video-drawer-body {
+      display: none !important;
+    }
+    .video-drawer-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      background: rgba(255, 255, 255, 0.04);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      cursor: default;
+      user-select: none;
+    }
+    .video-drawer-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #cdd6f4;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .video-drawer-time-pill {
+      font-size: 11px;
+      font-family: monospace;
+      padding: 2px 7px;
+      border-radius: 10px;
+      background: rgba(137, 180, 250, 0.2);
+      color: #89b4fa;
+      border: 1px solid rgba(137, 180, 250, 0.35);
+    }
+    .video-drawer-controls {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .video-drawer-ctrl-btn {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #a6adc8;
+      border-radius: 6px;
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 12px;
+      transition: all 0.15s ease;
+    }
+    .video-drawer-ctrl-btn:hover {
+      background: rgba(255, 255, 255, 0.15);
+      color: #ffffff;
+    }
+    .video-drawer-body {
+      padding: 10px;
+      background: #0d0f17;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    /* Cue Video Badge */
+    .cornell-cue-video-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      background: linear-gradient(135deg, rgba(243, 139, 168, 0.2), rgba(203, 166, 247, 0.2));
+      border: 1px solid rgba(243, 139, 168, 0.45);
+      color: #f5c2e7;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      width: fit-content;
+      text-decoration: none;
+    }
+    .cornell-cue-video-btn:hover {
+      background: linear-gradient(135deg, rgba(243, 139, 168, 0.35), rgba(203, 166, 247, 0.35));
+      border-color: #f38ba8;
+      color: #ffffff;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(243, 139, 168, 0.3);
+    }
+
+    /* Anki Flashcard Video Button */
+    .anki-video-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 7px 14px;
+      border-radius: 8px;
+      font-size: 12.5px;
+      font-weight: 600;
+      background: linear-gradient(135deg, rgba(137, 180, 250, 0.2), rgba(203, 166, 247, 0.25));
+      border: 1px solid rgba(137, 180, 250, 0.5);
+      color: #cdd6f4;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .anki-video-btn:hover {
+      background: linear-gradient(135deg, rgba(137, 180, 250, 0.35), rgba(203, 166, 247, 0.4));
+      border-color: #89b4fa;
+      color: #ffffff;
+      box-shadow: 0 4px 14px rgba(137, 180, 250, 0.3);
+      transform: translateY(-1px);
+    }
+    .zoom-launch-btn {
+      background: linear-gradient(135deg, #2d8cf0, #1b62cc);
+      color: #ffffff;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      box-shadow: 0 4px 12px rgba(45, 140, 240, 0.35);
+      transition: all 0.15s ease;
+    }
+    .zoom-launch-btn:hover {
+      background: linear-gradient(135deg, #3d9af0, #2272e2);
+      transform: translateY(-1px);
+      box-shadow: 0 6px 16px rgba(45, 140, 240, 0.5);
+    }
+
+    /* ============================================================
        CORNELL NOTES & ANKI SPACED REPETITION MODES
        ============================================================ */
     .cornell-launch-btn {
@@ -2264,6 +2419,41 @@
     </div>
   </div>
 
+  <!-- Floating Solution Video Drawer (PiP Player for YouTube, Local MP4, and Zoom) -->
+  <div id="videoDrawer" class="video-drawer" style="display:none;">
+    <div class="video-drawer-header" id="videoDrawerHeader">
+      <div class="video-drawer-title">
+        <span style="font-size:16px;">🎬</span>
+        <span id="videoDrawerTitleText">Solution Video</span>
+        <span class="video-drawer-time-pill" id="videoDrawerTimePill">00:00</span>
+      </div>
+      <div class="video-drawer-controls">
+        <button class="video-drawer-ctrl-btn" onclick="toggleVideoDrawerMinimize()" title="Minimize / Expand">_</button>
+        <button class="video-drawer-ctrl-btn" onclick="closeVideoDrawer()" title="Close Video">✕</button>
+      </div>
+    </div>
+    <div class="video-drawer-body" id="videoDrawerBody">
+      <!-- MP4 HTML5 Video -->
+      <video id="drawerMp4Player" controls playsinline style="display:none; width:100%; max-height:260px; background:#000; border-radius:6px;"></video>
+      <!-- YouTube Embed Iframe -->
+      <iframe id="drawerYtPlayer" style="display:none; width:100%; height:260px; border:none; border-radius:6px;" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+      <!-- Zoom Card -->
+      <div id="drawerZoomCard" style="display:none; width:100%; box-sizing:border-box; padding:16px; background:#181825; border-radius:8px; border:1px solid #313244; text-align:center;">
+        <div style="font-size:28px; margin-bottom:8px;">🎥</div>
+        <div style="font-weight:600; color:#cdd6f4; margin-bottom:6px;" id="zoomCardTitle">Zoom Cloud Recording</div>
+        <div style="font-size:12.5px; color:#a6adc8; margin-bottom:12px;" id="zoomCardTime">Timestamp: 00:00:00</div>
+        <div id="zoomCardPasscodeBox" style="margin-bottom:14px; background:#11111b; padding:6px 12px; border-radius:6px; font-family:monospace; color:#fab387; display:inline-block; border:1px dashed rgba(250, 179, 135, 0.4); font-size:12px;">
+          Passcode: <span id="zoomCardPasscodeText">------</span>
+        </div>
+        <div>
+          <button id="zoomCardLaunchBtn" class="zoom-launch-btn" onclick="launchZoomWithPasscode()">
+            <span>🚀</span> Copy Passcode &amp; Open Zoom
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Anki Spaced Repetition Modal (Obsidian-Style Decks & 3D Cards) -->
   <div id="ankiModal" class="anki-modal" style="display:none;">
     <!-- View 1: Deck Hub -->
@@ -2357,6 +2547,11 @@
             </div>
             <div class="anki-answer-text" id="ankiBackAnswer">
               Answer loading...
+            </div>
+            <div id="ankiVideoActionBox" style="display:none; margin: 12px 0 6px 0; text-align:center;">
+              <button id="ankiBtnWatchSolution" class="anki-video-btn" onclick="event.stopPropagation();" title="Watch solution video at this timestamp">
+                <span>🎬</span> Watch Solution (<span id="ankiVideoTimestamp">--:--</span>)
+              </button>
             </div>
             <div class="anki-card-hint" style="color:var(--text-muted);">
               <span>Rate your recall to schedule next interval:</span>
@@ -3681,6 +3876,106 @@
       }
       window.toggleCornellQuizMode = toggleCornellQuizMode;
 
+      let currentActiveVideo = null;
+
+      function openVideoClip(videoData) {
+        if (!videoData) return;
+        currentActiveVideo = videoData;
+
+        const drawer = document.getElementById("videoDrawer");
+        const titleEl = document.getElementById("videoDrawerTitleText");
+        const timePill = document.getElementById("videoDrawerTimePill");
+        const mp4El = document.getElementById("drawerMp4Player");
+        const ytEl = document.getElementById("drawerYtPlayer");
+        const zoomCard = document.getElementById("drawerZoomCard");
+
+        if (!drawer) return;
+
+        drawer.style.display = "flex";
+        drawer.classList.remove("minimized");
+        if (mp4El) {
+          mp4El.pause();
+          mp4El.style.display = "none";
+          mp4El.src = "";
+        }
+        if (ytEl) {
+          ytEl.style.display = "none";
+          ytEl.src = "about:blank";
+        }
+        if (zoomCard) {
+          zoomCard.style.display = "none";
+        }
+
+        if (titleEl) titleEl.textContent = videoData.label || "Solution Video";
+        if (timePill) timePill.textContent = videoData.time_str || "00:00";
+
+        if (videoData.type === "youtube" && ytEl) {
+          ytEl.style.display = "block";
+          ytEl.src = videoData.src;
+        } else if (videoData.type === "mp4" && mp4El) {
+          mp4El.style.display = "block";
+          mp4El.src = videoData.src;
+          mp4El.currentTime = videoData.seconds || 0;
+          mp4El.play().catch(() => {});
+        } else if (videoData.type === "zoom" && zoomCard) {
+          zoomCard.style.display = "block";
+          const zTime = document.getElementById("zoomCardTime");
+          const zPassBox = document.getElementById("zoomCardPasscodeBox");
+          const zPassText = document.getElementById("zoomCardPasscodeText");
+          if (zTime) zTime.textContent = `Timestamp: ${videoData.time_str || "00:00:00"}`;
+          if (videoData.passcode && zPassText && zPassBox) {
+            zPassBox.style.display = "inline-block";
+            zPassText.textContent = videoData.passcode;
+          } else if (zPassBox) {
+            zPassBox.style.display = "none";
+          }
+        }
+      }
+      window.openVideoClip = openVideoClip;
+
+      function openVideoClipFromStr(jsonStr) {
+        try {
+          const data = JSON.parse(jsonStr);
+          openVideoClip(data);
+        } catch (err) {
+          console.error("Failed to parse video clip data", err);
+        }
+      }
+      window.openVideoClipFromStr = openVideoClipFromStr;
+
+      function closeVideoDrawer() {
+        const drawer = document.getElementById("videoDrawer");
+        const mp4El = document.getElementById("drawerMp4Player");
+        const ytEl = document.getElementById("drawerYtPlayer");
+        if (mp4El) {
+          mp4El.pause();
+          mp4El.src = "";
+        }
+        if (ytEl) {
+          ytEl.src = "about:blank";
+        }
+        if (drawer) drawer.style.display = "none";
+        currentActiveVideo = null;
+      }
+      window.closeVideoDrawer = closeVideoDrawer;
+
+      function toggleVideoDrawerMinimize() {
+        const drawer = document.getElementById("videoDrawer");
+        if (drawer) drawer.classList.toggle("minimized");
+      }
+      window.toggleVideoDrawerMinimize = toggleVideoDrawerMinimize;
+
+      function launchZoomWithPasscode() {
+        if (!currentActiveVideo || currentActiveVideo.type !== "zoom") return;
+        if (currentActiveVideo.passcode) {
+          navigator.clipboard.writeText(currentActiveVideo.passcode).then(() => {
+            alert(`📋 Passcode "${currentActiveVideo.passcode}" copied to clipboard! Opening Zoom...`);
+          }).catch(() => {});
+        }
+        window.open(currentActiveVideo.src, "_blank");
+      }
+      window.launchZoomWithPasscode = launchZoomWithPasscode;
+
       function renderNativeCornellNote(node, rawUrl) {
         const paperEl = document.getElementById("cornellPaperContent");
         const scrollEl = document.getElementById("cornellPaperScroll");
@@ -3700,10 +3995,22 @@
             totalCuesCount++;
             const cueBadge = e.badge || "CONCEPT";
             const formattedNotes = formatMarkdownNotes(e.notes);
+            let videoBtnHtml = "";
+            if (e.video) {
+              const vJson = escapeHtml(JSON.stringify(e.video));
+              videoBtnHtml = `
+                <button class="cornell-cue-video-btn" onclick="event.stopPropagation(); openVideoClipFromStr('${vJson}')" title="Watch solution clip (${escapeHtml(e.video.time_str || '')})">
+                  <span>🎬</span> ${escapeHtml(e.video.time_str || 'Video')}
+                </button>
+              `;
+            }
             rowsHtml += `
               <div class="cornell-entry-pair">
                 <div class="cornell-cue-box">
-                  <span class="cornell-cue-badge">${escapeHtml(cueBadge)}</span>
+                  <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:4px;">
+                    <span class="cornell-cue-badge">${escapeHtml(cueBadge)}</span>
+                    ${videoBtnHtml}
+                  </div>
                   <div class="cornell-cue-text">${escapeHtml(e.cue)}</div>
                 </div>
                 <div class="cornell-notes-box blurred" onclick="this.classList.toggle('revealed')">
@@ -3776,6 +4083,11 @@
       window.openCornellHub = openCornellHub;
 
       function openCornellReader(url, title, nodeId) {
+        if (!title && !nodeId && url) {
+          nodeId = url;
+          url = null;
+        }
+
         const ankiModal = document.getElementById("ankiModal");
         if (ankiModal) ankiModal.style.display = "none";
         const modal = document.getElementById("cornellModal");
@@ -3794,6 +4106,11 @@
         if (nodeId) targetNode = nodes.find(n => n.id === nodeId);
         if (!targetNode && url) targetNode = nodes.find(n => (n.cornellPath === url || n.cornellUrl === url));
         if (!targetNode && title) targetNode = nodes.find(n => n.cleanTitle === title || n.label === title);
+
+        if (targetNode) {
+          url = url || targetNode.cornellPath || targetNode.cornellUrl;
+          title = title || targetNode.cleanTitle || targetNode.label;
+        }
 
         const clean = cleanNodeTitle((targetNode && targetNode.cleanTitle) || title || "Cornell Interactive Notes");
         if (modalTitle) modalTitle.innerHTML = `<span>📝</span> ${clean}`;
@@ -3942,10 +4259,10 @@
                     </div>
                   </div>
                   <div class="cornell-note-card-actions">
-                    <button class="cornell-btn-read" onclick="openCornellReader('${url}', '${escapeHtml(n.cleanTitle)}', '${n.id}')">
+                    <button class="cornell-btn-read" data-node-id="${escapeHtml(n.id)}" onclick="openCornellReader(this.dataset.nodeId)">
                       📖 Read &amp; Quiz
                     </button>
-                    <button class="cornell-btn-anki" onclick="closeCornellModal(); startAnkiSession('node', '${n.id}')" title="Practice Cues in Flashcards">
+                    <button class="cornell-btn-anki" data-node-id="${escapeHtml(n.id)}" onclick="closeCornellModal(); startAnkiSession('node', this.dataset.nodeId)" title="Practice Cues in Flashcards">
                       🎴 Flashcards
                     </button>
                   </div>
@@ -4523,6 +4840,23 @@
         // Render KaTeX Formulas on front and back
         renderMathSafe(frontQ);
         renderMathSafe(backA);
+
+        // Video Solution Button on Flashcard Back
+        const videoBox = document.getElementById("ankiVideoActionBox");
+        const videoTs = document.getElementById("ankiVideoTimestamp");
+        const videoBtn = document.getElementById("ankiBtnWatchSolution");
+        if (videoBox && videoBtn) {
+          if (card.video) {
+            videoBox.style.display = "block";
+            if (videoTs) videoTs.textContent = card.video.time_str || "Solution";
+            videoBtn.onclick = (e) => {
+              e.stopPropagation();
+              openVideoClip(card.video);
+            };
+          } else {
+            videoBox.style.display = "none";
+          }
+        }
 
         // Update Bottom Bar
         if (flipBtn) flipBtn.style.display = "inline-flex";
