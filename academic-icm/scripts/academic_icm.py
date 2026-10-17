@@ -1520,20 +1520,25 @@ def cmd_smart_check(args: argparse.Namespace) -> int:
         if tp.is_file() and tp.name.endswith(".json"):
             notes_to_audit.append(tp)
         elif tp.is_dir():
-            notes_to_audit.extend(sorted(tp.rglob("*_cornell.json")))
+            for f in sorted(tp.rglob("*_cornell.json")):
+                if not any(p in f.parts for p in ("02_workers", "scratch", ".kanban", ".git", ".gemini", "brain")):
+                    notes_to_audit.append(f)
         else:
-            for jf in vault_root.rglob("*_cornell.json"):
+            for jf in sorted(vault_root.rglob("*_cornell.json")):
+                if any(p in jf.parts for p in ("02_workers", "scratch", ".kanban", ".git", ".gemini", "brain")):
+                    continue
                 if target.lower() in jf.name.lower():
                     notes_to_audit.append(jf)
     else:
         notes_map = collect_cornell_notes(vault_root)
-        for jf in sorted(notes_map.keys()):
-            info = notes_map[jf]
-            jp = info["json_path"]
+        unique_jsons = {v["json_path"] for v in notes_map.values()}
+        for jp in sorted(unique_jsons):
             if week_token and not matches_week_filter(str(jp), week_token):
                 continue
-            if jp not in notes_to_audit:
-                notes_to_audit.append(jp)
+            notes_to_audit.append(jp)
+
+    # Deduplicate preserving order
+    notes_to_audit = list(dict.fromkeys(notes_to_audit))
 
     if not notes_to_audit:
         print("❌ No matching Cornell notes found to audit.")
