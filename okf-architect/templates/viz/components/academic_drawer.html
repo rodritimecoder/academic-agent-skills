@@ -1,0 +1,61 @@
+  <div id="detailsDrawer">
+    <div class="drawer-header">
+      <div class="drawer-title" id="dTitle">Concept Title</div>
+      <button class="drawer-close" id="drawerClose">&times;</button>
+    </div>
+
+    <div id="dCourseBadge" class="course-badge">Course Name</div>
+
+    <div class="action-block" id="dCornellBlock" style="display:none; margin: 4px 0 6px 0;">
+      <a id="dCornellLink" href="#" target="_blank" class="cornell-action-btn">
+        <span>📝</span> Open Interactive Cornell Notes (<span id="dCornellCues">0</span> Cues)
+      </a>
+    </div>
+
+    <div class="action-block" id="dAnkiBlock" style="display:none; margin: 0 0 10px 0;">
+      <button id="dAnkiBtn" class="anki-action-btn" type="button">
+        <span>🎴</span> Study Anki Flashcards (<span id="dAnkiCount">0</span> Cards)
+      </button>
+    </div>
+
+    <!-- PDF Problem Sheet Button -->
+    <div class="action-block" id="dPdfBlock" style="display:none; margin: 4px 0 6px 0;">
+      <button id="dPdfBtn" class="btn-pdf-view" type="button">
+        <span>📄</span> View Problem Sheet (PDF)
+      </button>
+    </div>
+
+    <!-- Worked Solution Video Cues -->
+    <div class="action-block" id="dSolutionCuesBlock" style="display:none; margin: 8px 0 10px 0; background:rgba(137,180,250,0.06); border:1px solid rgba(137,180,250,0.3); border-radius:8px; padding:12px;">
+      <div style="font-weight:600; font-size:13px; color:#89b4fa; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
+        <span>🎬</span> Worked Solution Cues (Click to Seek)
+      </div>
+      <div id="dSolutionCuesList" style="display:flex; flex-direction:column; gap:6px;"></div>
+    </div>
+
+    <div class="meta-block">
+      <div class="meta-tag">Concept ID & Path</div>
+      <div class="meta-content" id="dId" style="font-family: monospace; font-size: 11px; color: var(--accent);">id</div>
+    </div>
+
+    <div class="meta-block">
+      <div class="meta-tag">Trust Tier</div>
+      <div class="meta-content" id="dTrust">Human-Reviewed</div>
+    </div>
+
+    <div class="meta-block">
+      <div class="meta-tag">Description</div>
+      <div class="meta-content" id="dDesc">Description goes here...</div>
+    </div>
+
+    <div class="meta-block" id="tagsContainer">
+      <div class="meta-tag">Tags</div>
+      <div class="tag-container" id="dTags"></div>
+    </div>
+
+    <div class="meta-block">
+      <div class="meta-tag">Connected Edges (<span id="dLinkCount">0</span>)</div>
+      <ul class="connections-list" id="dLinks"></ul>
+    </div>
+  </div>
+

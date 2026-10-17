@@ -1117,6 +1117,38 @@ def generate_cornell_portal(bundle_root: Path, nodes: List[Dict[str, Any]]) -> b
     return True
 
 
+def load_and_assemble_viz_template(template_dir: Path) -> str:
+    """Load and assemble viz_template from modular templates/viz/ or fallback to monolithic viz_template.html."""
+    modular_index = template_dir / "viz" / "index.html"
+    if modular_index.is_file():
+        viz_root = template_dir / "viz"
+        raw_index = modular_index.read_text(encoding="utf-8")
+
+        solutions_json_path = viz_root / "data" / "worked_solutions_db.json"
+        solutions_json = "{}"
+        if solutions_json_path.is_file():
+            solutions_json = solutions_json_path.read_text(encoding="utf-8")
+
+        def replace_include(match):
+            rel_inc = match.group(1).strip("\"' ")
+            inc_file = viz_root / rel_inc
+            if inc_file.is_file():
+                content = inc_file.read_text(encoding="utf-8")
+                if "/* __WORKED_SOLUTIONS_DB__ */" in content:
+                    content = content.replace("/* __WORKED_SOLUTIONS_DB__ */", solutions_json)
+                return content
+            print(f"⚠️ Warning: Included template module not found: {inc_file}")
+            return f"<!-- Missing include: {rel_inc} -->"
+
+        assembled = re.sub(r'<!--\s*@include\s+["\']([^"\']+)["\']\s*-->', replace_include, raw_index)
+        return assembled
+
+    fallback = template_dir / "viz_template.html"
+    if fallback.is_file():
+        return fallback.read_text(encoding="utf-8")
+    return ""
+
+
 def generate_viz(bundle_root: Path, output_file: Optional[Path] = None, tree_file: Optional[Path] = None) -> bool:
     """Generate standalone viz.html interactive graph and cornell study portal for OKF bundle."""
     print(f"\n📊 [Knowledge Graph] Generating Canvas-Structured viz.html for bundle: {bundle_root.resolve()}")
@@ -1147,15 +1179,14 @@ def generate_viz(bundle_root: Path, output_file: Optional[Path] = None, tree_fil
     for n in nodes:
         n["data"]["degree"] = degree_map.get(n["data"]["id"], 0)
 
-    template_path = TEMPLATE_DIR / "viz_template.html"
-    if not template_path.is_file():
-        print(f"❌ Error: viz_template.html missing at {template_path}")
+    template_html = load_and_assemble_viz_template(TEMPLATE_DIR)
+    if not template_html:
+        print(f"❌ Error: viz template missing at {TEMPLATE_DIR}")
         return False
 
     graph_payload = {"nodes": nodes, "edges": edges}
     graph_json = json.dumps(graph_payload, indent=2)
 
-    template_html = template_path.read_text(encoding="utf-8")
     d3_path = TEMPLATE_DIR / "d3.min.js"
     d3_code = d3_path.read_text(encoding="utf-8") if d3_path.is_file() else ""
     rendered_html = template_html.replace("/* __D3_INLINE__ */", d3_code)
