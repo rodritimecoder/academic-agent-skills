@@ -469,11 +469,11 @@ def extract_video_info(
                             passcode = sol.get("passcode", "")
                             break
                     if not passcode:
-                        m_w = re.search(r'\b(?:week|w)[_\s-]*0?(\d+)\b', f"{jf.stem} {cue} {notes}", re.IGNORECASE)
+                        m_w = re.search(r'\b(?:week|w)[_\s-]*0?(\d+)(?!\d)', f"{jf.stem} {cue} {notes}", re.IGNORECASE)
                         if m_w:
                             w_target = m_w.group(1)
                             for key, sol in sol_data.items():
-                                m_sol_w = re.search(r'week_0?(\d+)', key, re.IGNORECASE)
+                                m_sol_w = re.search(r'week_0?(\d+)(?!\d)', key, re.IGNORECASE)
                                 if m_sol_w and m_sol_w.group(1) == w_target:
                                     passcode = sol.get("passcode", "")
                                     break
@@ -500,7 +500,7 @@ def extract_video_info(
                         for key, sol in sol_data.items():
                             m_w = re.search(r'week_?(\d+)', key, re.IGNORECASE)
                             w_num = m_w.group(1) if m_w else ""
-                            matches_week = bool(w_num and re.search(rf'\b(?:week|w)[_\s-]*0?{w_num}\b', search_target, re.IGNORECASE))
+                            matches_week = bool(w_num and re.search(rf'\b(?:week|w)[_\s-]*0?{w_num}(?!\d)', search_target, re.IGNORECASE))
                             if key in search_target or matches_week:
                                 if sol.get("videoSrc") and sol["videoSrc"].startswith("http"):
                                     resolved_zoom = {
@@ -528,7 +528,7 @@ def extract_video_info(
     if not video_data:
         m_imp = re.search(r'\[Timestamp:\s*([0-9:]+)\]', combined, re.IGNORECASE) or \
                 re.search(r'\*\*Video Walkthrough Timestamp\*\*:\s*`?\[([0-9:]+)\]`?', combined, re.IGNORECASE) or \
-                re.search(r'\[([0-9]{1,2}:\d{2}:\d{2})\]', combined)
+                re.search(r'\[([0-9]{1,2}:\d{2}(?::\d{2})?)\]', combined)
         if m_imp:
             time_str = (m_imp.group(1) if m_imp.lastindex >= 1 and m_imp.group(1) else m_imp.group(0).strip("[]`"))
             sec = parse_time_to_seconds(time_str)
@@ -540,8 +540,8 @@ def extract_video_info(
                     break
 
             # 1. Determine the week of this note
-            m_wk = re.search(r'\b(?:week|w)[_\s-]*0?(\d+)\b', str(jf), re.IGNORECASE) or \
-                   re.search(r'\b(?:week|w)[_\s-]*0?(\d+)\b', f"{cue} {notes}", re.IGNORECASE)
+            m_wk = re.search(r'\b(?:week|w)[_\s-]*0?(\d+)(?!\d)', str(jf), re.IGNORECASE) or \
+                   re.search(r'\b(?:week|w)[_\s-]*0?(\d+)(?!\d)', f"{cue} {notes}", re.IGNORECASE)
             note_week = m_wk.group(1) if m_wk else None
 
             # 2. Look up worked_solutions_db for this exact week
@@ -550,7 +550,7 @@ def extract_video_info(
                 try:
                     sol_data = json.loads(sol_db_path.read_text(encoding="utf-8"))
                     for key, sol in sol_data.items():
-                        m_sol_w = re.search(r'week_0?(\d+)', key, re.IGNORECASE)
+                        m_sol_w = re.search(r'week_0?(\d+)(?!\d)', key, re.IGNORECASE)
                         if m_sol_w and m_sol_w.group(1) == note_week:
                             v_type = sol.get("type", "zoom")
                             v_src = sol.get("videoSrc", "")
@@ -577,7 +577,7 @@ def extract_video_info(
             if not video_data and course_dir and note_week:
                 cand_mp4s = [
                     f for f in (list(course_dir.glob("videos/*.mp4")) + list(course_dir.glob("*.mp4")))
-                    if re.search(rf'\b(?:week|w)[_\s-]*0?{note_week}\b', f.name, re.IGNORECASE)
+                    if re.search(rf'\b(?:week|w)[_\s-]*0?{note_week}(?!\d)', f.name, re.IGNORECASE)
                 ]
                 if cand_mp4s:
                     rel_mp4 = str(cand_mp4s[0].relative_to(bundle_root)).replace("\\", "/")
