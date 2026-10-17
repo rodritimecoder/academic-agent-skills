@@ -9,7 +9,7 @@ import json
 import os
 import re
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -43,6 +43,7 @@ class CornellInfo:
     sections: int
     source: str
     cards: List[Dict[str, Any]]
+    sections_data: List[Dict[str, Any]] = field(default_factory=list)
 
 
 def parse_frontmatter(file_path: Path) -> Tuple[Dict[str, Any], str]:
@@ -440,21 +441,30 @@ def collect_cornell_map(bundle_root: Path) -> Dict[str, CornellInfo]:
                     rel_html = str(html_candidate.relative_to(bundle_root)).replace("\\", "/")
                     clean_jf_stem = re.sub(r'_cornell(_cornell)?$', '', jf.stem, flags=re.IGNORECASE).lower().replace("-", "_").replace(" ", "_")
                     cards_list: List[Dict[str, Any]] = []
+                    sections_list: List[Dict[str, Any]] = []
                     for sec_idx, sec in enumerate(c_data.get("sections", [])):
                         heading = sec.get("heading", "")
+                        sec_entries = []
                         for e_idx, entry in enumerate(sec.get("entries", [])):
                             cue_text = entry.get("cue", "").strip()
                             notes_text = entry.get("notes", "").strip()
                             badge_text = entry.get("badge", "concept")
                             if cue_text:
                                 clean_cue, clean_notes = sanitize_cornell_card(cue_text, notes_text)
-                                cards_list.append({
+                                card_item = {
                                     "id": f"{clean_jf_stem}_{sec_idx}_{e_idx}",
                                     "section": heading,
                                     "badge": badge_text,
                                     "cue": clean_cue,
                                     "notes": clean_notes
-                                })
+                                }
+                                cards_list.append(card_item)
+                                sec_entries.append(card_item)
+                        sections_list.append({
+                            "heading": heading,
+                            "entries": sec_entries,
+                            "summary": sec.get("summary", "")
+                        })
 
                     info = CornellInfo(
                         html_path=rel_html,
@@ -462,7 +472,8 @@ def collect_cornell_map(bundle_root: Path) -> Dict[str, CornellInfo]:
                         cues=len(cards_list),
                         sections=len(c_data.get("sections", [])),
                         source=src,
-                        cards=cards_list
+                        cards=cards_list,
+                        sections_data=sections_list
                     )
                     # Index under original and normalized stems
                     cornell_map[clean_jf_stem] = info
@@ -746,7 +757,8 @@ def build_graph_nodes(
                 "has_cornell": has_cornell,
                 "cornell_path": cornell_path,
                 "cornell_cues": cornell_cues,
-                "cornell_cards": cornell_info.cards if cornell_info else []
+                "cornell_cards": cornell_info.cards if cornell_info else [],
+                "cornell_sections": cornell_info.sections_data if cornell_info else []
             }
         })
         node_ids.add(concept_id)
