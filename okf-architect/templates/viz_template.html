@@ -3959,7 +3959,7 @@
           cLink.onclick = null;
         }
 
-        // Academic Trinity: PDF Problem Sheet & Solution Cues
+        // Academic Trinity: Dynamic PDF Problem Sheet & Solution Cues
         const pdfBlock = document.getElementById("dPdfBlock");
         const pdfBtn = document.getElementById("dPdfBtn");
         const cuesBlock = document.getElementById("dSolutionCuesBlock");
@@ -3967,7 +3967,18 @@
 
         const cleanId = (n.id || "").toLowerCase();
         let targetPdf = null;
-        if (cleanId.includes("48520") && cleanId.includes("week_2")) {
+        let matchedSolKey = null;
+
+        for (const solKey of Object.keys(WORKED_SOLUTIONS_DB)) {
+          if (cleanId.includes(solKey)) {
+            matchedSolKey = solKey;
+            break;
+          }
+        }
+
+        if (matchedSolKey && WORKED_SOLUTIONS_DB[matchedSolKey].pdfPath) {
+          targetPdf = WORKED_SOLUTIONS_DB[matchedSolKey].pdfPath;
+        } else if (cleanId.includes("48520") && cleanId.includes("week_2")) {
           targetPdf = "48520 - Electronics and Circuits/Week_2/Week_2_Topic_Notes.pdf";
         }
 
@@ -3985,8 +3996,8 @@
 
         // Solution Cues
         if (cuesBlock && cuesList) {
-          const solData = WORKED_SOLUTIONS_DB["week_2_tutorial_solutions_toan"];
-          if (cleanId.includes("week_2_tutorial_solutions") && solData) {
+          if (matchedSolKey && WORKED_SOLUTIONS_DB[matchedSolKey]) {
+            const solData = WORKED_SOLUTIONS_DB[matchedSolKey];
             cuesBlock.style.display = "block";
             cuesList.innerHTML = "";
             solData.cues.forEach(cue => {
@@ -4308,19 +4319,197 @@
 
       // Solution Cues Database for Video Walkthroughs
       const WORKED_SOLUTIONS_DB = {
-        "week_2_tutorial_solutions_toan": {
-          title: "Dr. Trong Toan Tran — Week 2 Worked Tutorial Walkthrough",
-          videoSrc: "48520 - Electronics and Circuits/recordings/Week_2_-_Nodal_and_Mesh_Analysis_Circuit_Analysis_Techniques/trong_toan_tran_s_zoom_meeting.mp4",
-          pdfPath: "48520 - Electronics and Circuits/Week_2/Week_2_Topic_Notes.pdf",
-          cues: [
-            { label: "Problem 1: Nodal Supernode (V3 - V2 = 22V)", time: "11:23", seconds: 683 },
-            { label: "Problem 2: Mesh Current Supermesh Loop", time: "17:57", seconds: 1077 },
-            { label: "Problem 3: Superposition & Power Trap", time: "26:04", seconds: 1564 },
-            { label: "Problem 4: Source Transformation for Parallel Reductions", time: "31:54", seconds: 1914 },
-            { label: "Problem 5: Thevenin 1V Test Source with Dependent Source", time: "45:27", seconds: 2727 }
-          ]
-        }
-      };
+      "week_10_tutorial_solutions_alpha": {
+            "title": "Alpha Bah \u2014 Week 10 Tutorial Walkthrough (Resonance & Q)",
+            "videoSrc": "48520 - Electronics and Circuits/recordings/Week_10_Second-Order_Frequency_Response_Second-Order_Op-Amp_Filters/48520_electronics_and_circuits_autumn_2026_transcript.md",
+            "pdfPath": "48520 - Electronics and Circuits/Week_10/Week_10_Topic_Notes.pdf",
+            "cues": [
+                  {
+                        "label": "Problem 1: Series vs Parallel Resonant Formulas",
+                        "time": "04:34",
+                        "seconds": 274
+                  },
+                  {
+                        "label": "Problem 2: Half-Power Frequencies $\\omega_1$ and $\\omega_2$",
+                        "time": "20:20",
+                        "seconds": 1220
+                  }
+            ]
+      },
+      "week_1_tutorial_solutions_toan": {
+            "title": "Dr. Trong Toan Tran \u2014 Week 1 Tutorial Problem Walkthrough",
+            "videoSrc": "48520 - Electronics and Circuits/recordings/Week_1_-_Basic_Laws_Amplifiers/trong_toan_tran_s_zoom_meeting.mp4",
+            "pdfPath": "48520 - Electronics and Circuits/Week_1/Week_1_Topic_Notes.pdf",
+            "cues": [
+                  {
+                        "label": "Problem 1: KCL & KVL Sign Discipline at Multi-Branch Nodes",
+                        "time": "08:15",
+                        "seconds": 495
+                  },
+                  {
+                        "label": "Problem 2: Ideal Op-Amp Virtual Short & Virtual Ground",
+                        "time": "18:40",
+                        "seconds": 1120
+                  },
+                  {
+                        "label": "Problem 3: Inverting vs Non-Inverting Closed-Loop Gain",
+                        "time": "27:30",
+                        "seconds": 1650
+                  }
+            ]
+      },
+      "week_2_tutorial_solutions_toan": {
+            "title": "Dr. Trong Toan Tran \u2014 Week 2 Tutorial Problem Walkthrough",
+            "videoSrc": "48520 - Electronics and Circuits/recordings/Week_2_-_Nodal_and_Mesh_Analysis_Circuit_Analysis_Techniques/trong_toan_tran_s_zoom_meeting.mp4",
+            "pdfPath": "48520 - Electronics and Circuits/Week_2/Week_2_Topic_Notes.pdf",
+            "cues": [
+                  {
+                        "label": "Problem 1: Nodal Analysis with Supernode",
+                        "time": "11:23",
+                        "seconds": 683
+                  },
+                  {
+                        "label": "Problem 2: Mesh Current Analysis with Supermesh",
+                        "time": "17:57",
+                        "seconds": 1077
+                  },
+                  {
+                        "label": "Problem 3: Superposition Principle & Power Trap",
+                        "time": "26:04",
+                        "seconds": 1564
+                  },
+                  {
+                        "label": "Problem 4: Source Transformation for Parallel Reductions",
+                        "time": "31:54",
+                        "seconds": 1914
+                  },
+                  {
+                        "label": "Problem 5: Thevenin Equivalent with Dependent Sources (Test Source Method)",
+                        "time": "45:27",
+                        "seconds": 2727
+                  }
+            ]
+      },
+      "week_3_tutorial_solutions_toan": {
+            "title": "Dr. Trong Toan Tran \u2014 Week 3 Tutorial Walkthrough",
+            "videoSrc": "48520 - Electronics and Circuits/recordings/Week_3_-_Linear_Op-Amp_Applications_Reactive_Components/trong_toan_tran_s_zoom_meeting.mp4",
+            "pdfPath": "48520 - Electronics and Circuits/Week_3/Week_3_Topic_Notes.pdf",
+            "cues": [
+                  {
+                        "label": "Problem 1: Weighted Inverting Summing Amplifier",
+                        "time": "12:58",
+                        "seconds": 778
+                  },
+                  {
+                        "label": "Problem 2: Difference / Subtractor Amplifier Balancing Condition",
+                        "time": "20:08",
+                        "seconds": 1208
+                  },
+                  {
+                        "label": "Problem 3: Ideal Op-Amp Integrator & DC Saturation",
+                        "time": "26:55",
+                        "seconds": 1615
+                  }
+            ]
+      },
+      "week_4_tutorial_solutions_toan": {
+            "title": "Dr. Trong Toan Tran \u2014 Week 4 Tutorial Walkthrough",
+            "videoSrc": "48520 - Electronics and Circuits/recordings/Week_4_-_Diodes_and_Basic_Diode_Circuits_Source-Free_RC_and_RL_Circuits/trong_toan_tran_s_zoom_meeting.mp4",
+            "pdfPath": "48520 - Electronics and Circuits/Week_4/Week_4_Topic_Notes.pdf",
+            "cues": [
+                  {
+                        "label": "Problem 1: Diode CVD Model State Assumption & Verification",
+                        "time": "06:42",
+                        "seconds": 402
+                  },
+                  {
+                        "label": "Problem 2: Source-Free RC Natural Decay & Time Constant",
+                        "time": "15:10",
+                        "seconds": 910
+                  }
+            ]
+      },
+      "week_5_tutorial_solutions_toan": {
+            "title": "Dr. Trong Toan Tran \u2014 Week 5 Tutorial Walkthrough",
+            "videoSrc": "48520 - Electronics and Circuits/recordings/Week_5_-_First-Order_Step_Response/trong_toan_tran_s_zoom_meeting.mp4",
+            "pdfPath": "48520 - Electronics and Circuits/Week_5/Week_5_Topic_Notes.pdf",
+            "cues": [
+                  {
+                        "label": "Problem 1: The Universal 3-Step Transient Formula",
+                        "time": "04:40",
+                        "seconds": 280
+                  },
+                  {
+                        "label": "Problem 2: Continuity of State Variables ($t=0^-$ vs $t=0^+$)",
+                        "time": "13:35",
+                        "seconds": 815
+                  }
+            ]
+      },
+      "week_6_tutorial_solutions_alpha": {
+            "title": "Alpha Bah \u2014 Week 6 Tutorial Walkthrough (Phasors)",
+            "videoSrc": "48520 - Electronics and Circuits/recordings/Week_6_-_The_Phasor_Concept/48520_Electronics_and_Circuits_-_Autumn_2026.vtt",
+            "pdfPath": "48520 - Electronics and Circuits/Week_6/Week_6_Topic_Notes.pdf",
+            "cues": [
+                  {
+                        "label": "Problem 1: Sinusoid to Phasor Domain Transform",
+                        "time": "05:12",
+                        "seconds": 312
+                  },
+                  {
+                        "label": "Problem 2: Complex Impedance of Reactive Components",
+                        "time": "14:45",
+                        "seconds": 885
+                  }
+            ]
+      },
+      "week_7_tutorial_solutions_alpha": {
+            "title": "Alpha Bah \u2014 Week 7 Tutorial Walkthrough (AC Steady-State)",
+            "videoSrc": "48520 - Electronics and Circuits/recordings/Week_7_The_Sinusoidal_Steady-State_Response/48520_Electronics_and_Circuits_-_Autumn_2026.vtt",
+            "pdfPath": "48520 - Electronics and Circuits/Week_7/Week_7_Topic_Notes.pdf",
+            "cues": [
+                  {
+                        "label": "Problem 1: AC Nodal Analysis with Phasor Admittances",
+                        "time": "08:45",
+                        "seconds": 525
+                  },
+                  {
+                        "label": "Problem 2: AC Thevenin Equivalent Circuit",
+                        "time": "18:20",
+                        "seconds": 1100
+                  }
+            ]
+      },
+      "week_8_tutorial_solutions_ash": {
+            "title": "Aiswarya Pradeepkumar \u2014 Week 8 Tutorial Walkthrough (Filters)",
+            "videoSrc": "48520 - Electronics and Circuits/recordings/Week_8_Frequency_Response_First-Order_Op-Amp_Filters/aiswarya_pradeepkumar_s_zoom_meeting_transcript.md",
+            "pdfPath": "48520 - Electronics and Circuits/Week_8/Week_8_Topic_Notes.pdf",
+            "cues": [
+                  {
+                        "label": "Problem 1: Active Inverting Low-Pass Filter Transfer Function",
+                        "time": "07:49",
+                        "seconds": 469
+                  },
+                  {
+                        "label": "Problem 2: Filter Design from Specs ($f_c$ and Passband Gain)",
+                        "time": "36:24",
+                        "seconds": 2184
+                  }
+            ]
+      },
+      "week_9_tutorial_solutions_ash": {
+            "title": "Aiswarya Pradeepkumar \u2014 Week 9 Tutorial Walkthrough (RLC)",
+            "videoSrc": "48520 - Electronics and Circuits/recordings/Week_9_Topic_-_Second-Order_Step_Response/aiswarya_pradeepkumar_s_zoom_meeting_transcript.md",
+            "pdfPath": "48520 - Electronics and Circuits/Week_9/Week_9_Topic_Notes.pdf",
+            "cues": [
+                  {
+                        "label": "Problem 1: Series RLC Damping Factor $\\alpha$ vs Resonant Frequency $\\omega_0$",
+                        "time": "11:20",
+                        "seconds": 680
+                  }
+            ]
+      }
+};
 
 
       function toggleVideoDrawerMinimize() {
