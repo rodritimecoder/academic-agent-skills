@@ -1439,7 +1439,189 @@ def cmd_verify(args: argparse.Namespace) -> int:
     if output_json:
         print(json.dumps({"scope": week_label, "passed": overall_passed, "gates": gate_results}, indent=2))
 
-    return 0 if overall_passed else 1
+# ==============================================================================
+# SUBCOMMAND: smart-check (AGY 3.8 Flash Cognitive Audit & OneJev Vision Gating)
+# ==============================================================================
+def audit_note_with_flash(note_data: Dict[str, Any], model: str = "gemini-3.8-flash-low") -> Dict[str, Any]:
+    cues = []
+    for sec in note_data.get("sections", []):
+        for entry in sec.get("entries", []):
+            cues.append({
+                "cue": entry.get("cue", ""),
+                "notes": entry.get("notes", "")
+            })
+
+    prompt = f"""You are a Senior Academic Examiner evaluating an Electrical Engineering Cornell Study Note.
+Topic: {note_data.get("title")}
+
+CUES AND NOTES:
+{json.dumps(cues, indent=2, ensure_ascii=False)}
+
+Evaluate this study note on 3 strict criteria:
+1. BLOOMS TAXONOMY: Classify each cue into Level 1 (Remember/Trivia), Level 2 (Understand), Level 3 (Apply/Calculate), Level 4 (Analyze/Compare), Level 5 (Evaluate/Pitfalls).
+2. DERIVATION & SCIENTIFIC ACCURACY: Are equations, signs (e.g. +jωL vs 1/(jωC)), and SI units accurate?
+3. EXAM READINESS SCORE: 0 to 100. (Pass threshold: >= 75, with >= 50% Level 3+ cues).
+
+Return strictly a single valid JSON object with NO surrounding markdown or extra text:
+{{
+  "exam_readiness_score": <int>,
+  "passed": <bool>,
+  "bloom_distribution": {{"remember": <int>, "understand": <int>, "apply": <int>, "analyze": <int>, "evaluate": <int>}},
+  "accuracy_verdict": "<Clean|Minor Issues|Flawed>",
+  "strengths": ["<str>"],
+  "improvements": ["<str>"],
+  "rejection_delta": null or "<actionable delta>"
+}}
+"""
+    cmd = ["agy", "--model", model, "--print", prompt]
+    try:
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=40)
+        out = res.stdout.strip()
+        json_match = re.search(r'\{[\s\S]*\}', out)
+        if json_match:
+            return json.loads(json_match.group(0))
+        return {"error": "Failed to parse JSON from AGY subagent", "raw": out}
+    except Exception as e:
+        return {"error": str(e)}
+
+def audit_image_with_onejev(img_path: Path, topic_context: str) -> Dict[str, Any]:
+    jev_script = Path("/run/media/rodri/AI/skills/jev-decision/jev_decision.py")
+    if not jev_script.is_file():
+        return {"checked": False, "reason": "jev_decision.py not found"}
+    
+    q = f"Does this image show an authentic electrical schematic, circuit diagram, or waveform related to {topic_context}?"
+    try:
+        cmd = [sys.executable, str(jev_script), "bool", "--context", f"Course circuit figure for {topic_context}", "--question", q, "--image", str(img_path), "--timeout", "5"]
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=8)
+        is_yes = "YES" in res.stdout
+        m_conf = re.search(r'Confidence:\s*([\d.]+)%', res.stdout)
+        conf = float(m_conf.group(1)) / 100.0 if m_conf else 0.5
+        return {"checked": True, "image": img_path.name, "valid_circuit": is_yes, "confidence": conf}
+    except Exception as e:
+        return {"checked": False, "image": img_path.name, "error": str(e)}
+
+def cmd_smart_check(args: argparse.Namespace) -> int:
+    vault_root = find_vault_root(args.vault)
+    target = getattr(args, "target", None)
+    week_token = normalize_week_filter(getattr(args, "week", None))
+    enable_vision = getattr(args, "vision", True)
+    model = getattr(args, "model", "gemini-3.8-flash-low")
+    output_json = getattr(args, "json", False)
+
+    print(f"\n🧠 [Academic ICM Smart Check — AGY 3.8 Flash & OneJev Vision]")
+    print(f"   • Vault Root : {vault_root}")
+    print(f"   • Cognitive  : AGY Subagent ({model})")
+    print(f"   • Vision     : OneJev1.5-4B (:8083)")
+
+    # Collect notes
+    notes_to_audit = []
+    if target:
+        tp = Path(target).resolve()
+        if tp.is_file() and tp.name.endswith(".json"):
+            notes_to_audit.append(tp)
+        elif tp.is_dir():
+            notes_to_audit.extend(sorted(tp.rglob("*_cornell.json")))
+        else:
+            for jf in vault_root.rglob("*_cornell.json"):
+                if target.lower() in jf.name.lower():
+                    notes_to_audit.append(jf)
+    else:
+        notes_map = collect_cornell_notes(vault_root)
+        for jf in sorted(notes_map.keys()):
+            info = notes_map[jf]
+            jp = info["json_path"]
+            if week_token and not matches_week_filter(str(jp), week_token):
+                continue
+            if jp not in notes_to_audit:
+                notes_to_audit.append(jp)
+
+    if not notes_to_audit:
+        print("❌ No matching Cornell notes found to audit.")
+        return 1
+
+    print(f"   • Target Notes: {len(notes_to_audit)} notes to inspect\n")
+
+    audit_reports = []
+    all_passed = True
+
+    for jf in notes_to_audit:
+        try:
+            data = json.loads(jf.read_text(encoding="utf-8"))
+        except Exception as e:
+            print(f"❌ Failed to parse {jf.name}: {e}")
+            continue
+
+        title = data.get("title", jf.stem)
+        print(f"📄 Auditing: {jf.name} ('{title[:50]}')")
+
+        # 1. Vision Gating with OneJev
+        vision_results = []
+        if enable_vision:
+            # Find images in source directory
+            src = data.get("source", "")
+            img_candidates = []
+            if src:
+                subject_root = jf.parent.parent.parent if jf.parent.parent.name == "outputs" else jf.parent.parent
+                src_dir = (subject_root / src).parent
+                if src_dir.is_dir():
+                    for ext in ("*.jpg", "*.png", "*.jpeg"):
+                        img_candidates.extend(list(src_dir.glob(ext)))
+            
+            if img_candidates:
+                print(f"   👁️  [OneJev Vision] Found {len(img_candidates)} diagrams to inspect...")
+                for img in img_candidates[:3]:  # inspect sample of up to 3 figures
+                    v_res = audit_image_with_onejev(img, title)
+                    vision_results.append(v_res)
+                    icon = "✓" if v_res.get("valid_circuit") else "⚠️"
+                    conf_pct = v_res.get("confidence", 0) * 100
+                    print(f"      {icon} {img.name}: Valid Circuit = {v_res.get('valid_circuit')} (conf: {conf_pct:.1f}%)")
+
+        # 2. Cognitive Audit with AGY 3.8 Flash
+        print(f"   ⚡ [AGY 3.8 Flash] Running academic examiner cognitive audit...")
+        cog_res = audit_note_with_flash(data, model=model)
+        
+        if "error" in cog_res:
+            print(f"      ❌ AGY Subagent Error: {cog_res.get('error')}")
+            all_passed = False
+            audit_reports.append({"note": jf.name, "error": cog_res.get("error")})
+            continue
+
+        score = cog_res.get("exam_readiness_score", 0)
+        passed = cog_res.get("passed", False)
+        dist = cog_res.get("bloom_distribution", {})
+        verdict = cog_res.get("accuracy_verdict", "Unknown")
+
+        if not passed:
+            all_passed = False
+
+        status_icon = "✅ PASS" if passed else "🛑 REJECT"
+        print(f"   🎯 Verdict: {status_icon} (Exam Readiness Score: {score}/100, Accuracy: {verdict})")
+        print(f"      • Bloom Levels: Remember={dist.get('remember',0)}, Understand={dist.get('understand',0)}, Apply={dist.get('apply',0)}, Analyze={dist.get('analyze',0)}, Evaluate={dist.get('evaluate',0)}")
+        
+        for st in cog_res.get("strengths", [])[:2]:
+            print(f"      • ✨ Strength: {st}")
+        for imp in cog_res.get("improvements", [])[:2]:
+            print(f"      • 💡 Improvement: {imp}")
+        
+        if cog_res.get("rejection_delta"):
+            print(f"      • 📌 Rejection Delta: {cog_res.get('rejection_delta')}")
+        print()
+
+        audit_reports.append({
+            "note": jf.name,
+            "title": title,
+            "score": score,
+            "passed": passed,
+            "bloom": dist,
+            "accuracy": verdict,
+            "vision": vision_results,
+            "rejection_delta": cog_res.get("rejection_delta")
+        })
+
+    if output_json:
+        print(json.dumps(audit_reports, indent=2, ensure_ascii=False))
+
+    return 0 if all_passed else 1
 
 # ==============================================================================
 # SUBCOMMAND: serve
@@ -1573,9 +1755,19 @@ def main() -> int:
     p_verify.add_argument("--stage", choices=["1", "2", "3", "4", "5", "all"], default="all", help="Target specific stage gate (default: all)")
     p_verify.add_argument("--judge", action="store_true", default=True, help="Run unbiased 0-context local model judge (default: True)")
     p_verify.add_argument("--no-judge", dest="judge", action="store_false", help="Disable 0-context model judge")
+    p_verify.add_argument("--smart", action="store_true", help="Run deep cognitive audit with AGY 3.8 Flash and OneJev Vision")
     p_verify.add_argument("--json", action="store_true", help="Output machine-readable JSON evaluation report")
     p_verify.add_argument("--fix", action="store_true", help="Auto-repair fixable defects (e.g. normalize relative source paths)")
     p_verify.add_argument("--vault", default=None, help="Path to notes vault root")
+
+    # smart-check
+    p_smart = subparsers.add_parser("smart-check", help="Run deep cognitive & visual audit with AGY 3.8 Flash and OneJev Vision")
+    p_smart.add_argument("target", nargs="?", default=None, help="Path or substring of _cornell.json file or folder")
+    p_smart.add_argument("--week", default=None, help="Filter by week (e.g. 5, 6, 9)")
+    p_smart.add_argument("--no-vision", dest="vision", action="store_false", default=True, help="Disable OneJev vision image inspection")
+    p_smart.add_argument("--model", default="gemini-3.8-flash-low", help="AGY subagent model tier (default: gemini-3.8-flash-low)")
+    p_smart.add_argument("--json", action="store_true", help="Output machine-readable JSON report")
+    p_smart.add_argument("--vault", default=None, help="Path to notes vault root")
 
     # serve
     p_serve = subparsers.add_parser("serve", help="Start local web server for study portal")
@@ -1597,6 +1789,7 @@ def main() -> int:
         "stamp-video": cmd_stamp_video,
         "serve": cmd_serve,
         "verify": cmd_verify,
+        "smart-check": cmd_smart_check,
     }
 
     return dispatch[args.command](args)

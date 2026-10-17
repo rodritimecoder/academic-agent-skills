@@ -79,7 +79,19 @@ academic-icm verify --fix
 academic-icm verify 5 --stage 3
 ```
 
-### 2. Check Coverage & Detect Orphans
+### 2. Run Smart Cognitive & Visual Audit (AGY 3.8 Flash + OneJev Vision)
+```bash
+# Deep cognitive audit on a specific note
+academic-icm smart-check Week06_Phasors_cornell.json
+
+# Deep cognitive & visual audit on all notes for a week
+academic-icm smart-check --week 6
+
+# Smart audit with machine-readable JSON scorecard
+academic-icm smart-check --week 9 --json
+```
+
+### 3. Check Coverage & Detect Orphans
 ```bash
 academic-icm status
 # or target a specific vault
