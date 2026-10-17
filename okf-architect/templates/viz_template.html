@@ -439,6 +439,219 @@
       color: #f38ba8;
     }
 
+    /* Cornell Notes Hub & Reader Components */
+    .cornell-hub-view {
+      flex: 1;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background: radial-gradient(circle at 50% 10%, #151826, #0b0c10 85%);
+      box-sizing: border-box;
+      overflow: hidden;
+    }
+    .cornell-hub-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 12px 24px;
+      background: rgba(15, 17, 26, 0.85);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(12px);
+      flex-wrap: wrap;
+    }
+    .cornell-hub-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .cornell-hub-filter-pills {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .cornell-hub-pill {
+      font-size: 12px;
+      font-weight: 600;
+      padding: 5px 14px;
+      border-radius: 20px;
+      cursor: pointer;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: #cdd6f4;
+      transition: all 0.2s;
+    }
+    .cornell-hub-pill:hover, .cornell-hub-pill.active {
+      background: rgba(166, 227, 161, 0.18);
+      border-color: #a6e3a1;
+      color: #a6e3a1;
+      box-shadow: 0 0 10px rgba(166, 227, 161, 0.25);
+    }
+    .cornell-hub-search-box {
+      position: relative;
+      min-width: 260px;
+    }
+    .cornell-hub-search-input {
+      width: 100%;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 8px;
+      padding: 7px 14px 7px 32px;
+      color: #ffffff;
+      font-size: 13px;
+      outline: none;
+      transition: all 0.2s;
+    }
+    .cornell-hub-search-input:focus {
+      border-color: #a6e3a1;
+      background: rgba(255, 255, 255, 0.08);
+      box-shadow: 0 0 12px rgba(166, 227, 161, 0.2);
+    }
+    .cornell-hub-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+      max-width: 1400px;
+      width: 100%;
+      margin: 0 auto;
+      box-sizing: border-box;
+    }
+    .cornell-course-container {
+      background: rgba(20, 23, 33, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      border-radius: 12px;
+      padding: 18px 20px;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+    }
+    .cornell-course-header {
+      font-size: 15px;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      padding-bottom: 10px;
+    }
+    .cornell-module-block {
+      margin-bottom: 18px;
+    }
+    .cornell-module-header {
+      font-size: 13px;
+      font-weight: 700;
+      color: #fab387;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .cornell-notes-cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 12px;
+    }
+    .cornell-note-card {
+      background: rgba(255, 255, 255, 0.025);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      border-radius: 8px;
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 10px;
+      transition: all 0.2s ease;
+    }
+    .cornell-note-card:hover {
+      border-color: #a6e3a1;
+      background: rgba(166, 227, 161, 0.04);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    }
+    .cornell-note-card-title {
+      font-size: 13.5px;
+      font-weight: 600;
+      color: #f5f5f7;
+      line-height: 1.4;
+    }
+    .cornell-note-card-cues {
+      font-size: 11px;
+      font-weight: 600;
+      color: #a6e3a1;
+      background: rgba(166, 227, 161, 0.12);
+      padding: 2px 8px;
+      border-radius: 4px;
+      display: inline-block;
+      width: fit-content;
+    }
+    .cornell-note-card-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 4px;
+    }
+    .cornell-btn-read {
+      flex: 1;
+      text-align: center;
+      background: #1e3a2f;
+      color: #a6e3a1;
+      border: 1px solid #a6e3a1;
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 11.5px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .cornell-btn-read:hover {
+      background: #2a5242;
+    }
+    .cornell-btn-anki {
+      text-align: center;
+      background: rgba(203, 166, 247, 0.15);
+      color: #cba6f7;
+      border: 1px solid rgba(203, 166, 247, 0.35);
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 11.5px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .cornell-btn-anki:hover {
+      background: rgba(203, 166, 247, 0.28);
+      border-color: #cba6f7;
+      color: #ffffff;
+    }
+    .cornell-anki-switch-btn {
+      background: rgba(203, 166, 247, 0.15);
+      border: 1px solid rgba(203, 166, 247, 0.4);
+      color: #cba6f7;
+      padding: 5px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+    .cornell-anki-switch-btn:hover {
+      background: rgba(203, 166, 247, 0.3);
+      border-color: #cba6f7;
+      color: #fff;
+    }
+
     /* ============================================================
        CORNELL NOTES & ANKI SPACED REPETITION MODES
        ============================================================ */
@@ -1811,21 +2024,52 @@
     </div>
   </div>
 
-  <!-- Embedded Cornell Reader Modal (Full Screen Tab Experience) -->
+  <!-- Embedded Cornell Study Portal & Reader Modal -->
   <div id="cornellModal" class="cornell-modal" style="display:none;">
-    <div class="cornell-modal-content">
+    <!-- View 1: Cornell Notes Hub (Organized chronologically by Subject and Week) -->
+    <div id="cornellHubView" class="cornell-hub-view">
+      <div class="cornell-hub-toolbar">
+        <div style="display:flex; align-items:center; gap:16px;">
+          <button class="cornell-back-btn" onclick="closeCornellModal()" title="Return to Knowledge Cosmos (Esc)">
+            <span>←</span> Back to Cosmos
+          </button>
+          <div class="cornell-hub-title">
+            <span>📝</span> Cornell Notes Hub
+          </div>
+        </div>
+        <div class="cornell-hub-filter-pills" id="cornellCourseFilterPills">
+          <!-- Dynamically filled with course pills -->
+        </div>
+        <div style="display:flex; align-items:center; gap:12px;">
+          <div class="cornell-hub-search-box">
+            <span style="position:absolute; left:10px; top:50%; transform:translateY(-50%); font-size:12px; opacity:0.6;">🔍</span>
+            <input type="text" id="cornellSearchInput" class="cornell-hub-search-input" placeholder="Filter notes or cues..." oninput="filterCornellHub(this.value)">
+          </div>
+          <button class="cornell-modal-close-btn" onclick="closeCornellModal()" title="Close (Esc)">✕</button>
+        </div>
+      </div>
+      <div class="cornell-hub-body" id="cornellHubGrid">
+        <!-- Rendered dynamically by renderCornellHubGrid -->
+      </div>
+    </div>
+
+    <!-- View 2: Cornell Note Reader View (Interactive Self-Quiz Iframe) -->
+    <div id="cornellReaderView" class="cornell-modal-content" style="display:none;">
       <div class="cornell-modal-header">
-        <button id="cornellModalBack" class="cornell-back-btn" title="Return to Knowledge Cosmos (Esc)">
-          <span>←</span> Back to Cosmos
+        <button id="cornellReaderBack" class="cornell-back-btn" onclick="returnToCornellHub()" title="Return to Notes Hub">
+          <span>←</span> Back to Notes Hub
         </button>
-        <div id="cornellModalTitle" class="cornell-modal-title">
+        <div id="cornellReaderTitle" class="cornell-modal-title">
           <span>📝</span> Cornell Interactive Notes
         </div>
         <div style="display:flex; gap:10px; align-items:center;">
+          <button id="cornellReaderStudyAnki" class="cornell-anki-switch-btn" title="Practice these cues in Flashcards">
+            <span>🎴</span> Study Flashcards
+          </button>
           <a id="cornellModalPopout" href="#" target="_blank" rel="noopener noreferrer" class="cornell-popout-btn" title="Open in separate browser window">
             <span>↗</span> Open in New Tab
           </a>
-          <button id="cornellModalClose" class="cornell-modal-close-btn" title="Close (Esc)">✕</button>
+          <button id="cornellModalClose" class="cornell-modal-close-btn" onclick="closeCornellModal()" title="Close (Esc)">✕</button>
         </div>
       </div>
       <iframe id="cornellIframe" src="" style="width:100vw; height:calc(100vh - 48px); border:none; background:#f8fafc;"></iframe>
@@ -2062,17 +2306,26 @@
       }
       window.addEventListener("resize", resize);
 
-      // Title cleaner to remove redundant course code prefixes while preserving descriptive week badges and topic context
+      // Title cleaner to remove redundant course code prefixes, double stems, and trailing version artifacts
       function cleanNodeTitle(raw) {
         if (!raw) return "";
         let s = raw;
-        // Convert bracketed week badges like "[48520 W01] Foo" -> "W01: Foo"
-        s = s.replace(/^\[\d+\s+(W\d+)\]\s*/i, "$1: ");
-        // Strip bracket course numbers like "[41200] Foo", "[48520] Foo", "[48521] Foo", "[48430] Foo" -> "Foo"
-        s = s.replace(/^\[\d+\]\s*/g, "");
-        // Clean double underscores and normalize spaces
-        s = s.replace(/_/g, " ");
-        s = s.trim();
+        // Strip bracket prefixes like [48520 W09], [41200], [48521 W01]
+        s = s.replace(/^\[[^\]]+\]\s*/, "");
+        // Strip repeated week prefixes like "Week 6 Week 6", "Week 06:", "W01 W01"
+        s = s.replace(/^(?:week|w)\s*\d+[\s:_-]*(?:week\s*\d+[\s:_-]*)?/i, "");
+        // Strip module prefixes like "Module 02:", "mod_02 -"
+        s = s.replace(/^module\s*\d+[\s:_-]*/i, "");
+        // Strip lecture/file prefixes like "F01 -", "L02:"
+        s = s.replace(/^(?:f|l)\s*\d+[\s:_-]*/i, "");
+        // Strip trailing number/version artifacts like " 26", " v2", " tl"
+        s = s.replace(/\s+(?:26|tl|v2)\b/gi, "");
+        // Normalize underscores and multiple spaces
+        s = s.replace(/_+/g, " ").replace(/\s+/g, " ").trim();
+        // Capitalize first character cleanly
+        if (s && s.length > 0 && s[0] >= 'a' && s[0] <= 'z') {
+          s = s.charAt(0).toUpperCase() + s.slice(1);
+        }
         return s || raw;
       }
 
@@ -2107,6 +2360,7 @@
           degree: d.degree || 0,
           hasCornell: d.has_cornell || false,
           cornellPath: d.cornell_path || "",
+          cornellUrl: d.cornell_path || "",
           cornellCues: d.cornell_cues || 0,
           cornellCards: d.cornell_cards || [],
           radius: (d.type === "ModuleHub") ? 13 : Math.max(3.5, Math.min(13, 3.2 + Math.sqrt(d.degree || 0) * 1.8)),
@@ -3208,26 +3462,89 @@
         requestRender();
       };
 
-      // Embedded Cornell Reader Modal Logic
-      function openCornellModal(url, title) {
+      // Embedded Cornell Study Portal & Reader Modal Logic
+      let activeCornellCourse = 'all';
+      let cornellSearchQuery = '';
+
+      function getWeekSortOrder(name) {
+        if (!name) return 500;
+        const m = name.match(/\b(?:week|w)[s]?[\s_-]*(\d+)/i);
+        if (m) return parseInt(m[1], 10);
+        const m2 = name.match(/\bmodule[\s_-]*(\d+)/i);
+        if (m2) return parseInt(m2[1], 10);
+        if (/overview|intro|get started|orientation/i.test(name)) return -1;
+        if (/quiz|exam|assessment|project/i.test(name)) return 999;
+        return 500;
+      }
+
+      function openCornellHub() {
         const ankiModal = document.getElementById("ankiModal");
         if (ankiModal) ankiModal.style.display = "none";
         const modal = document.getElementById("cornellModal");
-        const iframe = document.getElementById("cornellIframe");
-        const modalTitle = document.getElementById("cornellModalTitle");
-        const popout = document.getElementById("cornellModalPopout");
+        const hubView = document.getElementById("cornellHubView");
+        const readerView = document.getElementById("cornellReaderView");
 
-        if (modalTitle) {
-          modalTitle.innerHTML = `<span>📝</span> ${title || "Cornell Interactive Notes"}`;
+        if (readerView) readerView.style.display = "none";
+        if (hubView) hubView.style.display = "flex";
+        if (modal) modal.style.display = "flex";
+
+        renderCornellHubPills();
+        renderCornellHubGrid();
+      }
+      window.openCornellHub = openCornellHub;
+
+      function openCornellReader(url, title, nodeId) {
+        const ankiModal = document.getElementById("ankiModal");
+        if (ankiModal) ankiModal.style.display = "none";
+        const modal = document.getElementById("cornellModal");
+        const hubView = document.getElementById("cornellHubView");
+        const readerView = document.getElementById("cornellReaderView");
+        const iframe = document.getElementById("cornellIframe");
+        const modalTitle = document.getElementById("cornellReaderTitle");
+        const popout = document.getElementById("cornellModalPopout");
+        const studyAnkiBtn = document.getElementById("cornellReaderStudyAnki");
+
+        if (hubView) hubView.style.display = "none";
+        if (readerView) readerView.style.display = "flex";
+        if (modal) modal.style.display = "flex";
+
+        const clean = cleanNodeTitle(title || "Cornell Interactive Notes");
+        if (modalTitle) modalTitle.innerHTML = `<span>📝</span> ${clean}`;
+        if (iframe) iframe.src = url;
+        if (popout) popout.href = url;
+
+        if (studyAnkiBtn) {
+          studyAnkiBtn.onclick = () => {
+            let targetNode = null;
+            if (nodeId) targetNode = nodes.find(n => n.id === nodeId);
+            if (!targetNode && url) targetNode = nodes.find(n => (n.cornellPath === url || n.cornellUrl === url));
+            if (targetNode) {
+              closeCornellModal();
+              startAnkiSession('node', targetNode.id);
+            } else {
+              closeCornellModal();
+              openAnkiModal();
+            }
+          };
         }
-        if (iframe) {
-          iframe.src = url;
-        }
-        if (popout) {
-          popout.href = url;
-        }
-        if (modal) {
-          modal.style.display = "flex";
+      }
+      window.openCornellReader = openCornellReader;
+
+      function returnToCornellHub() {
+        const iframe = document.getElementById("cornellIframe");
+        if (iframe) iframe.src = "about:blank";
+        const hubView = document.getElementById("cornellHubView");
+        const readerView = document.getElementById("cornellReaderView");
+        if (readerView) readerView.style.display = "none";
+        if (hubView) hubView.style.display = "flex";
+      }
+      window.returnToCornellHub = returnToCornellHub;
+
+      function openCornellModal(url, title, nodeId) {
+        if (!url || url === "cornell_index.html" || url === "#") {
+          openCornellHub();
+        } else {
+          openCornellReader(url, title, nodeId);
         }
       }
       window.openCornellModal = openCornellModal;
@@ -3238,31 +3555,162 @@
         if (iframe) iframe.src = "about:blank";
         if (modal) modal.style.display = "none";
       };
+      window.closeCornellModal = closeCornellModal;
 
-      const modalCloseBtn = document.getElementById("cornellModalClose");
-      if (modalCloseBtn) modalCloseBtn.onclick = closeCornellModal;
-
-      const modalBackBtn = document.getElementById("cornellModalBack");
-      if (modalBackBtn) modalBackBtn.onclick = closeCornellModal;
-
-      const cornellModalEl = document.getElementById("cornellModal");
-      if (cornellModalEl) {
-        cornellModalEl.onclick = e => {
-          if (e.target === cornellModalEl) {
-            const iframe = document.getElementById("cornellIframe");
-            if (iframe) iframe.src = "about:blank";
-            cornellModalEl.style.display = "none";
+      function renderCornellHubPills() {
+        const pillsEl = document.getElementById("cornellCourseFilterPills");
+        if (!pillsEl) return;
+        const coursesWithCornell = new Set();
+        nodes.forEach(n => {
+          if (n.hasCornell && (n.cornellPath || n.cornellUrl)) {
+            coursesWithCornell.add(n.course || "General");
           }
-        };
+        });
+
+        const sortedCourses = Array.from(coursesWithCornell).sort();
+        const totalNotes = nodes.filter(n => n.hasCornell && (n.cornellPath || n.cornellUrl)).length;
+        let html = `<button class="cornell-hub-pill ${activeCornellCourse === 'all' ? 'active' : ''}" onclick="setCornellCourseFilter('all')">All (${totalNotes})</button>`;
+        sortedCourses.forEach(c => {
+          const theme = COURSE_THEMES[c] || { name: c.split(' ')[0], color: '#89b4fa' };
+          const count = nodes.filter(n => (n.course === c) && n.hasCornell && (n.cornellPath || n.cornellUrl)).length;
+          html += `<button class="cornell-hub-pill ${activeCornellCourse === c ? 'active' : ''}" onclick="setCornellCourseFilter('${c}')">${theme.name} (${count})</button>`;
+        });
+        pillsEl.innerHTML = html;
+      }
+
+      function setCornellCourseFilter(c) {
+        activeCornellCourse = c;
+        renderCornellHubPills();
+        renderCornellHubGrid();
+      }
+      window.setCornellCourseFilter = setCornellCourseFilter;
+
+      function filterCornellHub(val) {
+        cornellSearchQuery = (val || "").toLowerCase().trim();
+        renderCornellHubGrid();
+      }
+      window.filterCornellHub = filterCornellHub;
+
+      function renderCornellHubGrid() {
+        const gridEl = document.getElementById("cornellHubGrid");
+        if (!gridEl) return;
+        gridEl.innerHTML = "";
+
+        const byCourse = {};
+        nodes.forEach(n => {
+          if (n.hasCornell && (n.cornellPath || n.cornellUrl)) {
+            const c = n.course || "General";
+            if (!byCourse[c]) byCourse[c] = {};
+            const m = n.module || "Overview";
+            if (!byCourse[c][m]) byCourse[c][m] = [];
+            byCourse[c][m].push(n);
+          }
+        });
+
+        const courseList = Object.keys(byCourse).sort();
+        let totalVisible = 0;
+
+        courseList.forEach(c => {
+          if (activeCornellCourse !== 'all' && activeCornellCourse !== c) return;
+          const theme = COURSE_THEMES[c] || { name: c, color: '#89b4fa' };
+          const mods = byCourse[c];
+
+          const sortedModKeys = Object.keys(mods).sort((a, b) => {
+            const diff = getWeekSortOrder(a) - getWeekSortOrder(b);
+            if (diff !== 0) return diff;
+            return a.localeCompare(b);
+          });
+
+          const renderedModBlocks = [];
+
+          sortedModKeys.forEach(m => {
+            const notesList = mods[m];
+            const matchingNotes = notesList.filter(n => {
+              if (!cornellSearchQuery) return true;
+              return (
+                n.cleanTitle.toLowerCase().includes(cornellSearchQuery) ||
+                m.toLowerCase().includes(cornellSearchQuery) ||
+                (n.cornellCards && n.cornellCards.some(cc => cc.cue.toLowerCase().includes(cornellSearchQuery) || cc.notes.toLowerCase().includes(cornellSearchQuery)))
+              );
+            });
+
+            if (matchingNotes.length === 0) return;
+            totalVisible += matchingNotes.length;
+
+            const cardsHtml = matchingNotes.map(n => {
+              const url = n.cornellPath || n.cornellUrl;
+              const cues = n.cornellCues || (n.cornellCards ? n.cornellCards.length : 0);
+              return `
+                <div class="cornell-note-card">
+                  <div>
+                    <div class="cornell-note-card-title">${n.cleanTitle}</div>
+                    <div style="margin-top:6px;">
+                      <span class="cornell-note-card-cues">⚡ ${cues} Cues</span>
+                    </div>
+                  </div>
+                  <div class="cornell-note-card-actions">
+                    <button class="cornell-btn-read" onclick="openCornellReader('${url}', '${escapeHtml(n.cleanTitle)}', '${n.id}')">
+                      📖 Read &amp; Quiz
+                    </button>
+                    <button class="cornell-btn-anki" onclick="closeCornellModal(); startAnkiSession('node', '${n.id}')" title="Practice Cues in Flashcards">
+                      🎴 Flashcards
+                    </button>
+                  </div>
+                </div>
+              `;
+            }).join("");
+
+            renderedModBlocks.push(`
+              <div class="cornell-module-block">
+                <div class="cornell-module-header">
+                  <span>📅 ${m}</span>
+                  <span style="font-size:11px; font-weight:normal; color:#8b92aa;">(${matchingNotes.length} notes)</span>
+                </div>
+                <div class="cornell-notes-cards-grid">
+                  ${cardsHtml}
+                </div>
+              </div>
+            `);
+          });
+
+          if (renderedModBlocks.length > 0) {
+            const courseSection = document.createElement("div");
+            courseSection.className = "cornell-course-container";
+            courseSection.style.borderLeft = `4px solid ${theme.color}`;
+            courseSection.innerHTML = `
+              <div class="cornell-course-header">
+                <div style="display:flex; align-items:center; gap:10px;">
+                  <span style="font-size:18px;">🏛️</span>
+                  <span>${c}</span>
+                </div>
+                <span style="font-size:12px; color:#89b4fa; font-weight:600;">${theme.name}</span>
+              </div>
+              ${renderedModBlocks.join("")}
+            `;
+            gridEl.appendChild(courseSection);
+          }
+        });
+
+        if (totalVisible === 0) {
+          gridEl.innerHTML = `
+            <div style="text-align:center; padding:60px 20px; color:#8b92aa;">
+              <p style="font-size:18px; margin-bottom:8px;">No Cornell notes matching "${cornellSearchQuery}"</p>
+              <p style="font-size:13px;">Try clearing your search query or selecting "All" subjects.</p>
+            </div>
+          `;
+        }
       }
 
       window.addEventListener("keydown", e => {
         if (e.key === "Escape") {
           const modal = document.getElementById("cornellModal");
           if (modal && modal.style.display !== "none") {
-            const iframe = document.getElementById("cornellIframe");
-            if (iframe) iframe.src = "about:blank";
-            modal.style.display = "none";
+            const readerView = document.getElementById("cornellReaderView");
+            if (readerView && readerView.style.display !== "none") {
+              returnToCornellHub();
+            } else {
+              closeCornellModal();
+            }
           }
         }
       });
@@ -3568,6 +4016,39 @@
             else if (st === "mastered") cMaster++;
           });
 
+          // Group matching nodes by module
+          const modGroups = {};
+          matchingNodes.forEach(cn => {
+            const m = cn.module || "Overview";
+            if (!modGroups[m]) modGroups[m] = [];
+            modGroups[m].push(cn);
+          });
+
+          const sortedModNames = Object.keys(modGroups).sort((a, b) => {
+            const diff = getWeekSortOrder(a) - getWeekSortOrder(b);
+            if (diff !== 0) return diff;
+            return a.localeCompare(b);
+          });
+
+          const modulesHtml = sortedModNames.map(mName => {
+            const mNodes = modGroups[mName];
+            return `
+              <div style="margin-bottom:12px;">
+                <div style="font-size:11px; font-weight:700; color:#fab387; margin-bottom:5px; display:flex; align-items:center; gap:5px; text-transform:uppercase; letter-spacing:0.4px;">
+                  <span>📅</span> ${mName}
+                </div>
+                <div class="anki-topics-list">
+                  ${mNodes.map(cn => `
+                    <div class="anki-topic-item" onclick="startAnkiSession('node', '${cn.id}')">
+                      <span class="anki-topic-title" title="${cn.cleanTitle}">📝 ${cn.cleanTitle}</span>
+                      <span class="anki-topic-count">${cn.cornellCards.length} cards &rsaquo;</span>
+                    </div>
+                  `).join("")}
+                </div>
+              </div>
+            `;
+          }).join("");
+
           const cardEl = document.createElement("div");
           cardEl.className = "anki-course-card";
           cardEl.style.borderColor = `${theme.color}40`;
@@ -3588,13 +4069,8 @@
                 <span class="anki-stat-pill anki-pill-master" style="font-size:11px; padding:3px 8px;">${cMaster} Mastered</span>
               </div>
 
-              <div class="anki-topics-list">
-                ${matchingNodes.map(cn => `
-                  <div class="anki-topic-item" onclick="startAnkiSession('node', '${cn.id}')">
-                    <span class="anki-topic-title" title="${cn.cleanTitle}">📝 ${cn.cleanTitle}</span>
-                    <span class="anki-topic-count">${cn.cornellCards.length} cards &rsaquo;</span>
-                  </div>
-                `).join("")}
+              <div class="anki-topics-scrollable" style="max-height:360px; overflow-y:auto; padding-right:4px;">
+                ${modulesHtml}
               </div>
             </div>
 
@@ -3898,8 +4374,9 @@
       function inspectNodeFromKanban(nodeId) {
         const node = nodes.find(n => n.id === nodeId);
         if (!node) return;
-        if (node.hasCornell && node.cornellUrl) {
-          openCornellModal(node.cornellUrl, node.label);
+        const cUrl = node.cornellPath || node.cornellUrl;
+        if (node.hasCornell && cUrl) {
+          openCornellReader(cUrl, node.cleanTitle || node.label, node.id);
         } else {
           setViewMode("constellation");
           selectNode(node);
@@ -3936,12 +4413,13 @@
 
         const moduleName = node.module ? node.module.replace(/_/g, " ") : (node.week || "");
 
+        const cUrl = node.cornellPath || node.cornellUrl;
         let actionBtns = "";
-        if (node.hasCornell && node.cornellUrl) {
-          actionBtns += `<button class="kanban-btn-action" title="Read Interactive Cornell Notes" onclick="event.stopPropagation(); openCornellModal('${node.cornellUrl}', '${escapeHtml(node.label)}')"><span>📝</span> Notes</button>`;
+        if (node.hasCornell && cUrl) {
+          actionBtns += `<button class="kanban-btn-action" title="Read Interactive Cornell Notes" onclick="event.stopPropagation(); openCornellReader('${cUrl}', '${escapeHtml(node.cleanTitle || node.label)}', '${node.id}')"><span>📝</span> Notes</button>`;
         }
         if (cardCount > 0) {
-          actionBtns += `<button class="kanban-btn-action" title="Start Spaced Repetition Session" onclick="event.stopPropagation(); startAnkiSession('node', window.graphNodes.find(n => n.id === '${node.id}'))"><span>🎴</span> Study</button>`;
+          actionBtns += `<button class="kanban-btn-action" title="Start Spaced Repetition Session" onclick="event.stopPropagation(); startAnkiSession('node', '${node.id}')"><span>🎴</span> Study</button>`;
         }
 
         return `
@@ -3952,7 +4430,7 @@
               </span>
               <span class="kanban-module-tag" title="${escapeHtml(moduleName)}">${escapeHtml(moduleName)}</span>
             </div>
-            <div class="kanban-card-title">${escapeHtml(node.label)}</div>
+            <div class="kanban-card-title">${escapeHtml(node.cleanTitle || node.label)}</div>
             <div class="kanban-card-footer">
               ${badgeHtml}
               <div style="display:flex; gap:6px;">

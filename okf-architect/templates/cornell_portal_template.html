@@ -186,6 +186,70 @@
     .btn-study:hover {
       background: #2a5242;
     }
+    .filter-controls-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .course-filter-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    .course-filter-btn {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      color: var(--text-dim);
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .course-filter-btn:hover {
+      border-color: var(--accent-blue);
+      color: #ffffff;
+    }
+    .course-filter-btn.active {
+      background: rgba(137, 180, 250, 0.18);
+      border-color: var(--accent-blue);
+      color: var(--accent-blue);
+      box-shadow: 0 0 12px rgba(137, 180, 250, 0.25);
+    }
+    .portal-search-box {
+      flex: 1;
+      max-width: 360px;
+      position: relative;
+    }
+    .portal-search-input {
+      width: 100%;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 8px 14px 8px 34px;
+      color: #ffffff;
+      font-size: 13px;
+      outline: none;
+      transition: all 0.2s;
+    }
+    .portal-search-input:focus {
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 10px rgba(137, 180, 250, 0.2);
+    }
+    .search-icon {
+      position: absolute;
+      left: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 13px;
+      opacity: 0.6;
+      pointer-events: none;
+    }
   </style>
 </head>
 <body>
@@ -205,6 +269,72 @@
     <div class="stat-pill"><span>🎓 Subjects:</span> <span class="stat-num">{{TOTAL_SUBJECTS}}</span></div>
   </div>
 
+  <div class="filter-controls-bar">
+    <div class="course-filter-bar">
+      {{COURSE_FILTER_BUTTONS}}
+    </div>
+    <div class="portal-search-box">
+      <span class="search-icon">🔍</span>
+      <input type="text" id="portalSearch" class="portal-search-input" placeholder="Filter notes or cues..." oninput="handleSearch(this.value)">
+    </div>
+  </div>
+
 {{COURSE_SECTIONS}}
+
+  <script>
+    let activeCourse = 'all';
+    let searchQuery = '';
+
+    function filterByCourse(course, btn) {
+      activeCourse = course;
+      document.querySelectorAll('.course-filter-btn').forEach(b => b.classList.remove('active'));
+      if (btn) btn.classList.add('active');
+      applyFilters();
+    }
+
+    function handleSearch(val) {
+      searchQuery = (val || '').trim().toLowerCase();
+      applyFilters();
+    }
+
+    function applyFilters() {
+      const sections = document.querySelectorAll('.course-section');
+      sections.forEach(sec => {
+        const cName = sec.getAttribute('data-course');
+        const courseMatch = (activeCourse === 'all' || cName === activeCourse);
+
+        if (!courseMatch) {
+          sec.style.display = 'none';
+          return;
+        }
+
+        let sectionVisibleNotes = 0;
+        const groups = sec.querySelectorAll('.module-group');
+        groups.forEach(grp => {
+          let groupVisibleNotes = 0;
+          const cards = grp.querySelectorAll('.note-card');
+          cards.forEach(card => {
+            const title = card.getAttribute('data-title') || '';
+            const textMatch = !searchQuery || title.includes(searchQuery);
+            if (textMatch) {
+              card.style.display = '';
+              groupVisibleNotes++;
+            } else {
+              card.style.display = 'none';
+            }
+          });
+
+          if (groupVisibleNotes > 0) {
+            grp.style.display = '';
+            sectionVisibleNotes += groupVisibleNotes;
+          } else {
+            grp.style.display = 'none';
+          }
+        });
+
+        sec.style.display = (sectionVisibleNotes > 0) ? '' : 'none';
+      });
+    }
+  </script>
 </body>
 </html>

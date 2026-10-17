@@ -354,6 +354,40 @@ def classify_canvas_module(rel_path_str: str, meta: Dict[str, Any], course_name:
     return f"{course_name}/mod_overview", "Course Overview", 0
 
 
+def clean_display_title(s: str) -> str:
+    """Clean note title by removing bracket prefixes, repeated week stems, and version suffixes."""
+    if not s:
+        return ""
+    # Strip bracket prefixes like [48520 W09] or [41200]
+    s = re.sub(r'^\[[^\]]+\]\s*', '', s)
+    # Strip repeated week prefixes like "Week 6 Week 6 " or "W01 W01 "
+    s = re.sub(r'^(?:week|w)\s*\d+[\s:_-]*(?:week\s*\d+[\s:_-]*)?', '', s, flags=re.IGNORECASE)
+    # Strip module prefixes like "Module 02 "
+    s = re.sub(r'^module\s*\d+[\s:_-]*', '', s, flags=re.IGNORECASE)
+    # Strip lecture/file prefixes like "L01 " or "F01 "
+    s = re.sub(r'^(?:f|l)\s*\d+[\s:_-]*', '', s, flags=re.IGNORECASE)
+    # Strip trailing numbers/versions like " 26", " v2", " tl"
+    s = re.sub(r'\s+(?:26|tl|v2)\b', '', s, flags=re.IGNORECASE)
+    # Replace multiple underscores with space
+    s = re.sub(r'_+', ' ', s).strip()
+    return (s[0].upper() + s[1:]) if s and s[0].islower() else s
+
+
+def week_sort_key(name: str) -> Tuple[int, int, str]:
+    """Sort module/week names naturally and chronologically."""
+    m = re.search(r'\b(?:week|w)[s]?[\s_-]*(\d+)', name, re.IGNORECASE)
+    if m:
+        return (0, int(m.group(1)), name)
+    m2 = re.search(r'\bmodule[\s_-]*(\d+)', name, re.IGNORECASE)
+    if m2:
+        return (0, int(m2.group(1)), name)
+    if any(k in name.lower() for k in ['overview', 'get started', 'orientation', 'intro']):
+        return (-1, 0, name)
+    if any(k in name.lower() for k in ['quiz', 'exam', 'assessment', 'project']):
+        return (2, 999, name)
+    return (1, 500, name)
+
+
 def normalize_stem(s: str) -> str:
     """Normalize note stem by standardizing week prefixes, double underscores, and case."""
     s = s.lower().replace("-", "_").replace(" ", "_")
@@ -908,15 +942,19 @@ def generate_cornell_portal(bundle_root: Path, nodes: List[Dict[str, Any]]) -> b
         return False
 
     sections_html: List[str] = []
+    course_filter_buttons: List[str] = ['<button class="course-filter-btn active" onclick="filterByCourse(\'all\', this)">All Subjects</button>']
     for course, mods in sorted(grouped.items()):
-        sections_html.append(f'  <section class="course-section">\n    <div class="course-header"><span>🏛️</span> {course}</div>')
-        for mod_name, items in sorted(mods.items()):
-            sections_html.append(f'    <div class="module-group">\n      <div class="module-header"><span>📅 {mod_name}</span><span style="font-size:12px; color:var(--text-dim);">{len(items)} Study Notes</span></div>\n      <div class="notes-grid">')
-            for itm in items:
-                title = itm.get("label", "Note")
+        short_course = course.split()[0]
+        course_filter_buttons.append(f'<button class="course-filter-btn" onclick="filterByCourse(\'{course}\', this)">{short_course}</button>')
+        sections_html.append(f'  <section class="course-section" data-course="{course}">\n    <div class="course-header"><span>🏛️</span> {course}</div>')
+        for mod_name, items in sorted(mods.items(), key=lambda x: week_sort_key(x[0])):
+            sections_html.append(f'    <div class="module-group" data-module="{mod_name}">\n      <div class="module-header"><span>📅 {mod_name}</span><span style="font-size:12px; color:var(--text-dim);">{len(items)} Study Notes</span></div>\n      <div class="notes-grid">')
+            for itm in sorted(items, key=lambda x: clean_display_title(x.get("label", ""))):
+                raw_title = itm.get("label", "Note")
+                clean_title = clean_display_title(raw_title)
                 cues = itm.get("cornell_cues", 0)
                 html_rel = itm.get("cornell_path", "#")
-                sections_html.append(f'        <div class="note-card">\n          <div>\n            <div class="note-title">{title}</div>\n            <div class="note-badges"><span class="badge-cues">⚡ {cues} Active Recall Cues</span></div>\n          </div>\n          <div class="card-actions"><a href="{html_rel}" class="btn-study" target="_blank">👁️ Self-Quiz Mode &rsaquo;</a></div>\n        </div>')
+                sections_html.append(f'        <div class="note-card" data-title="{clean_title.lower()}">\n          <div>\n            <div class="note-title">{clean_title}</div>\n            <div class="note-badges"><span class="badge-cues">⚡ {cues} Active Recall Cues</span></div>\n          </div>\n          <div class="card-actions"><a href="{html_rel}" class="btn-study" target="_blank">👁️ Self-Quiz Mode &rsaquo;</a></div>\n        </div>')
             sections_html.append('      </div>\n    </div>')
         sections_html.append('  </section>')
 
@@ -924,6 +962,7 @@ def generate_cornell_portal(bundle_root: Path, nodes: List[Dict[str, Any]]) -> b
     content = content.replace("{{TOTAL_CORNELL_NOTES}}", str(total_cornell_notes))
     content = content.replace("{{TOTAL_CUES}}", str(total_cues))
     content = content.replace("{{TOTAL_SUBJECTS}}", str(len(grouped)))
+    content = content.replace("{{COURSE_FILTER_BUTTONS}}", "\n    ".join(course_filter_buttons))
     content = content.replace("{{COURSE_SECTIONS}}", "\n".join(sections_html))
 
     portal_path.write_text(content, encoding="utf-8")
