@@ -457,6 +457,30 @@ class ZoomRecorderClient:
             raise RuntimeError(f"Failed to download transcript: HTTP {resp.status_code}")
         return resp.text
 
+    def download_video(self, video_url: str, output_path: str, chunk_size: int = 1024 * 1024) -> str:
+        """Download MP4 video stream to disk."""
+        resp = self.session.get(video_url, stream=True)
+        if resp.status_code != 200:
+            raise RuntimeError(f"Failed to stream video: HTTP {resp.status_code}")
+        total_size = int(resp.headers.get("content-length", 0))
+        downloaded = 0
+        with open(output_path, "wb") as f:
+            for chunk in resp.iter_content(chunk_size=chunk_size):
+                if chunk:
+                    f.write(chunk)
+                    downloaded += len(chunk)
+                    if total_size > 0:
+                        percent = (downloaded / total_size) * 100
+                        mb_done = downloaded / (1024 * 1024)
+                        mb_total = total_size / (1024 * 1024)
+                        sys.stdout.write(f"\r[*] Downloading MP4: {mb_done:.1f} MB / {mb_total:.1f} MB ({percent:.1f}%)")
+                    else:
+                        mb_done = downloaded / (1024 * 1024)
+                        sys.stdout.write(f"\r[*] Downloading MP4: {mb_done:.1f} MB")
+                    sys.stdout.flush()
+        print()
+        return output_path
+
     def extract_keyframes(self, video_url: str, output_dir: str, scene_threshold: float = 0.35, max_frames: int = 50):
         """Extract visual keyframes from video stream using ffmpeg."""
         os.makedirs(output_dir, exist_ok=True)
@@ -548,6 +572,7 @@ def main():
     parser.add_argument("--passcode", "-p", default="", help="Recording passcode if protected")
     parser.add_argument("--out-dir", "-o", default=".", help="Output directory for saved files")
     parser.add_argument("--format", choices=["md", "vtt", "txt", "all"], default="md", help="Transcript format")
+    parser.add_argument("--video", action="store_true", help="Download the full MP4 video file")
     parser.add_argument("--keyframes", action="store_true", help="Extract presentation slide keyframes using ffmpeg")
     parser.add_argument("--scene-threshold", type=float, default=0.35, help="Scene change sensitivity for keyframes (0.0 - 1.0)")
     parser.add_argument("--ocr", action="store_true", help="Run local vision OCR on extracted keyframes")
@@ -675,6 +700,20 @@ def main():
             print("[-] No native VTT transcript found hosted on Zoom for this recording.")
             if info.get("video_url"):
                 print("[*] Video stream URL is available for keyframe extraction or local ASR.")
+
+    # Video download
+    if args.video:
+        if info.get("video_url"):
+            mp4_path = os.path.join(args.out_dir, f"{slug}.mp4")
+            if not (args.json or args.table):
+                print(f"[*] Downloading MP4 video to {mp4_path}...")
+            client.download_video(info["video_url"], mp4_path)
+            size_mb = os.path.getsize(mp4_path) / (1024 * 1024) if os.path.exists(mp4_path) else 0
+            saved_files.append({"format": "mp4", "path": mp4_path, "words": int(size_mb)})
+            if not (args.json or args.table):
+                print(f"[+] Successfully saved MP4 video ({size_mb:.1f} MB): {mp4_path}")
+        else:
+            print("[-] Cannot download video: MP4 stream URL not available.", file=sys.stderr)
 
     # Keyframes extraction
     if args.keyframes or args.ocr:
