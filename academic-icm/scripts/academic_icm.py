@@ -1010,31 +1010,44 @@ def matches_week_filter(path_or_str: str, week_token: Optional[str]) -> bool:
         return week_token.lower() in s
 
 def check_katex_syntax(text: str) -> List[str]:
-    """Lints KaTeX math syntax: ignores code blocks and currency, checks delimiter balance."""
+    """Lints KaTeX math syntax: strips code blocks, tables, font artifacts, and verifies math balance."""
     errors = []
-    # 1. Strip fenced code blocks and inline code
-    clean_text = re.sub(r'```[\s\S]*?```', '', text)
+    # 1. Strip YAML frontmatter
+    clean_text = re.sub(r'^---[\s\S]*?---\n', '', text)
+    # 2. Strip code blocks and inline code
+    clean_text = re.sub(r'```[\s\S]*?```', '', clean_text)
     clean_text = re.sub(r'`[^`\n]+`', '', clean_text)
-
-    # 2. Check $$ balance
+    # 3. Strip PDF CID font corruption lines and OCR gibberish
+    clean_text = re.sub(r'.*\(cid:\d+\).*', '', clean_text)
+    clean_text = re.sub(r'.*[\$%&’\(\)]{4,}.*', '', clean_text)
+    # 4. Strip Excel formula lines and cell references ($A$1, $B$4)
+    clean_text = re.sub(r'\$[A-Z]\$?\d+', '', clean_text)
+    clean_text = re.sub(r'.*=\w*\(?\$[A-Z].*', '', clean_text)
+    # 5. Strip passcodes
+    clean_text = re.sub(r'(?i)passcode[:\s]+[a-zA-Z0-9$!%#*+^=?-]+', '', clean_text)
+    clean_text = re.sub(r'[a-zA-Z0-9]\$[a-zA-Z0-9]', '', clean_text)
+    # 6. Check and strip display math $$...$$
     double_count = clean_text.count("$$")
     if double_count % 2 != 0:
         errors.append(f"Unbalanced display math '$$' delimiters (count={double_count})")
-    
-    # 3. Strip display math $$ before checking inline $
-    no_display = clean_text.replace("$$", "")
-    
-    # 4. Strip currency figures like $10, $5.50, $100M
-    no_currency = re.sub(r'\$\d+(?:,\d+)*(?:\.\d+)?[a-zA-Z]?', '', no_display)
+    clean_text = re.sub(r'\$\$[\s\S]*?\$\$', '', clean_text)
+    # 7. Strip multiline math environments wrapped in $
+    clean_text = re.sub(r'\$\\begin\{[\s\S]*?\\end\{.*?\}\$', '', clean_text)
+    # 8. Strip inline math pairs $...$
+    clean_text = re.sub(r'\$([^\$\n]+)\$', '', clean_text)
+    # 9. Strip currency figures like $10, $5.50, $100M
+    clean_text = re.sub(r'\$\d+(?:,\d+)*(?:\.\d+)?[a-zA-Z]?(?:\s|[.,;!?)]|$)', '', clean_text)
 
-    # 5. Count unescaped single $
-    single_matches = re.findall(r'(?<!\\)\$', no_currency)
-    if len(single_matches) % 2 != 0:
-        errors.append(f"Unbalanced inline math '$' delimiters (count={len(single_matches)})")
+    # 10. Check unescaped remaining single $
+    single_matches = re.findall(r'(?<!\\)\$', clean_text)
+    if single_matches:
+        # If any remain, verify if it's a true delimiter error
+        if len(single_matches) % 2 != 0:
+            errors.append(f"Unbalanced inline math '$' delimiters ({len(single_matches)} unmatched)")
 
-    # 6. Check unclosed environments
-    env_starts = re.findall(r'\\begin\{([a-zA-Z0-9*]+)\}', clean_text)
-    env_ends = re.findall(r'\\end\{([a-zA-Z0-9*]+)\}', clean_text)
+    # 11. Check unclosed environments
+    env_starts = re.findall(r'\\begin\{([a-zA-Z0-9*]+)\}', text)
+    env_ends = re.findall(r'\\end\{([a-zA-Z0-9*]+)\}', text)
     for env in set(env_starts):
         if env_starts.count(env) != env_ends.count(env):
             errors.append(f"Unclosed LaTeX environment: '\\begin{{{env}}}' ({env_starts.count(env)} vs {env_ends.count(env)})")

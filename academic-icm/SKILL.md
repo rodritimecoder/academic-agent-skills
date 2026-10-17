@@ -52,14 +52,34 @@ academic-icm modules
    - Every `_cornell.json` must record `"source": "<rel_path_to_markdown>"` so the curriculum compiler can link by path fallback.
 3. **Curated Curriculum Hierarchy**:
    - `CURRICULUM_TREE.md` defines the virtual chronological outline (`Week 01 → Week 02 → ...`). Prune administrative noise (empty links, welcome announcements) so the Knowledge Cosmos reflects actual learning milestones.
-4. **Single-Command Verification**:
-   - `academic-icm status` and `academic-icm audit` detect coverage gaps, orphaned notes, and broken links before deployment.
+4. **5-Stage Verification & Unbiased 0-Context Gate**:
+   - `academic-icm verify [week]` enforces Kem Glitch's step-level propagation risk shield across 5 discrete gates:
+     1. Gate 1: Asset Doctor `[D]` (MIME validation, video size, Zoom passcode check).
+     2. Gate 2: Markdown & KaTeX Syntax `[D]` (balance of delimiters, zero `.vtt` video links).
+     3. Gate 3: Cornell JSON & Anti-VTT Invariant `[D]` (strict exclusion of subtitle files as video).
+     4. Gate 4: Web Cosmos & Study Portal Compilation `[D]` (HTML & Anki sync, zero `.vtt` in DOM).
+     5. Gate 5: Unbiased 0-Context Acceptance Judge `[P]` (local OneJev1.5-4B decision engine evaluation).
 
 ---
 
 ## 🚀 CLI Commands
 
-### 1. Check Coverage & Detect Orphans
+### 1. Run 5-Stage Verification & Unbiased Judge
+```bash
+# Verify entire curriculum corpus across all 5 gates
+academic-icm verify
+
+# Verify a specific week (e.g. Week 5)
+academic-icm verify 5
+
+# Auto-repair fixable defects (e.g. normalize relative source paths)
+academic-icm verify --fix
+
+# Target a specific gate (1: asset, 2: markdown, 3: cornell-json, 4: web, 5: uat/judge)
+academic-icm verify 5 --stage 3
+```
+
+### 2. Check Coverage & Detect Orphans
 ```bash
 academic-icm status
 # or target a specific vault
