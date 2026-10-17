@@ -1,6 +1,7 @@
     // Injected Graph Payload from okf-architect
     const rawData = /* __GRAPH_DATA__ */;
     const WORKED_SOLUTIONS_DB = /* __WORKED_SOLUTIONS_DB__ */;
+    window.WORKED_SOLUTIONS_DB = WORKED_SOLUTIONS_DB;
     // Course Palette & Galaxy Centers (Separated into 4 spacious cosmic quadrants)
     const COURSE_THEMES = {
       "41200 - Engineering Project Appraisal": {
