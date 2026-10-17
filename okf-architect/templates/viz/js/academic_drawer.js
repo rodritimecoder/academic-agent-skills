@@ -12,7 +12,7 @@
 
         // Cornell Interactive Button
         const cBlock = document.getElementById("dCornellBlock");
-        const cLink = document.getElementById("dCornellLink");
+        const cLink = /** @type {HTMLAnchorElement | null} */ (document.getElementById("dCornellLink"));
         const cCues = document.getElementById("dCornellCues");
         if (n.hasCornell && n.cornellPath) {
           cBlock.style.display = "block";
@@ -21,15 +21,17 @@
             const baseDir = window.location.href.substring(0, window.location.href.lastIndexOf("/") + 1);
             safeUrl = baseDir + encodeURI(n.cornellPath);
           }
-          cLink.href = safeUrl;
-          cLink.onclick = function(e) {
-            e.preventDefault();
-            openCornellModal(safeUrl, n.cleanTitle, n.id);
-          };
-          cCues.textContent = n.cornellCues;
+          if (cLink) {
+            cLink.href = safeUrl;
+            cLink.onclick = function(e) {
+              e.preventDefault();
+              openCornellModal(safeUrl, n.cleanTitle, n.id);
+            };
+          }
+          if (cCues) cCues.textContent = String(n.cornellCues || 0);
         } else {
           cBlock.style.display = "none";
-          cLink.onclick = null;
+          if (cLink) cLink.onclick = null;
         }
 
         // Academic Trinity: Dynamic PDF Problem Sheet & Solution Cues
@@ -140,7 +142,8 @@
           if (currentViewMode === "semantic" && nbr.type === "ModuleHub") return false;
           return true;
         });
-        document.getElementById("dLinkCount").textContent = visibleNeighbors.length;
+        const dLinkCountEl = document.getElementById("dLinkCount");
+        if (dLinkCountEl) dLinkCountEl.textContent = String(visibleNeighbors.length);
 
         visibleNeighbors.forEach(nbr => {
           const li = document.createElement("li");
@@ -177,21 +180,21 @@
       // --- Academic Trinity: Inlined PDF Viewer ---
       function openPdfModal(pdfUrl, title) {
         const modal = document.getElementById("pdfModal");
-        const iframe = document.getElementById("pdfModalFrame");
+        const iframe = /** @type {HTMLIFrameElement | null} */ (document.getElementById("pdfModalFrame"));
         const titleEl = document.getElementById("pdfModalTitleText");
-        const popout = document.getElementById("pdfModalPopoutBtn");
+        const popout = /** @type {HTMLAnchorElement | null} */ (document.getElementById("pdfModalPopoutBtn"));
         if (!modal || !iframe) return;
 
-        titleEl.textContent = title || "Problem Sheet (PDF)";
+        if (titleEl) titleEl.textContent = title || "Problem Sheet (PDF)";
         iframe.src = pdfUrl;
-        popout.href = pdfUrl;
+        if (popout) popout.href = pdfUrl;
         modal.style.display = "flex";
       }
       window.openPdfModal = openPdfModal;
 
       function closePdfModal() {
         const modal = document.getElementById("pdfModal");
-        const iframe = document.getElementById("pdfModalFrame");
+        const iframe = /** @type {HTMLIFrameElement | null} */ (document.getElementById("pdfModalFrame"));
         if (modal) modal.style.display = "none";
         if (iframe) iframe.src = "";
       }

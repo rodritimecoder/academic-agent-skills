@@ -3,6 +3,26 @@
       function showZoomCard(zoomUrl, passcode, timeStr, title) {
         const zoomCard = document.getElementById("drawerZoomCard");
         if (!zoomCard) return;
+
+        let targetUrl = zoomUrl || "";
+        let targetPasscode = passcode || "";
+
+        // Resolve real Zoom Cloud URL if caller supplied a relative path, .vtt, or .md
+        const db = (typeof window !== "undefined" && window.WORKED_SOLUTIONS_DB) ? window.WORKED_SOLUTIONS_DB : null;
+        if (db && (!targetUrl.startsWith("http") || targetUrl.toLowerCase().endsWith(".vtt") || targetUrl.toLowerCase().endsWith(".md"))) {
+          const matchTarget = `${targetUrl} ${title || ""}`.toLowerCase();
+          for (const [key, sol] of Object.entries(db)) {
+            const mWeek = key.match(/week_(\d+)/i);
+            const wNum = mWeek ? mWeek[1] : null;
+            if (matchTarget.includes(key) || (wNum && (matchTarget.includes(`week ${wNum}`) || matchTarget.includes(`week_${wNum}`) || matchTarget.includes(`w0${wNum}`) || matchTarget.includes(`w${wNum}`)))) {
+              if (sol.videoSrc && sol.videoSrc.startsWith("http")) targetUrl = sol.videoSrc;
+              if (sol.fallbackSrc && (!targetUrl || !targetUrl.startsWith("http"))) targetUrl = sol.fallbackSrc;
+              if (!targetPasscode && sol.passcode) targetPasscode = sol.passcode;
+              break;
+            }
+          }
+        }
+
         zoomCard.style.display = "block";
         const zTitle = document.getElementById("zoomCardTitle");
         const zTime = document.getElementById("zoomCardTime");
@@ -12,21 +32,25 @@
 
         if (zTitle) zTitle.textContent = title || "Zoom Cloud Recording";
         if (zTime) zTime.innerHTML = `Timestamp: <strong>${timeStr || "00:00:00"}</strong> <span style="font-size:11px; color:#a6adc8;">(Seek to this time in Zoom player)</span>`;
-        if (passcode && zPassText && zPassBox) {
+        if (targetPasscode && zPassText && zPassBox) {
           zPassBox.style.display = "inline-block";
-          zPassText.textContent = passcode;
+          zPassText.textContent = targetPasscode;
         } else if (zPassBox) {
           zPassBox.style.display = "none";
         }
         if (zBtn) {
           zBtn.innerHTML = `<span>🚀</span> Copy Passcode &amp; Open Zoom`;
           zBtn.onclick = () => {
-            if (passcode) {
-              navigator.clipboard.writeText(passcode).then(() => {
-                alert(`📋 Passcode "${passcode}" copied to clipboard! Opening Zoom...`);
+            if (targetPasscode) {
+              navigator.clipboard.writeText(targetPasscode).then(() => {
+                alert(`📋 Passcode "${targetPasscode}" copied to clipboard! Opening Zoom...`);
               }).catch(() => {});
             }
-            window.open(zoomUrl, "_blank");
+            if (targetUrl && targetUrl.startsWith("http")) {
+              window.open(targetUrl, "_blank");
+            } else {
+              alert("⚠️ No valid Zoom Cloud URL configured for this recording.");
+            }
           };
         }
       }
@@ -39,8 +63,8 @@
         const drawer = document.getElementById("videoDrawer");
         const titleEl = document.getElementById("videoDrawerTitleText");
         const timePill = document.getElementById("videoDrawerTimePill");
-        const mp4El = document.getElementById("drawerMp4Player");
-        const ytEl = document.getElementById("drawerYtPlayer");
+        const mp4El = /** @type {HTMLVideoElement | null} */ (document.getElementById("drawerMp4Player"));
+        const ytEl = /** @type {HTMLIFrameElement | null} */ (document.getElementById("drawerYtPlayer"));
         const zoomCard = document.getElementById("drawerZoomCard");
 
         if (!drawer) return;
@@ -61,13 +85,50 @@
           zoomCard.style.display = "none";
         }
 
-        const vSrc = videoData.src || videoData.url || "";
+        let vSrc = videoData.src || videoData.url || "";
         let vType = videoData.type;
+        let vPasscode = videoData.passcode || "";
+        let vFallback = videoData.fallbackSrc || "";
+
+        // Auto-resolve real Zoom Cloud URL and Passcode from WORKED_SOLUTIONS_DB
+        const db = (typeof window !== "undefined" && window.WORKED_SOLUTIONS_DB) ? window.WORKED_SOLUTIONS_DB : null;
+        if (db) {
+          const combinedStr = `${vSrc} ${videoData.title || ""} ${videoData.label || ""}`.toLowerCase();
+          for (const [key, sol] of Object.entries(db)) {
+            const mWeek = key.match(/week_(\d+)/i);
+            const wNum = mWeek ? mWeek[1] : null;
+            const matchesKey = combinedStr.includes(key);
+            const matchesWeek = wNum && (
+              combinedStr.includes(`week ${wNum}`) ||
+              combinedStr.includes(`week_${wNum}`) ||
+              combinedStr.includes(`week-${wNum}`) ||
+              combinedStr.includes(`w0${wNum}`) ||
+              combinedStr.includes(`w${wNum}`)
+            );
+
+            if (matchesKey || matchesWeek) {
+              if (sol.videoSrc && sol.videoSrc.startsWith("http")) {
+                vSrc = sol.videoSrc;
+              }
+              if (sol.passcode && !vPasscode) {
+                vPasscode = sol.passcode;
+              }
+              if (sol.fallbackSrc && !vFallback) {
+                vFallback = sol.fallbackSrc;
+              }
+              if (sol.type) {
+                vType = sol.type;
+              }
+              break;
+            }
+          }
+        }
+
         if (!vType) {
           if (vSrc.includes("youtube.com") || vSrc.includes("youtu.be")) vType = "youtube";
           else if (vSrc.includes("zoom.us")) vType = "zoom";
           else if (vSrc.toLowerCase().endsWith(".mp4")) vType = "mp4";
-          else if (videoData.passcode) vType = "zoom";
+          else if (vPasscode) vType = "zoom";
           else vType = "zoom";
         }
 
@@ -115,13 +176,13 @@
           mp4El.onerror = () => {
             console.warn("Local MP4 stream failed or not found, falling back to Zoom Card:", vSrc);
             mp4El.style.display = "none";
-            showZoomCard(videoData.fallbackSrc || vSrc, videoData.passcode, timeStr, displayTitle);
+            showZoomCard(vFallback || vSrc, vPasscode, timeStr, displayTitle);
           };
           mp4El.src = vSrc;
           mp4El.currentTime = seekSec;
           mp4El.play().catch(() => {});
         } else if (vType === "zoom" && zoomCard) {
-          showZoomCard(vSrc, videoData.passcode, timeStr, displayTitle);
+          showZoomCard(vSrc, vPasscode, timeStr, displayTitle);
         }
       }
       window.openVideoClip = openVideoClip;
@@ -138,8 +199,8 @@
 
       function closeVideoDrawer() {
         const drawer = document.getElementById("videoDrawer");
-        const mp4El = document.getElementById("drawerMp4Player");
-        const ytEl = document.getElementById("drawerYtPlayer");
+        const mp4El = /** @type {HTMLVideoElement | null} */ (document.getElementById("drawerMp4Player"));
+        const ytEl = /** @type {HTMLIFrameElement | null} */ (document.getElementById("drawerYtPlayer"));
         if (mp4El) {
           mp4El.pause();
           mp4El.src = "";

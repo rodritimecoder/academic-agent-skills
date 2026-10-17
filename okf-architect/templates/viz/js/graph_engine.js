@@ -90,18 +90,20 @@
       let simulation = null;
 
       function updateHUDCounts() {
+        const nodeCountEl = document.getElementById("nodeCount");
+        const edgeCountEl = document.getElementById("edgeCount");
         if (currentViewMode === "semantic" || currentViewMode === "kanban") {
           const sNodes = nodes.filter(n => n.type !== "ModuleHub");
           const sLinks = links.filter(l => l.type !== "spine" && l.type !== "containment" && l.source.type !== "ModuleHub" && l.target.type !== "ModuleHub");
-          document.getElementById("nodeCount").textContent = sNodes.length;
-          document.getElementById("edgeCount").textContent = sLinks.length;
+          if (nodeCountEl) nodeCountEl.textContent = String(sNodes.length);
+          if (edgeCountEl) edgeCountEl.textContent = String(sLinks.length);
         } else if (currentViewMode === "sunburst") {
-          document.getElementById("nodeCount").textContent = nodes.length;
+          if (nodeCountEl) nodeCountEl.textContent = String(nodes.length);
           const sbLinks = links.filter(l => l.type === "containment" || l.type === "spine");
-          document.getElementById("edgeCount").textContent = sbLinks.length;
+          if (edgeCountEl) edgeCountEl.textContent = String(sbLinks.length);
         } else {
-          document.getElementById("nodeCount").textContent = nodes.length;
-          document.getElementById("edgeCount").textContent = links.length;
+          if (nodeCountEl) nodeCountEl.textContent = String(nodes.length);
+          if (edgeCountEl) edgeCountEl.textContent = String(links.length);
         }
       }
 

@@ -92,7 +92,7 @@
             if (videoObj) {
               const vJson = escapeHtml(JSON.stringify(videoObj));
               videoBtnHtml = `
-                <button class="cornell-cue-video-btn" onclick="event.stopPropagation(); openVideoClipFromStr('${vJson}')" title="Watch solution clip (${escapeHtml(videoObj.time_str || '')})">
+                <button class="cornell-cue-video-btn" data-video-meta="${vJson}" onclick="event.stopPropagation(); handleCueVideoClick(this)" title="Watch solution clip (${escapeHtml(videoObj.time_str || '')})">
                   <span>🎬</span> ${escapeHtml(videoObj.time_str || 'Video')}
                 </button>
               `;
@@ -187,9 +187,9 @@
         const hubView = document.getElementById("cornellHubView");
         const readerView = document.getElementById("cornellReaderView");
         const modalTitle = document.getElementById("cornellReaderTitle");
-        const popout = document.getElementById("cornellModalPopout");
+        const popout = /** @type {HTMLAnchorElement | null} */ (document.getElementById("cornellModalPopout"));
         const studyAnkiBtn = document.getElementById("cornellReaderStudyAnki");
-        const iframe = document.getElementById("cornellIframe");
+        const iframe = /** @type {HTMLIFrameElement | null} */ (document.getElementById("cornellIframe"));
 
         if (hubView) hubView.style.display = "none";
         if (readerView) readerView.style.display = "flex";
@@ -245,7 +245,7 @@
       window.openCornellReader = openCornellReader;
 
       function returnToCornellHub() {
-        const iframe = document.getElementById("cornellIframe");
+        const iframe = /** @type {HTMLIFrameElement | null} */ (document.getElementById("cornellIframe"));
         if (iframe) {
           iframe.src = "about:blank";
           iframe.style.display = "none";
@@ -268,7 +268,7 @@
 
       const closeCornellModal = () => {
         const modal = document.getElementById("cornellModal");
-        const iframe = document.getElementById("cornellIframe");
+        const iframe = /** @type {HTMLIFrameElement | null} */ (document.getElementById("cornellIframe"));
         if (iframe) iframe.src = "about:blank";
         if (modal) modal.style.display = "none";
       };
@@ -417,6 +417,18 @@
           `;
         }
       }
+
+      function handleCueVideoClick(btn) {
+        try {
+          const raw = btn.getAttribute("data-video-meta");
+          if (!raw) return;
+          const data = JSON.parse(raw);
+          openVideoClip(data);
+        } catch (err) {
+          console.error("Failed to parse cue video data", err);
+        }
+      }
+      window.handleCueVideoClick = handleCueVideoClick;
 
       window.addEventListener("keydown", e => {
         if (e.key === "Escape") {

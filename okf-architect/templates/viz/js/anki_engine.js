@@ -88,11 +88,11 @@
         const statMaster = document.getElementById("ankiStatMaster");
         const totalNavChip = document.getElementById("ankiTotalCardsCount");
 
-        if (statTotal) statTotal.textContent = allCards.length;
-        if (statNew) statNew.textContent = countNew;
-        if (statLearn) statLearn.textContent = countLearn;
-        if (statMaster) statMaster.textContent = countMaster;
-        if (totalNavChip) totalNavChip.textContent = allCards.length;
+        if (statTotal) statTotal.textContent = String(allCards.length);
+        if (statNew) statNew.textContent = String(countNew);
+        if (statLearn) statLearn.textContent = String(countLearn);
+        if (statMaster) statMaster.textContent = String(countMaster);
+        if (totalNavChip) totalNavChip.textContent = String(allCards.length);
 
         renderCourseDecksGrid();
       }

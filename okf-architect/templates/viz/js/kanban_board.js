@@ -115,7 +115,7 @@
           initKanbanCoursePills();
         }
 
-        const searchInput = document.getElementById("kanbanSearchInput");
+        const searchInput = /** @type {HTMLInputElement | null} */ (document.getElementById("kanbanSearchInput"));
         const query = (searchInput ? searchInput.value : "").toLowerCase().trim();
 
         const bodyIngestion = document.getElementById("bodyIngestion");
@@ -178,10 +178,10 @@
         });
 
         // Update counts
-        if (countIngestion) countIngestion.textContent = col1.length;
-        if (countSynthesis) countSynthesis.textContent = col2.length;
-        if (countReview) countReview.textContent = col3.length;
-        if (countMastered) countMastered.textContent = col4.length;
+        if (countIngestion) countIngestion.textContent = String(col1.length);
+        if (countSynthesis) countSynthesis.textContent = String(col2.length);
+        if (countReview) countReview.textContent = String(col3.length);
+        if (countMastered) countMastered.textContent = String(col4.length);
 
         if (statsSummary) {
           const totalFiltered = studyNodes.length;

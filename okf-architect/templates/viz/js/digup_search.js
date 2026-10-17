@@ -8,7 +8,7 @@
         const modal = document.getElementById("digupModal");
         if (modal) {
           modal.style.display = "flex";
-          const input = document.getElementById("digupSearchInput");
+          const input = /** @type {HTMLInputElement | null} */ (document.getElementById("digupSearchInput"));
           if (input) {
             input.focus();
             input.select();
@@ -32,7 +32,7 @@
         if (tab === 'all') document.getElementById("tabAll")?.classList.add("active");
         else if (tab === 'slides') document.getElementById("tabSlides")?.classList.add("active");
         else if (tab === 'cues') document.getElementById("tabCues")?.classList.add("active");
-        const query = document.getElementById("digupSearchInput")?.value || "";
+        const query = (/** @type {HTMLInputElement | null} */ (document.getElementById("digupSearchInput")))?.value || "";
         performDigUpSearch(query);
       }
       window.setDigUpTab = setDigUpTab;
@@ -125,9 +125,9 @@
         const slidesEl = document.getElementById("digupSlidesCount");
         const cuesEl = document.getElementById("digupCuesCount");
 
-        if (totalEl) totalEl.innerText = (slides.length + cues.length);
-        if (slidesEl) slidesEl.innerText = slides.length;
-        if (cuesEl) cuesEl.innerText = cues.length;
+        if (totalEl) totalEl.innerText = String(slides.length + cues.length);
+        if (slidesEl) slidesEl.innerText = String(slides.length);
+        if (cuesEl) cuesEl.innerText = String(cues.length);
 
         if (slides.length === 0 && cues.length === 0) {
           container.innerHTML = `<div style="grid-column: 1/-1; padding: 40px; text-align: center; color: #a6adc8;">

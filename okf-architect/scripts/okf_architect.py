@@ -1134,7 +1134,9 @@ def load_and_assemble_viz_template(template_dir: Path) -> str:
             inc_file = viz_root / rel_inc
             if inc_file.is_file():
                 content = inc_file.read_text(encoding="utf-8")
-                if "/* __WORKED_SOLUTIONS_DB__ */" in content:
+                if "/* __WORKED_SOLUTIONS_DB__ */ {}" in content:
+                    content = content.replace("/* __WORKED_SOLUTIONS_DB__ */ {}", solutions_json)
+                elif "/* __WORKED_SOLUTIONS_DB__ */" in content:
                     content = content.replace("/* __WORKED_SOLUTIONS_DB__ */", solutions_json)
                 return content
             print(f"⚠️ Warning: Included template module not found: {inc_file}")
@@ -1190,7 +1192,10 @@ def generate_viz(bundle_root: Path, output_file: Optional[Path] = None, tree_fil
     d3_path = TEMPLATE_DIR / "d3.min.js"
     d3_code = d3_path.read_text(encoding="utf-8") if d3_path.is_file() else ""
     rendered_html = template_html.replace("/* __D3_INLINE__ */", d3_code)
-    rendered_html = rendered_html.replace("/* __GRAPH_DATA__ */", graph_json)
+    if "/* __GRAPH_DATA__ */ {}" in rendered_html:
+        rendered_html = rendered_html.replace("/* __GRAPH_DATA__ */ {}", graph_json)
+    else:
+        rendered_html = rendered_html.replace("/* __GRAPH_DATA__ */", graph_json)
 
     out_path = output_file if output_file else (bundle_root / "viz.html")
     out_path.write_text(rendered_html, encoding="utf-8")

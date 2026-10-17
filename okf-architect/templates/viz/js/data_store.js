@@ -1,6 +1,6 @@
     // Injected Graph Payload from okf-architect
-    const rawData = /* __GRAPH_DATA__ */;
-    const WORKED_SOLUTIONS_DB = /* __WORKED_SOLUTIONS_DB__ */;
+    const rawData = /* __GRAPH_DATA__ */ {};
+    const WORKED_SOLUTIONS_DB = /* __WORKED_SOLUTIONS_DB__ */ {};
     window.WORKED_SOLUTIONS_DB = WORKED_SOLUTIONS_DB;
     // Course Palette & Galaxy Centers (Separated into 4 spacious cosmic quadrants)
     const COURSE_THEMES = {
@@ -36,13 +36,12 @@
       }
     };
 
-    document.addEventListener("DOMContentLoaded", () => {
-      const container = document.getElementById("graphContainer");
-      const canvas = document.getElementById("graphCanvas");
-      const ctx = canvas.getContext("2d");
+    const container = document.getElementById("graphContainer");
+    const canvas = /** @type {HTMLCanvasElement} */ (document.getElementById("graphCanvas"));
+    const ctx = canvas.getContext("2d");
 
-      let width = container.clientWidth || window.innerWidth;
-      let height = container.clientHeight || window.innerHeight;
+    let width = container.clientWidth || window.innerWidth;
+    let height = container.clientHeight || window.innerHeight;
       const dpr = window.devicePixelRatio || 1;
 
       // Transform and Interactive State (Fits full 4-galaxy cosmos in viewport)
@@ -244,10 +243,13 @@
       });
 
       // Update HUD stats
-      document.getElementById("nodeCount").textContent = nodes.length;
-      document.getElementById("edgeCount").textContent = links.length;
+      const nodeCountEl = document.getElementById("nodeCount");
+      const edgeCountEl = document.getElementById("edgeCount");
+      const cornellCountEl = document.getElementById("cornellCount");
+      if (nodeCountEl) nodeCountEl.textContent = String(nodes.length);
+      if (edgeCountEl) edgeCountEl.textContent = String(links.length);
       const cornellNodes = nodes.filter(n => n.hasCornell);
-      document.getElementById("cornellCount").textContent = cornellNodes.length;
+      if (cornellCountEl) cornellCountEl.textContent = String(cornellNodes.length);
 
 
       function escapeHtml(str) {
@@ -422,5 +424,3 @@
 
         return renderCalloutsHtml(resultHtml);
       }
-
-      // Collect all cards from graph nodes

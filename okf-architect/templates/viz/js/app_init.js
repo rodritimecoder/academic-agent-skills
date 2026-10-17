@@ -13,27 +13,39 @@
       };
 
       // Physics Sliders
-      document.getElementById("sliderCharge").oninput = e => {
-        const val = +e.target.value;
-        document.getElementById("valCharge").textContent = val;
-        simulation.force("charge").strength(val);
-        simulation.alpha(0.3).restart();
-      };
+      const sliderChargeEl = document.getElementById("sliderCharge");
+      if (sliderChargeEl) {
+        sliderChargeEl.oninput = e => {
+          const val = +(/** @type {HTMLInputElement} */ (e.target).value);
+          const valChargeEl = document.getElementById("valCharge");
+          if (valChargeEl) valChargeEl.textContent = String(val);
+          simulation.force("charge").strength(val);
+          simulation.alpha(0.3).restart();
+        };
+      }
 
-      document.getElementById("sliderLink").oninput = e => {
-        const val = +e.target.value;
-        document.getElementById("valLink").textContent = val;
-        simulation.force("link").distance(val);
-        simulation.alpha(0.3).restart();
-      };
+      const sliderLinkEl = document.getElementById("sliderLink");
+      if (sliderLinkEl) {
+        sliderLinkEl.oninput = e => {
+          const val = +(/** @type {HTMLInputElement} */ (e.target).value);
+          const valLinkEl = document.getElementById("valLink");
+          if (valLinkEl) valLinkEl.textContent = String(val);
+          simulation.force("link").distance(val);
+          simulation.alpha(0.3).restart();
+        };
+      }
 
-      document.getElementById("sliderCluster").oninput = e => {
-        clusterStrength = +e.target.value;
-        document.getElementById("valCluster").textContent = clusterStrength;
-        simulation.force("clusterX").strength(clusterStrength);
-        simulation.force("clusterY").strength(clusterStrength);
-        simulation.alpha(0.3).restart();
-      };
+      const sliderClusterEl = document.getElementById("sliderCluster");
+      if (sliderClusterEl) {
+        sliderClusterEl.oninput = e => {
+          clusterStrength = +(/** @type {HTMLInputElement} */ (e.target).value);
+          const valClusterEl = document.getElementById("valCluster");
+          if (valClusterEl) valClusterEl.textContent = String(clusterStrength);
+          simulation.force("clusterX").strength(clusterStrength);
+          simulation.force("clusterY").strength(clusterStrength);
+          simulation.alpha(0.3).restart();
+        };
+      }
 
       // Aesthetics Toggles
       const toggleGlowRow = document.getElementById("toggleGlowRow");
@@ -51,9 +63,10 @@
       };
 
       // Search Filter Input
-      const searchInput = document.getElementById("searchInput");
-      searchInput.oninput = e => {
-        searchQuery = e.target.value.toLowerCase().trim();
+      const searchInput = /** @type {HTMLInputElement | null} */ (document.getElementById("searchInput"));
+      if (searchInput) {
+        searchInput.oninput = e => {
+          searchQuery = (/** @type {HTMLInputElement} */ (e.target).value).toLowerCase().trim();
         if (searchQuery) {
           const match = nodes.find(n => n.label.toLowerCase().includes(searchQuery));
           if (match) {
@@ -65,6 +78,7 @@
         }
         requestRender();
       };
+    }
 
 
       // Initialize view mode state after all functions and models are defined
@@ -91,4 +105,3 @@
         renderKanbanBoard,
         filterKanbanCourse
       };
-    });
