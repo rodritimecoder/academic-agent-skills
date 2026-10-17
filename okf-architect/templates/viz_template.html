@@ -2451,7 +2451,7 @@
           <a id="pdfModalPopoutBtn" href="#" target="_blank" rel="noopener noreferrer" class="cornell-popout-btn" title="Open in browser tab">
             <span>↗</span> Open in Tab
           </a>
-          <button class="cornell-modal-close-btn" onclick="closePdfModal()" title="Close (Esc)">✕</button>
+          <button id="pdfModalClose" class="cornell-modal-close-btn" onclick="closePdfModal()" title="Close (Esc)">✕</button>
         </div>
       </div>
       <div style="flex:1; width:100%; height:100%; position:relative;">
@@ -2687,7 +2687,7 @@
       </div>
       <div class="video-drawer-controls">
         <button class="video-drawer-ctrl-btn" onclick="toggleVideoDrawerMinimize()" title="Minimize / Expand">_</button>
-        <button class="video-drawer-ctrl-btn" onclick="closeVideoDrawer()" title="Close Video">✕</button>
+        <button id="videoDrawerClose" class="video-drawer-ctrl-btn" onclick="closeVideoDrawer()" title="Close Video">✕</button>
       </div>
     </div>
     <div class="video-drawer-body" id="videoDrawerBody">
@@ -3951,7 +3951,7 @@
           cLink.href = safeUrl;
           cLink.onclick = function(e) {
             e.preventDefault();
-            openCornellModal(safeUrl, n.cleanTitle);
+            openCornellModal(safeUrl, n.cleanTitle, n.id);
           };
           cCues.textContent = n.cornellCues;
         } else {
@@ -4539,6 +4539,17 @@
         const theme = COURSE_THEMES[node.course] || { color: "#89b4fa", name: node.course };
         const sections = node.cornellSections || [];
 
+        const cleanId = (node.id || "").toLowerCase();
+        let matchedSol = null;
+        if (typeof WORKED_SOLUTIONS_DB !== "undefined") {
+          for (const solKey of Object.keys(WORKED_SOLUTIONS_DB)) {
+            if (cleanId.includes(solKey)) {
+              matchedSol = WORKED_SOLUTIONS_DB[solKey];
+              break;
+            }
+          }
+        }
+
         let sectionsHtml = "";
         let totalCuesCount = 0;
 
@@ -4548,12 +4559,36 @@
             totalCuesCount++;
             const cueBadge = e.badge || "CONCEPT";
             const formattedNotes = formatMarkdownNotes(e.notes);
+            let videoObj = e.video;
+            if (!videoObj && matchedSol) {
+              let cueSec = e.seconds !== undefined ? e.seconds : null;
+              let timeStr = e.timestamp;
+              if (!timeStr && e.cue) {
+                const m = e.cue.match(/\[(\d{1,2}:\d{2})\]/);
+                if (m) timeStr = m[1];
+              }
+              if (cueSec === null && timeStr && typeof timeStr === "string" && timeStr.includes(":")) {
+                cueSec = timeStr.split(":").reduce((acc, t) => (60 * acc) + +t, 0);
+              }
+              if (cueSec === null && matchedSol.cues && matchedSol.cues[eIdx]) {
+                cueSec = matchedSol.cues[eIdx].seconds;
+                timeStr = timeStr || matchedSol.cues[eIdx].time;
+              }
+              if (cueSec !== null) {
+                videoObj = {
+                  title: matchedSol.title,
+                  src: matchedSol.videoSrc,
+                  timestamp: cueSec,
+                  time_str: timeStr || `${Math.floor(cueSec / 60)}:${(cueSec % 60 < 10 ? "0" : "") + (cueSec % 60)}`
+                };
+              }
+            }
             let videoBtnHtml = "";
-            if (e.video) {
-              const vJson = escapeHtml(JSON.stringify(e.video));
+            if (videoObj) {
+              const vJson = escapeHtml(JSON.stringify(videoObj));
               videoBtnHtml = `
-                <button class="cornell-cue-video-btn" onclick="event.stopPropagation(); openVideoClipFromStr('${vJson}')" title="Watch solution clip (${escapeHtml(e.video.time_str || '')})">
-                  <span>🎬</span> ${escapeHtml(e.video.time_str || 'Video')}
+                <button class="cornell-cue-video-btn" onclick="event.stopPropagation(); openVideoClipFromStr('${vJson}')" title="Watch solution clip (${escapeHtml(videoObj.time_str || '')})">
+                  <span>🎬</span> ${escapeHtml(videoObj.time_str || 'Video')}
                 </button>
               `;
             }
@@ -4657,7 +4692,17 @@
 
         let targetNode = null;
         if (nodeId) targetNode = nodes.find(n => n.id === nodeId);
-        if (!targetNode && url) targetNode = nodes.find(n => (n.cornellPath === url || n.cornellUrl === url));
+        if (!targetNode && url) {
+          const dec = decodeURIComponent(url);
+          targetNode = nodes.find(n => (
+            n.cornellPath === url || 
+            n.cornellUrl === url || 
+            n.cornellPath === dec || 
+            n.cornellUrl === dec ||
+            (n.cornellPath && (dec.endsWith(n.cornellPath) || url.endsWith(n.cornellPath))) ||
+            (n.cornellUrl && (dec.endsWith(n.cornellUrl) || url.endsWith(n.cornellUrl)))
+          ));
+        }
         if (!targetNode && title) targetNode = nodes.find(n => n.cleanTitle === title || n.label === title);
 
         if (targetNode) {
@@ -4669,9 +4714,13 @@
         if (modalTitle) modalTitle.innerHTML = `<span>📝</span> ${clean}`;
         if (popout) popout.href = url || "#";
 
+        const scrollEl = document.getElementById("cornellPaperScroll");
         if (targetNode && targetNode.cornellSections && targetNode.cornellSections.length > 0) {
+          if (iframe) iframe.style.display = "none";
+          if (scrollEl) scrollEl.style.display = "block";
           renderNativeCornellNote(targetNode, url);
         } else if (iframe && url) {
+          if (scrollEl) scrollEl.style.display = "none";
           iframe.style.display = "block";
           iframe.src = url;
         }
@@ -4936,7 +4985,8 @@
       }
 
       function renderMathSafe(el) {
-        if (window.renderMathInElement) {
+        if (!el) return;
+        if (typeof window.renderMathInElement === "function") {
           try {
             renderMathInElement(el, {
               delimiters: [
@@ -4946,6 +4996,8 @@
               throwOnError: false
             });
           } catch (e) {}
+        } else {
+          setTimeout(() => renderMathSafe(el), 80);
         }
       }
 

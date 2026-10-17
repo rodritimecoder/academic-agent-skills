@@ -558,7 +558,23 @@ def collect_cornell_map(bundle_root: Path) -> Dict[str, CornellInfo]:
                     clean_jf_stem = re.sub(r'_cornell(_cornell)?$', '', jf.stem, flags=re.IGNORECASE).lower().replace("-", "_").replace(" ", "_")
                     cards_list: List[Dict[str, Any]] = []
                     sections_list: List[Dict[str, Any]] = []
-                    for sec_idx, sec in enumerate(c_data.get("sections", [])):
+                    raw_sections = c_data.get("sections", [])
+                    if not raw_sections and "cues" in c_data:
+                        raw_sections = [{
+                            "heading": "Worked Problem Solutions",
+                            "summary": c_data.get("summary", ""),
+                            "entries": [
+                                {
+                                    "cue": c.get("cue", ""),
+                                    "notes": c.get("note", c.get("notes", "")),
+                                    "badge": "problem",
+                                    "timestamp": c.get("timestamp", ""),
+                                    "seconds": c.get("seconds", 0)
+                                }
+                                for c in c_data.get("cues", [])
+                            ]
+                        }]
+                    for sec_idx, sec in enumerate(raw_sections):
                         heading = sec.get("heading", "")
                         sec_entries = []
                         for e_idx, entry in enumerate(sec.get("entries", [])):
