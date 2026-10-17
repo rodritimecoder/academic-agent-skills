@@ -539,35 +539,56 @@ def extract_video_info(
                     course_dir = p
                     break
 
-            if course_dir:
-                mp4_files = list(course_dir.glob("videos/*.mp4")) or list(course_dir.glob("*.mp4"))
-                if mp4_files:
-                    rel_mp4 = str(mp4_files[0].relative_to(bundle_root)).replace("\\", "/")
+            # 1. Determine the week of this note
+            m_wk = re.search(r'\b(?:week|w)[_\s-]*0?(\d+)\b', str(jf), re.IGNORECASE) or \
+                   re.search(r'\b(?:week|w)[_\s-]*0?(\d+)\b', f"{cue} {notes}", re.IGNORECASE)
+            note_week = m_wk.group(1) if m_wk else None
+
+            # 2. Look up worked_solutions_db for this exact week
+            sol_db_path = TEMPLATE_DIR / "viz" / "data" / "worked_solutions_db.json"
+            if sol_db_path.is_file() and note_week:
+                try:
+                    sol_data = json.loads(sol_db_path.read_text(encoding="utf-8"))
+                    for key, sol in sol_data.items():
+                        m_sol_w = re.search(r'week_0?(\d+)', key, re.IGNORECASE)
+                        if m_sol_w and m_sol_w.group(1) == note_week:
+                            v_type = sol.get("type", "zoom")
+                            v_src = sol.get("videoSrc", "")
+                            # If MP4 type, verify that local MP4 actually exists on disk
+                            if v_type == "mp4" and v_src:
+                                local_mp4 = bundle_root / v_src
+                                if not local_mp4.is_file():
+                                    v_src = sol.get("fallbackSrc", v_src)
+                                    v_type = "zoom"
+                            video_data = {
+                                "type": v_type,
+                                "src": v_src,
+                                "time_str": time_str,
+                                "seconds": sec,
+                                "passcode": sol.get("passcode", ""),
+                                "fallbackSrc": sol.get("fallbackSrc", ""),
+                                "label": f"{'Zoom' if v_type == 'zoom' else 'Video'} @ {time_str}"
+                            }
+                            break
+                except Exception:
+                    pass
+
+            # 3. If still not found, check if a local MP4 explicitly matches this week
+            if not video_data and course_dir and note_week:
+                cand_mp4s = [
+                    f for f in (list(course_dir.glob("videos/*.mp4")) + list(course_dir.glob("*.mp4")))
+                    if re.search(rf'\b(?:week|w)[_\s-]*0?{note_week}\b', f.name, re.IGNORECASE)
+                ]
+                if cand_mp4s:
+                    rel_mp4 = str(cand_mp4s[0].relative_to(bundle_root)).replace("\\", "/")
                     video_data = {
                         "type": "mp4",
                         "src": rel_mp4,
                         "time_str": time_str,
                         "seconds": sec,
+                        "passcode": "",
                         "label": f"Walkthrough ({time_str})"
                     }
-                else:
-                    zoom_mds = list(course_dir.rglob("*video*recording*.md")) or list(course_dir.rglob("*recording*.md"))
-                    if zoom_mds:
-                        try:
-                            z_text = zoom_mds[0].read_text(encoding="utf-8")
-                            m_zurl = re.search(r'(https://[a-zA-Z0-9.-]*zoom\.us/rec/[^\s\)>]+)', z_text)
-                            m_pass = re.search(r'Passcode:\s*([^\s\n\r]+)', z_text, re.IGNORECASE)
-                            if m_zurl:
-                                video_data = {
-                                    "type": "zoom",
-                                    "src": m_zurl.group(1),
-                                    "time_str": time_str,
-                                    "seconds": sec,
-                                    "passcode": m_pass.group(1) if m_pass else "",
-                                    "label": f"Zoom ({time_str})"
-                                }
-                        except Exception:
-                            pass
 
     return cue.strip(), notes.strip(), video_data
 
