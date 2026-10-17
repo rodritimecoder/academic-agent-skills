@@ -3909,9 +3909,28 @@
         if (titleEl) titleEl.textContent = videoData.label || "Solution Video";
         if (timePill) timePill.textContent = videoData.time_str || "00:00";
 
-        if (videoData.type === "youtube" && ytEl) {
-          ytEl.style.display = "block";
-          ytEl.src = videoData.src;
+        if (videoData.type === "youtube") {
+          if (window.location.protocol === "file:") {
+            if (zoomCard) {
+              zoomCard.style.display = "block";
+              const zTitle = document.getElementById("zoomCardTitle");
+              const zTime = document.getElementById("zoomCardTime");
+              const zPassBox = document.getElementById("zoomCardPasscodeBox");
+              const zLaunchBtn = document.getElementById("zoomCardLaunchBtn");
+
+              if (zTitle) zTitle.textContent = "YouTube Walkthrough Clip";
+              if (zTime) zTime.innerHTML = `Timestamp: <strong>${videoData.time_str || "00:00"}</strong><br><span style="font-size:11px; color:#a6adc8; margin-top:5px; display:inline-block;">YouTube blocks in-app embeds from <code>file://</code> URLs.<br>Run <code>./serve.sh</code> for in-drawer playback, or click below:</span>`;
+              if (zPassBox) zPassBox.style.display = "none";
+              if (zLaunchBtn) {
+                zLaunchBtn.innerHTML = `<span>🚀</span> Watch on YouTube (${videoData.time_str})`;
+                const rawYt = videoData.src.replace("www.youtube-nocookie.com/embed/", "www.youtube.com/watch?v=").replace("&autoplay=1", "").replace("?autoplay=1", "");
+                zLaunchBtn.onclick = () => window.open(rawYt, "_blank");
+              }
+            }
+          } else if (ytEl) {
+            ytEl.style.display = "block";
+            ytEl.src = videoData.src;
+          }
         } else if (videoData.type === "mp4" && mp4El) {
           mp4El.style.display = "block";
           mp4El.src = videoData.src;
