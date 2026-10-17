@@ -14,6 +14,7 @@ Commands:
   academic-icm build-note <json_file> - Compile _cornell.json into .html study sheet and .tsv Anki deck
   academic-icm compile [vault]        - Recompile CURRICULUM_TREE.md into Knowledge Cosmos and Study Portal
   academic-icm sync-orphans [vault]   - Auto-repair and link orphaned Cornell notes into the curriculum tree
+  academic-icm stamp-video [target]   - Auto-stamp Cornell cues with video/recording timestamps
   academic-icm serve [vault] [--port] - Start local HTTP preview server for study portal
 """
 
@@ -24,6 +25,8 @@ import json
 import argparse
 import subprocess
 from pathlib import Path
+import math
+from collections import Counter
 from typing import Dict, List, Any, Optional, Tuple
 
 DEFAULT_NOTES_DIR = Path("/run/media/rodri/AI/University/notes")
@@ -517,6 +520,468 @@ def cmd_sync_orphans(args: argparse.Namespace) -> int:
     return 0
 
 # ==============================================================================
+# SUBCOMMAND: stamp-video
+# ==============================================================================
+
+STOPWORDS = {
+    "a", "about", "above", "after", "again", "against", "all", "am", "an", "and", "any", "are",
+    "aren't", "as", "at", "be", "because", "been", "before", "being", "below", "between", "both",
+    "but", "by", "can", "can't", "cannot", "could", "couldn't", "did", "didn't", "do", "does",
+    "doesn't", "doing", "don't", "down", "during", "each", "few", "for", "from", "further", "had",
+    "hadn't", "has", "hasn't", "have", "haven't", "having", "he", "he'd", "he'll", "he's", "her",
+    "here", "here's", "hers", "herself", "him", "himself", "his", "how", "how's", "i", "i'd",
+    "i'll", "i'm", "i've", "if", "in", "into", "is", "isn't", "it", "it's", "its", "itself",
+    "let's", "me", "more", "most", "mustn't", "my", "myself", "no", "nor", "not", "of", "off",
+    "on", "once", "only", "or", "other", "ought", "our", "ours", "ourselves", "out", "over", "own",
+    "same", "shan't", "she", "she'd", "she'll", "she's", "should", "shouldn't", "so", "some", "such",
+    "than", "that", "that's", "the", "their", "theirs", "them", "themselves", "then", "there",
+    "there's", "these", "they", "they'd", "they'll", "they're", "they've", "this", "those", "through",
+    "to", "too", "under", "until", "up", "very", "was", "wasn't", "we", "we'd", "we'll", "we're",
+    "we've", "were", "weren't", "what", "what's", "when", "when's", "where", "where's", "which",
+    "while", "who", "who's", "whom", "why", "why's", "with", "won't", "would", "wouldn't", "you",
+    "you'd", "you'll", "you're", "you've", "your", "yours", "yourself", "yourselves", "okay", "sorry",
+    "yeah", "right", "alright", "um", "uh", "just", "like", "well", "see", "basically", "now"
+}
+
+def clean_tokens(text: str) -> List[str]:
+    text = re.sub(r"\$\$.*?\$\$", " ", text, flags=re.DOTALL)
+    text = re.sub(r"\$.*?\$", " ", text)
+    text = re.sub(r"\[▶.*?\]\(.*?\)", " ", text)
+    text = re.sub(r"\[.*?\]\(.*?\)", " ", text)
+    text = re.sub(r"[#*`_~\\|/(){}\[\]<>]", " ", text)
+    words = re.findall(r"[a-zA-Z0-9]+(?:[-'][a-zA-Z0-9]+)?", text.lower())
+    return [w for w in words if len(w) > 1 and w not in STOPWORDS]
+
+def parse_vtt(vtt_path: Path) -> List[Dict[str, Any]]:
+    lines = vtt_path.read_text(encoding="utf-8").splitlines()
+    cues = []
+    i = 0
+    time_re = re.compile(r"^(\d{2}:\d{2}:\d{2}\.\d{3}|\d{2}:\d{2}\.\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}\.\d{3}|\d{2}:\d{2}\.\d{3})")
+    while i < len(lines):
+        line = lines[i].strip()
+        m = time_re.match(line)
+        if m:
+            start_str, _ = m.group(1), m.group(2)
+            i += 1
+            text_lines = []
+            while i < len(lines) and lines[i].strip():
+                text_lines.append(lines[i].strip())
+                i += 1
+            raw_text = " ".join(text_lines)
+            speaker = ""
+            if ":" in raw_text:
+                parts = raw_text.split(":", 1)
+                speaker = parts[0].strip()
+                text = parts[1].strip()
+            else:
+                text = raw_text
+            
+            p = start_str.split(":")
+            if len(p) == 3:
+                sec = int(p[0]) * 3600 + int(p[1]) * 60 + float(p[2])
+                mm_ss = f"{int(p[0])*60 + int(p[1]):02d}:{int(float(p[2])):02d}" if int(p[0]) == 0 else f"{int(p[0]):02d}:{int(p[1]):02d}:{int(float(p[2])):02d}"
+            else:
+                sec = int(p[0]) * 60 + float(p[1])
+                mm_ss = f"{int(p[0]):02d}:{int(float(p[1])):02d}"
+            cues.append({
+                "seconds": int(sec),
+                "time_str": mm_ss,
+                "speaker": speaker,
+                "text": text
+            })
+        i += 1
+    return cues
+
+def parse_transcript_md(md_path: Path) -> List[Dict[str, Any]]:
+    lines = md_path.read_text(encoding="utf-8").splitlines()
+    cues = []
+    line_re = re.compile(r"-\s*`\[(\d{2}:\d{2}:\d{2}|\d{2}:\d{2})\]`\s*(?:\*\*([^*]+)\*\*:\s*)?(.*)")
+    for line in lines:
+        line = line.strip()
+        m = line_re.match(line)
+        if m:
+            time_str = m.group(1)
+            speaker = (m.group(2) or "").strip()
+            text = m.group(3).strip()
+            p = time_str.split(":")
+            if len(p) == 3:
+                sec = int(p[0]) * 3600 + int(p[1]) * 60 + int(p[2])
+            else:
+                sec = int(p[0]) * 60 + int(p[1])
+            cues.append({
+                "seconds": int(sec),
+                "time_str": time_str,
+                "speaker": speaker,
+                "text": text
+            })
+    return cues
+
+def build_sliding_chunks(cues: List[Dict[str, Any]], window_cues: int = 4, step_cues: int = 2) -> List[Dict[str, Any]]:
+    chunks = []
+    for i in range(0, len(cues), step_cues):
+        window = cues[i:i+window_cues]
+        if not window:
+            continue
+        combined_text = " ".join([c["text"] for c in window])
+        chunks.append({
+            "start_seconds": window[0]["seconds"],
+            "time_str": window[0]["time_str"],
+            "speaker": window[0].get("speaker", ""),
+            "text": combined_text,
+            "tokens": clean_tokens(combined_text)
+        })
+    return chunks
+
+class BM25Ranker:
+    def __init__(self, chunks: List[Dict[str, Any]], k1: float = 1.5, b: float = 0.75):
+        self.chunks = chunks
+        self.k1 = k1
+        self.b = b
+        self.N = len(chunks)
+        self.doc_lens = [len(c["tokens"]) for c in chunks]
+        self.avgdl = sum(self.doc_lens) / (self.N or 1)
+        
+        self.df = Counter()
+        for c in chunks:
+            for t in set(c["tokens"]):
+                self.df[t] += 1
+                
+        self.idf = {}
+        for t, freq in self.df.items():
+            self.idf[t] = math.log((self.N - freq + 0.5) / (freq + 0.5) + 1.0)
+            
+    def query(self, query_tokens: List[str], problem_tag: Optional[str] = None) -> List[Tuple[float, int]]:
+        q_counts = Counter(query_tokens)
+        scores = []
+        for i, c in enumerate(self.chunks):
+            score = 0.0
+            doc_len = self.doc_lens[i]
+            c_counts = Counter(c["tokens"])
+            for t, q_count in q_counts.items():
+                if t in c_counts:
+                    tf = c_counts[t]
+                    idf = self.idf.get(t, 0.0)
+                    numerator = tf * (self.k1 + 1.0)
+                    denominator = tf + self.k1 * (1.0 - self.b + self.b * (doc_len / (self.avgdl or 1.0)))
+                    score += idf * (numerator / denominator)
+            
+            # Problem number bonus (e.g. "9.1", "9.3", "exercise 9.1")
+            if problem_tag and problem_tag.lower() in c["text"].lower():
+                score += 15.0
+                
+            scores.append((score, i))
+        scores.sort(key=lambda x: x[0], reverse=True)
+        return scores
+
+def find_media_and_transcript_for_note(vault_root: Path, json_path: Path, note_data: dict) -> Tuple[Optional[Path], Optional[str], Optional[str], Dict[str, str]]:
+    """
+    Discovers:
+      1. Associated transcript file (.vtt or _transcript.md)
+      2. Media target (local MP4 path, Zoom URL, or YouTube URL)
+      3. Passcode if applicable
+      4. Explicit question-to-video mapping (e.g. from YouTube question playlists)
+    """
+    source_rel = note_data.get("source") or ""
+    course_dir = None
+    module_dir = None
+    
+    # Try resolving from json_path parent hierarchy
+    for p in json_path.parents:
+        if (p / "CURRICULUM_TREE.md").is_file() or p.parent == vault_root:
+            course_dir = p
+            break
+    if not course_dir and source_rel:
+        full_source = vault_root / source_rel
+        for p in full_source.parents:
+            if p.parent == vault_root:
+                course_dir = p
+                break
+
+    if not course_dir:
+        course_dir = json_path.parent.parent
+
+    # Determine module / week name
+    source_path = Path(source_rel)
+    week_token = ""
+    for part in [source_path.parent.name, source_path.name, json_path.name]:
+        m = re.search(r"(week[_\s-]*\d+|w\d+|module[_\s-]*\d+|topic[_\s-]*\d+[a-z]?)", part, re.I)
+        if m:
+            week_token = m.group(1).lower().replace(" ", "_").replace("-", "_")
+            break
+
+    module_cand = course_dir / source_path.parent
+    if module_cand.is_dir():
+        module_dir = module_cand
+    elif (course_dir / source_path.parent.parent).is_dir():
+        module_dir = course_dir / source_path.parent.parent
+
+    transcript_path: Optional[Path] = None
+    media_target: Optional[str] = None
+    passcode: Optional[str] = None
+    q_map: Dict[str, str] = {}
+
+    # 1. Search for transcript in module folder
+    search_dirs = []
+    if module_dir and module_dir.is_dir():
+        search_dirs.append(module_dir)
+        search_dirs.append(module_dir / "markdown")
+        search_dirs.append(module_dir / "video_transcripts")
+        search_dirs.append(module_dir / "transcripts")
+    recordings_dir = course_dir / "recordings"
+    if recordings_dir.is_dir():
+        search_dirs.append(recordings_dir)
+        for sub in recordings_dir.iterdir():
+            if sub.is_dir() and (week_token and week_token in sub.name.lower().replace("-", "_")):
+                search_dirs.insert(0, sub)
+
+    # Find VTT or transcript markdown
+    for s_dir in search_dirs:
+        if not s_dir.is_dir():
+            continue
+        vtt_files = list(s_dir.glob("*.vtt"))
+        if vtt_files:
+            transcript_path = vtt_files[0]
+            break
+        md_transcripts = list(s_dir.glob("*transcript*.md"))
+        if md_transcripts:
+            transcript_path = md_transcripts[0]
+            break
+
+    # 2. Check for local MP4 in course_dir / "videos"
+    videos_dir = course_dir / "videos"
+    if videos_dir.is_dir():
+        mp4_files = list(videos_dir.glob("*.mp4")) + list(videos_dir.glob("*.m4a")) + list(videos_dir.glob("*.mkv"))
+        if mp4_files:
+            matched_mp4 = None
+            speaker_token = ""
+            if transcript_path:
+                speaker_token = transcript_path.stem.lower().replace("-", "_").replace(" ", "_")
+            for mp4 in mp4_files:
+                mp4_stem = mp4.stem.lower().replace("-", "_").replace(" ", "_")
+                if week_token and week_token in mp4_stem:
+                    matched_mp4 = mp4
+                    break
+                if speaker_token and (speaker_token in mp4_stem or mp4_stem in speaker_token):
+                    matched_mp4 = mp4
+                    break
+
+            if matched_mp4:
+                try:
+                    rel_mp4 = matched_mp4.relative_to(vault_root)
+                    media_target = str(rel_mp4)
+                except ValueError:
+                    media_target = str(matched_mp4)
+
+    # 3. Check for Zoom recording files if no local MP4
+    if not media_target:
+        for s_dir in search_dirs:
+            if not s_dir.is_dir():
+                continue
+            for rec_md in s_dir.glob("*.md"):
+                if rec_md == transcript_path:
+                    continue
+                content = rec_md.read_text(encoding="utf-8")
+                z_match = re.search(r"https://(?:[a-zA-Z0-9-]+\.)?zoom\.us/rec/(?:share|play)/[^\s\)\"\'>]+", content)
+                if z_match:
+                    media_target = z_match.group(0)
+                    p_match = re.search(r"Passcode:\s*([A-Za-z0-9=+^#@!_%~-]+)", content)
+                    if p_match:
+                        passcode = p_match.group(1).strip()
+                    break
+            if media_target:
+                break
+
+    # 4. Check for YouTube question mappings (e.g. FEET Module 1)
+    if module_dir and module_dir.is_dir():
+        for f in module_dir.glob("*.md"):
+            txt = f.read_text(encoding="utf-8")
+            for m in re.finditer(r"[\*\-]?\s*(?:Q|Question|Exercise)\s*(\d+)(?:\s*-\s*(?:Q|Question|Exercise)?\s*(\d+))?.*?:.*?<?(https://(?:youtu\.be/|www\.youtube\.com/watch\?v=)[^\s\)\"\'>]+)>?", txt, re.I):
+                q_start = int(m.group(1))
+                q_end = int(m.group(2)) if m.group(2) else q_start
+                yt_link = m.group(3).strip()
+                for q_n in range(q_start, q_end + 1):
+                    q_map[str(q_n)] = yt_link
+                if not media_target:
+                    media_target = yt_link
+
+    # 5. Fallback: if transcript exists but no media, link to transcript directly
+    if not media_target and transcript_path:
+        try:
+            rel_t = transcript_path.relative_to(vault_root)
+            media_target = str(rel_t)
+        except ValueError:
+            media_target = str(transcript_path)
+
+    return transcript_path, media_target, passcode, q_map
+
+def stamp_cornell_json(
+    json_path: Path,
+    vault_root: Path,
+    threshold: float = 0.15,
+    force: bool = False,
+    dry_run: bool = False
+) -> Dict[str, Any]:
+    try:
+        note_data = json.loads(json_path.read_text(encoding="utf-8"))
+    except Exception as e:
+        return {"file": json_path.name, "stamped": 0, "error": str(e)}
+
+    transcript_path, media_target, passcode, q_map = find_media_and_transcript_for_note(vault_root, json_path, note_data)
+    if not transcript_path and not q_map:
+        return {"file": json_path.name, "stamped": 0, "skipped": "No transcript or media mappings found"}
+
+    raw_cues = []
+    chunks = []
+    ranker = None
+    if transcript_path:
+        if transcript_path.suffix.lower() == ".vtt":
+            raw_cues = parse_vtt(transcript_path)
+        else:
+            raw_cues = parse_transcript_md(transcript_path)
+        if raw_cues:
+            chunks = build_sliding_chunks(raw_cues, window_cues=4, step_cues=2)
+            ranker = BM25Ranker(chunks)
+
+    stamped_count = 0
+    results_detail = []
+
+    for sec in note_data.get("sections", []):
+        for entry in sec.get("entries", []):
+            orig_cue = entry.get("cue", "")
+            has_existing = bool(re.search(r"\[▶.*?\]\(.*?\)", orig_cue))
+            if has_existing and not force:
+                continue
+
+            base_cue = re.sub(r"\[▶.*?\]\(.*?\)", "", orig_cue).strip()
+            notes_sample = entry.get("notes", "")[:300]
+            
+            # Check question mapping first (e.g. Q1, Q3, Exercise 9.1)
+            target_link = None
+            matched_time_str = "00:00"
+            matched_sec = 0
+            match_score = 0.0
+
+            q_match = re.search(r"\b(?:q|question|exercise)\s*(\d+(?:-\d+)?)\b", base_cue, re.I)
+            if q_match:
+                q_num = q_match.group(1).lower()
+                if q_num in q_map:
+                    target_link = q_map[q_num]
+                    matched_time_str = "00:00"
+                    matched_sec = 0
+                    match_score = 1.0
+
+            if not target_link and ranker and chunks:
+                # Extract problem tag if any (e.g. "9.1", "9.3")
+                p_tag = None
+                p_m = re.search(r"\b(\d+\.\d+)\b", base_cue)
+                if p_m:
+                    p_tag = p_m.group(1)
+
+                cue_tokens = clean_tokens(base_cue)
+                notes_tokens = [w for w in clean_tokens(notes_sample) if w not in cue_tokens][:10]
+                q_tokens = cue_tokens + notes_tokens
+
+                scores = ranker.query(q_tokens, problem_tag=p_tag)
+                top_score, top_idx = scores[0]
+                max_possible = sum([ranker.idf.get(t, 0.0) * (ranker.k1 + 1.0) for t in set(q_tokens)])
+                norm_score = top_score / (max_possible or 1.0)
+                
+                if norm_score >= threshold or top_score >= 10.0 or (p_tag and top_score >= 12.0):
+                    best_chunk = chunks[top_idx]
+                    matched_time_str = best_chunk["time_str"]
+                    matched_sec = best_chunk["start_seconds"]
+                    match_score = norm_score
+                    if media_target:
+                        target_link = media_target
+
+            if target_link:
+                # Format stamped link
+                # Check if target_link already has query or fragment
+                clean_target = re.sub(r"[#?].*$", "", target_link)
+                stamped_tag = f"[▶ {matched_time_str}]({clean_target}#t={matched_sec})"
+                new_cue = f"{base_cue} {stamped_tag}"
+                entry["cue"] = new_cue
+                stamped_count += 1
+                results_detail.append({
+                    "cue": base_cue[:60],
+                    "time": matched_time_str,
+                    "seconds": matched_sec,
+                    "target": clean_target,
+                    "score": f"{match_score:.2f}"
+                })
+
+    if stamped_count > 0 and not dry_run:
+        json_path.write_text(json.dumps(note_data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    return {
+        "file": json_path.name,
+        "stamped": stamped_count,
+        "details": results_detail,
+        "media": media_target or "None",
+        "transcript": transcript_path.name if transcript_path else "None"
+    }
+
+def cmd_stamp_video(args: argparse.Namespace) -> int:
+    vault_root = find_vault_root(args.vault if hasattr(args, "vault") else None)
+    target = getattr(args, "target", None)
+    threshold = getattr(args, "threshold", 0.20)
+    force = getattr(args, "force", False)
+    dry_run = getattr(args, "dry_run", False)
+    course_filter = getattr(args, "course", None)
+
+    mode_label = "🔍 [DRY-RUN] " if dry_run else "⚡ "
+    print(f"\n{mode_label}[Academic ICM] Video & Solution Timestamp Stamping Harness")
+    print(f"   • Vault Root : {vault_root}")
+    print(f"   • Threshold  : {threshold}")
+    print(f"   • Force      : {force}\n")
+
+    json_files = []
+    if target:
+        tp = Path(target).resolve()
+        if tp.is_file() and tp.name.endswith("_cornell.json"):
+            json_files.append(tp)
+        elif tp.is_dir():
+            json_files = list(tp.rglob("*_cornell.json"))
+        else:
+            # Check within vault_root
+            cand = vault_root / target
+            if cand.is_file() and cand.name.endswith("_cornell.json"):
+                json_files.append(cand)
+            elif cand.is_dir():
+                json_files = list(cand.rglob("*_cornell.json"))
+    
+    if not json_files:
+        json_files = list(vault_root.rglob("*_cornell.json"))
+
+    if course_filter:
+        json_files = [f for f in json_files if course_filter.lower() in str(f).lower()]
+
+    if not json_files:
+        print("❌ No matching _cornell.json notes found.")
+        return 1
+
+    total_stamped = 0
+    total_files_changed = 0
+
+    for jf in sorted(json_files):
+        res = stamp_cornell_json(jf, vault_root, threshold=threshold, force=force, dry_run=dry_run)
+        cnt = res.get("stamped", 0)
+        if cnt > 0:
+            total_stamped += cnt
+            total_files_changed += 1
+            print(f"📄 {jf.name} -> {cnt} cues stamped (media: {res.get('media')})")
+            for d in res.get("details", []):
+                print(f"   • [{d['time']}] ({d['score']}) {d['cue']}...")
+        elif "skipped" in res:
+            pass
+
+    action_word = "Would stamp" if dry_run else "Stamped"
+    print(f"\n🎯 Summary: {action_word} {total_stamped} cues across {total_files_changed} notes (scanned {len(json_files)} total notes).")
+    if total_stamped > 0 and not dry_run:
+        print("💡 Run 'academic-icm compile' to update your Knowledge Cosmos and Study Portal with new video drawers!")
+    return 0
+
+# ==============================================================================
 # SUBCOMMAND: serve
 # ==============================================================================
 def cmd_serve(args: argparse.Namespace) -> int:
@@ -633,6 +1098,15 @@ def main() -> int:
     p_sync = subparsers.add_parser("sync-orphans", help="Repair and align known orphaned notes")
     p_sync.add_argument("vault", nargs="?", default=None, help="Path to notes vault root")
 
+    # stamp-video
+    p_stamp = subparsers.add_parser("stamp-video", help="Auto-stamp Cornell cues with video/recording timestamps")
+    p_stamp.add_argument("target", nargs="?", default=None, help="Path to _cornell.json file or folder (default: all notes)")
+    p_stamp.add_argument("--threshold", type=float, default=0.20, help="Minimum BM25 match score threshold (default: 0.20)")
+    p_stamp.add_argument("--force", action="store_true", help="Overwrite existing video timestamps in cues")
+    p_stamp.add_argument("--dry-run", action="store_true", help="Preview timestamp matches without saving to disk")
+    p_stamp.add_argument("--course", help="Filter target notes by course substring (e.g. 48520, 48521)")
+    p_stamp.add_argument("--vault", default=None, help="Path to notes vault root")
+
     # serve
     p_serve = subparsers.add_parser("serve", help="Start local web server for study portal")
     p_serve.add_argument("vault", nargs="?", default=None, help="Path to notes vault root")
@@ -650,6 +1124,7 @@ def main() -> int:
         "build-note": cmd_build_note,
         "compile": cmd_compile,
         "sync-orphans": cmd_sync_orphans,
+        "stamp-video": cmd_stamp_video,
         "serve": cmd_serve,
     }
 

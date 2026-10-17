@@ -103,3 +103,17 @@ Renames and aligns historical stem mismatches so previously unlinked notes attac
 academic-icm serve --port 8765
 ```
 Previews the interactive portal and D3 Cosmos at `http://localhost:8765/`.
+
+### 8. Auto-Stamp Video Solution Timestamps
+```bash
+# Preview timestamp matching across notes without modifying files
+academic-icm stamp-video "48520 - Electronics and Circuits" --dry-run
+
+# Auto-stamp cues in a specific note or entire subject
+academic-icm stamp-video "48520 - Electronics and Circuits/outputs/json/Week_5_Topic_Notes_cornell.json"
+
+# Recompile the curriculum tree so video drawers are activated in Study Portal & Anki cards
+academic-icm compile
+```
+Extracts timestamps from `.vtt` and `_transcript.md` using BM25 semantic chunking, binds them to local MP4s, Zoom cloud recordings, or YouTube walkthroughs, and appends `[▶ MM:SS](url#t=sec)` directly to active-recall cues.
+
