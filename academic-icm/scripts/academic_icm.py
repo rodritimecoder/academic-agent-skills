@@ -1677,19 +1677,52 @@ def cmd_modules() -> int:
     print("\n  Direct CLI commands:")
     print("    academic-icm canvas [...]   - Canvas LMS API client (courses, grades, modules)")
     print("    academic-icm zoom [...]     - Zoom recording download & slide scraper")
+    print("    academic-icm graph [...]    - Knowledge graph traversal & hybrid RAG (Stage 2)")
     print("    academic-icm cornell [...]  - Markdown to active-recall Cornell HTML & Anki")
     print("    academic-icm srs [...]      - Spaced repetition review runner")
     print("  Or via backward-compatible shims in ~/.local/bin/ (canvas-cli, zoom-recorder, cornell-notes)\n")
     return 0
 
+def cmd_graph(args: argparse.Namespace) -> int:
+    action = getattr(args, "graph_action", "search")
+    graph_bin = shutil.which("graph-memory") or "/run/media/rodri/AI/skills/glitch-cat/graph-memory/graph_memory.py"
+    cmd = [sys.executable, str(graph_bin)] if str(graph_bin).endswith(".py") else [str(graph_bin)]
+
+    if action == "index":
+        vault_root = find_vault_root(getattr(args, "vault", None))
+        cmd.extend(["index", "--corpus", str(vault_root)])
+    elif action == "search":
+        if not getattr(args, "query", ""):
+            print("❌ Query string required. E.g. academic-icm graph search 'Coulomb law' --table")
+            return 1
+        cmd.extend(["search", args.query])
+        if getattr(args, "table", False):
+            cmd.append("--table")
+        if getattr(args, "limit", None):
+            cmd.extend(["-n", str(args.limit)])
+    elif action == "recall":
+        if not getattr(args, "query", ""):
+            print("❌ Query required for graph recall. E.g. academic-icm graph recall 'Supernode'")
+            return 1
+        cmd.extend(["recall", args.query])
+    elif action == "build":
+        cmd.extend(["build-graph"])
+
+    res = subprocess.run(cmd)
+    return res.returncode
+
 # ==============================================================================
 # MAIN ENTRYPOINT
 # ==============================================================================
 def main() -> int:
-    if len(sys.argv) > 1 and sys.argv[1] in ("canvas", "zoom", "cornell", "srs", "modules"):
+    if len(sys.argv) > 1 and sys.argv[1] in ("canvas", "zoom", "graph", "cornell", "srs", "modules"):
         mod = sys.argv[1]
         rem = sys.argv[2:]
-        if mod == "canvas":
+        if mod == "graph":
+            graph_bin = shutil.which("graph-memory") or "/run/media/rodri/AI/skills/glitch-cat/graph-memory/graph_memory.py"
+            cmd = [sys.executable, str(graph_bin)] if str(graph_bin).endswith(".py") else [str(graph_bin)]
+            return subprocess.run(cmd + rem).returncode
+        elif mod == "canvas":
             script = find_engine_path("canvas-cli", "canvas_cli.py")
             if not script:
                 sys.exit("❌ Error: canvas_cli.py not found.")
@@ -1717,6 +1750,7 @@ def main() -> int:
         description="Academic ICM Pipeline Orchestrator (Interpretable Context Methodology)"
     )
     subparsers = parser.add_subparsers(dest="command", help="Available subcommands")
+    subparsers.add_parser("graph", help="Knowledge graph traversal & hybrid RAG via graph-memory (Stage 2)")
 
     # Integrated module proxies
     subparsers.add_parser("canvas", help="Canvas LMS API client (courses, grades, assignments, modules)")
@@ -1801,6 +1835,7 @@ def main() -> int:
         "serve": cmd_serve,
         "verify": cmd_verify,
         "smart-check": cmd_smart_check,
+        "graph": cmd_graph,
     }
 
     return dispatch[args.command](args)
