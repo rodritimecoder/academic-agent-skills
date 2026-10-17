@@ -539,8 +539,7 @@ def sanitize_cornell_card(cue: str, notes: str) -> Tuple[str, str]:
 def collect_cornell_map(bundle_root: Path) -> Dict[str, CornellInfo]:
     """Scan bundle for generated Cornell notes JSON and HTML sidecars."""
     cornell_map: Dict[str, CornellInfo] = {}
-    # Search for all *_cornell.json (case-insensitive for safety)
-    json_files = [p for p in bundle_root.rglob("*.json") if p.name.lower().endswith(("_cornell.json", "_cornell_cornell.json"))]
+    json_files = [p for p in bundle_root.rglob("*.json") if p.name.lower().endswith(("_cornell.json", "_cornell_cornell.json")) and "viz_icm" not in p.parts and "02_workers" not in p.parts]
     for jf in json_files:
         if "outputs" in jf.parts:
             try:
@@ -1109,7 +1108,7 @@ def generate_viz(bundle_root: Path, output_file: Optional[Path] = None, tree_fil
         print(f"❌ Error: Not a directory: {bundle_root}")
         return False
 
-    md_files = list(bundle_root.rglob("*.md"))
+    md_files = [f for f in bundle_root.rglob("*.md") if "viz_icm" not in f.parts and "02_workers" not in f.parts and ".git" not in f.parts and "outputs" not in f.parts]
     cornell_map = collect_cornell_map(bundle_root)
 
     active_tree = tree_file
