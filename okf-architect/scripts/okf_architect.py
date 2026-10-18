@@ -348,6 +348,14 @@ def classify_canvas_module(rel_path_str: str, meta: Dict[str, Any], course_name:
         return f"{course_name}/mod_m{m_num:02d}", f"[{c_tag}] Module {m_num:02d}", m_num
 
     low = rel_path_str.lower()
+    if any(k in low for k in [
+        "meet_the_team", "faq", "how_to_be_successful", "welcome", "how_we_run",
+        "assessment_overview", "epa_overview", "modules_overview", "weekly_program",
+        "your_path", "uts_library", "guidance", "study_resources", "subject_resources",
+        "get started", "teaching_staff", "subject_schedule", "open_labs", "general_knowledge"
+    ]):
+        return f"{course_name}/mod_orientation", f"[{c_tag}] 🧭 Orientation & Course Admin", 950
+
     if "assignment" in low:
         return f"{course_name}/mod_assignments", f"[{c_tag}] Assignments & Projects", 90
     if "quiz" in low:
