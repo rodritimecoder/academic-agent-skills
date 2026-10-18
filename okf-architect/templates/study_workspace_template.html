@@ -1320,6 +1320,62 @@
       border-color: var(--accent);
       color: var(--accent);
     }
+    .mat-chip.chip-issues {
+      border-color: rgba(248, 81, 73, 0.45);
+      color: #f85149;
+    }
+    .mat-chip.chip-issues:hover, .mat-chip.chip-issues.active {
+      background: rgba(248, 81, 73, 0.18);
+      border-color: #f85149;
+      color: #ff7b72;
+    }
+    .note-defect-banner {
+      background: rgba(248, 81, 73, 0.08);
+      border: 1px solid rgba(248, 81, 73, 0.35);
+      border-left: 4px solid #f85149;
+      border-radius: 6px;
+      padding: 12px 16px;
+      margin-bottom: 20px;
+    }
+    .note-defect-banner .defect-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-weight: 700;
+      color: #ff7b72;
+      font-size: 13px;
+      margin-bottom: 8px;
+    }
+    .note-defect-banner ul {
+      margin: 0;
+      padding-left: 18px;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    .note-defect-banner li {
+      color: #e6edf3;
+    }
+    .note-defect-banner li.sev-critical {
+      color: #ff7b72;
+      font-weight: 600;
+    }
+    .note-defect-banner li.sev-defect {
+      color: #d29922;
+    }
+    .note-defect-banner li.sev-warning {
+      color: #e3b341;
+    }
+    .note-defect-banner .defect-source {
+      margin-top: 8px;
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+    .note-defect-banner code {
+      background: rgba(0,0,0,0.3);
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: #a5d6ff;
+    }
 
     /* Asset Badges & Formatting */
     .badge-spreadsheet {
@@ -1687,6 +1743,9 @@
 
     <!-- Actions -->
     <div class="header-actions">
+      <button class="btn-action" id="btnHeaderIssues" onclick="setMaterialFilter('issues', document.querySelector('.mat-chip.chip-issues'))" title="Show only notes with detected defects or issues" style="border-color:rgba(248,81,73,0.35); color:#f85149;">
+        <span>🚨</span> Issues
+      </button>
       <button class="btn-action" id="btnToggleAllAnswers" onclick="toggleAllAnswers()">
         <span>👁️</span> Reveal All
       </button>
@@ -1711,6 +1770,7 @@
           <button class="mat-chip" data-filter="cornell" onclick="setMaterialFilter('cornell', this)">⚡ Cornell Notes</button>
           <button class="mat-chip" data-filter="video" onclick="setMaterialFilter('video', this)">🎬 Videos</button>
           <button class="mat-chip" data-filter="transcript" onclick="setMaterialFilter('transcript', this)">🎙️ Transcripts</button>
+          <button class="mat-chip chip-issues" data-filter="issues" onclick="setMaterialFilter('issues', this)" title="Show only flawed notes with detected defects or issues">🚨 Issues</button>
         </div>
         
         <div class="sidebar-search-box">
@@ -1927,6 +1987,73 @@
       }
     }
 
+    function auditNote(note) {
+      if (!note) return [];
+      const defects = [];
+      const body = note.markdown_content || "";
+      const title = (note.title || "").toLowerCase();
+      const cues = note.cues || [];
+      const secs = note.sections || [];
+      const words = (body.match(/\b\w+\b/g) || []).length;
+
+      // 1. Corrupted values
+      if (body.includes("NaN")) {
+        defects.push({ severity: "CRITICAL", msg: "Corrupted calculation: contains 'NaN' in text/tables" });
+      }
+      if (body.includes("undefined")) {
+        defects.push({ severity: "CRITICAL", msg: "Unresolved JS variable: contains 'undefined' in text" });
+      }
+
+      // 2. Raw URLs or markdown links inside cues
+      cues.forEach((c, idx) => {
+        const cueTxt = typeof c === "string" ? c : (c.cue || c.question || "");
+        if (cueTxt.includes("http://") || cueTxt.includes("https://") || cueTxt.includes("zoom.us")) {
+          defects.push({ severity: "DEFECT", msg: `Cue #${idx + 1} contains visible URL: '${cueTxt.slice(0, 50)}...'` });
+        } else if (/\[([^\]]+)\]\([^)]+\)/.test(cueTxt)) {
+          defects.push({ severity: "DEFECT", msg: `Cue #${idx + 1} contains unparsed markdown link: '${cueTxt.slice(0, 50)}...'` });
+        }
+      });
+
+      // 3. Missing video on video-claimed notes
+      const claimsVideo = ["recording", "video", "walkthrough"].some(k => title.includes(k));
+      if (claimsVideo && !note.video_src && !note.zoom_url) {
+        defects.push({ severity: "DEFECT", msg: "Title claims recording/video but has no playable MP4 or Zoom link" });
+      }
+
+      // 4. Sparse content
+      if (words < 35) {
+        defects.push({ severity: "WARNING", msg: `Sparse note: only ${words} words` });
+      }
+
+      // 5. Missing cues/sections
+      if (cues.length === 0 && secs.length === 0) {
+        defects.push({ severity: "INFO", msg: "No Cornell active recall cues or cue-note pairs" });
+      }
+
+      return defects;
+    }
+
+    window.studyDoctor = function(errorsOnly = false) {
+      if (!window.STUDY_DATA || !window.STUDY_DATA.notes) return;
+      const issues = [];
+      Object.entries(window.STUDY_DATA.notes).forEach(([id, n]) => {
+        const d = auditNote(n);
+        const filtered = errorsOnly ? d.filter(x => x.severity === "CRITICAL" || x.severity === "DEFECT") : d;
+        if (filtered.length > 0) {
+          issues.push({
+            id: id,
+            title: n.title,
+            course: n.course,
+            words: (n.markdown_content || "").split(/\s+/).length,
+            defects: filtered.map(x => `[${x.severity}] ${x.msg}`).join(" | "),
+            source: n.source
+          });
+        }
+      });
+      console.table(issues);
+      return issues;
+    };
+
     // Local Storage Progress Store
     const STORAGE_KEY_PREFIX = "icm_retention_";
 
@@ -2100,6 +2227,23 @@
         notes = notes.filter(n => n.video_src || n.zoom_url);
       } else if (activeMaterialFilter === "transcript") {
         notes = notes.filter(n => n.asset_type === "transcript" || n.title.toLowerCase().includes("transcript") || n.id.toLowerCase().includes("transcript"));
+      } else if (activeMaterialFilter === "issues") {
+        notes = notes.filter(n => auditNote(n).some(d => d.severity === "CRITICAL" || d.severity === "DEFECT"));
+      }
+
+      if (activeMaterialFilter === "issues" && notes.length === 0) {
+        treeContainer.innerHTML = `
+          <div style="padding: 24px 16px; text-align: center; color: var(--text-dim); font-size: 13px;">
+            <div style="font-size: 28px; margin-bottom: 8px;">✅</div>
+            <strong style="color: #34d399; display: block; margin-bottom: 6px;">Zero Critical Defects</strong>
+            <span style="line-height:1.5;">No flawed sheets found in this course. Select another course above or run <code>./doctor.py --errors</code> in terminal.</span>
+          </div>
+        `;
+        return;
+      }
+
+      if (activeMaterialFilter === "issues" && notes.length > 0 && !notes.some(n => n.id === currentNoteId)) {
+        selectNote(notes[0].id);
       }
 
       // Group by module
@@ -2137,6 +2281,9 @@
 
           const cueCount = n.cues ? n.cues.length : 0;
           const hasVideo = !!(n.video_src || n.zoom_url);
+          const noteDefects = auditNote(n).filter(d => d.severity === "CRITICAL" || d.severity === "DEFECT");
+          const defectBadge = noteDefects.length > 0 ? `<span class="badge-issues" title="${noteDefects.map(d=>d.msg).join('&#10;')}" style="background:rgba(248,81,73,0.2); color:#ff7b72; border:1px solid rgba(248,81,73,0.4); padding:1px 5px; border-radius:3px; font-size:10px; font-weight:700;">🚨 ${noteDefects.length}</span>` : "";
+
           let assetIcon = "📄";
           if (cueCount > 0) assetIcon = "⚡";
           else if (n.asset_type === "transcript" || n.title.toLowerCase().includes("transcript")) assetIcon = "🎙️";
@@ -2149,6 +2296,7 @@
               <span style="overflow:hidden; text-overflow:ellipsis;">${n.title}</span>
             </div>
             <div class="lecture-badges">
+              ${defectBadge}
               <span class="badge-cues">⚡ ${cueCount}</span>
               ${hasVideo ? '<span class="badge-video">🎬</span>' : ''}
             </div>
@@ -2882,6 +3030,23 @@
         </div>
       `;
 
+      const noteIssues = auditNote(note).filter(d => d.severity === "CRITICAL" || d.severity === "DEFECT" || d.severity === "WARNING");
+      let defectBannerHtml = "";
+      if (noteIssues.length > 0) {
+        defectBannerHtml = `
+          <div class="note-defect-banner">
+            <div class="defect-header">
+              <span>🚨 Ground-Truth Note Defects (${noteIssues.length})</span>
+              <span style="font-size:11px; font-weight:normal; color:var(--text-dim);">Run <code>./doctor.py --errors</code> in terminal to verify</span>
+            </div>
+            <ul>
+              ${noteIssues.map(d => `<li class="sev-${d.severity.toLowerCase()}"><strong>[${d.severity}]</strong> ${d.msg}</li>`).join("")}
+            </ul>
+            <div class="defect-source">Raw File: <code>${note.source || note.id}</code></div>
+          </div>
+        `;
+      }
+
       if (!note.sections || note.sections.length === 0) {
         if (note.markdown_content) {
           let content = note.markdown_content;
@@ -2891,12 +3056,14 @@
           }
           paper.innerHTML = `
             ${headerHtml}
+            ${defectBannerHtml}
             <div style="line-height:1.7; font-size:14px; color:var(--text-main);" class="doc-markdown-body">
               ${renderMarkdownSafe(content)}
             </div>`;
         } else {
           paper.innerHTML = `
             ${headerHtml}
+            ${defectBannerHtml}
             <div style="color:var(--text-dim); font-style:italic; padding:20px;">No content recorded for this note.</div>`;
         }
       } else {
@@ -2972,6 +3139,7 @@
 
         paper.innerHTML = `
           ${headerHtml}
+          ${defectBannerHtml}
           ${sectionsHtml}
         `;
       }
