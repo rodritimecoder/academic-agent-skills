@@ -83,6 +83,14 @@
       gap: 8px;
       text-decoration: none;
     }
+    .brand-area {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+      flex: 1;
+      overflow: hidden;
+    }
     .brand-badge {
       font-size: 10px;
       font-weight: 600;
@@ -92,6 +100,7 @@
       padding: 2px 7px;
       border-radius: 12px;
       text-transform: uppercase;
+      flex-shrink: 0;
     }
 
     .header-breadcrumb {
@@ -100,10 +109,28 @@
       display: flex;
       align-items: center;
       gap: 6px;
+      min-width: 0;
+      overflow: hidden;
+      white-space: nowrap;
+    }
+    .header-breadcrumb span#breadcrumbCourse {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      display: inline-block;
+      max-width: 140px;
+      flex-shrink: 1;
     }
     .header-breadcrumb strong {
       color: var(--text-main);
       font-weight: 600;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      display: inline-block;
+      max-width: 280px;
+      vertical-align: bottom;
+      flex-shrink: 1;
     }
 
     /* Mode Toggles */
@@ -992,17 +1019,201 @@
       display: none;
       flex: 1;
       overflow-y: auto;
-      padding: 40px 20px;
-      background: #f8fafc;
-      color: #1a1a1a;
+      padding: 30px 24px;
+      background: #0c0e14;
+      color: #cdd6f4;
     }
     .doc-sheet-paper {
-      max-width: 215mm;
+      max-width: 1040px;
       margin: 0 auto;
-      background: #ffffff;
-      padding: 20mm;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+      background: #141721;
+      padding: 32px 36px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    /* Cornell Paper Sheet Components */
+    .cornell-doc-header {
+      border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+      padding-bottom: 20px;
+      margin-bottom: 28px;
+    }
+    .cornell-doc-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    .cornell-doc-pills {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .cornell-doc-course-pill {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      background: rgba(137, 180, 250, 0.15);
+      color: #89b4fa;
+      border: 1px solid rgba(137, 180, 250, 0.3);
+    }
+    .cornell-doc-module-pill {
+      font-size: 11px;
+      color: #fab387;
+      font-weight: 600;
+      background: rgba(250, 179, 135, 0.1);
+      padding: 3px 8px;
+      border-radius: 6px;
+      border: 1px solid rgba(250, 179, 135, 0.25);
+    }
+    .cornell-doc-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .cornell-doc-btn {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: var(--text-dim);
+      padding: 5px 11px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      text-decoration: none;
+      transition: all 0.15s ease;
+    }
+    .cornell-doc-btn:hover {
+      background: rgba(137, 180, 250, 0.15);
+      border-color: #89b4fa;
+      color: #ffffff;
+    }
+    .cornell-doc-title {
+      font-size: 22px;
+      font-weight: 700;
+      color: #ffffff;
+      line-height: 1.35;
+      margin-bottom: 6px;
+    }
+    .cornell-doc-stats {
+      font-size: 12px;
+      color: #8b92aa;
+    }
+    .cornell-section-block {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      border-radius: 10px;
+      margin-bottom: 24px;
+      overflow: hidden;
+    }
+    .cornell-sec-heading {
+      background: rgba(137, 180, 250, 0.08);
+      border-bottom: 1px solid rgba(137, 180, 250, 0.18);
+      color: #89b4fa;
+      padding: 11px 18px;
+      font-size: 14px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .cornell-entry-pair {
+      display: grid;
+      grid-template-columns: 34% 66%;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      transition: background 0.15s;
+    }
+    .cornell-entry-pair:last-child {
+      border-bottom: none;
+    }
+    .cornell-entry-pair:hover {
+      background: rgba(255, 255, 255, 0.015);
+    }
+    .cornell-cue-box {
+      background: rgba(255, 255, 255, 0.015);
+      border-right: 1px solid rgba(255, 255, 255, 0.08);
+      padding: 14px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .cornell-cue-badge {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 2px 7px;
       border-radius: 4px;
+      width: fit-content;
+      background: rgba(166, 227, 161, 0.15);
+      color: #a6e3a1;
+    }
+    .cornell-cue-text {
+      font-size: 13.5px;
+      font-weight: 600;
+      color: #ffffff;
+      line-height: 1.45;
+    }
+    .cornell-cue-video-btn {
+      background: rgba(137, 180, 250, 0.12);
+      border: 1px solid rgba(137, 180, 250, 0.3);
+      color: #89b4fa;
+      padding: 4px 8px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      width: fit-content;
+      transition: all 0.15s ease;
+    }
+    .cornell-cue-video-btn:hover {
+      background: #89b4fa;
+      color: #111420;
+    }
+    .cornell-notes-box {
+      padding: 14px 20px;
+      color: #cdd6f4;
+      font-size: 13.5px;
+      line-height: 1.6;
+      transition: filter 0.2s, opacity 0.2s;
+    }
+    .cornell-notes-box.blurred {
+      filter: blur(7px);
+      opacity: 0.25;
+      cursor: pointer;
+      user-select: none;
+    }
+    .cornell-notes-box.blurred:hover {
+      opacity: 0.45;
+      filter: blur(5px);
+    }
+    .cornell-notes-box.revealed {
+      filter: none;
+      opacity: 1;
+      cursor: default;
+    }
+    .cornell-sec-summary {
+      background: rgba(250, 179, 135, 0.08);
+      border-top: 1px dashed rgba(250, 179, 135, 0.3);
+      padding: 12px 18px;
+      font-size: 13px;
+      color: #fab387;
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
     }
 
     /* Math rendering helpers */
@@ -2231,17 +2442,59 @@
       }
     }
 
+    function toggleDocBlurAll() {
+      const boxes = document.querySelectorAll(".cornell-notes-box");
+      const hasBlurred = Array.from(boxes).some(b => b.classList.contains("blurred"));
+      boxes.forEach(b => {
+        if (hasBlurred) {
+          b.classList.remove("blurred");
+          b.classList.add("revealed");
+        } else {
+          b.classList.remove("revealed");
+          b.classList.add("blurred");
+        }
+      });
+      const btn = document.getElementById("btnDocBlurToggle");
+      if (btn) {
+        btn.innerHTML = hasBlurred ? "<span>🙈</span> Blur Answers (Self-Quiz)" : "<span>👁️</span> Reveal All Answers";
+      }
+    }
+    window.toggleDocBlurAll = toggleDocBlurAll;
+
     function renderDocSheet(note) {
       const paper = document.getElementById("docSheetPaper");
-      let badgeHtml = "";
-      if (note.asset_type === "spreadsheet" || (note.title && note.title.toLowerCase().includes("excel"))) {
-        badgeHtml = '<div style="margin-bottom:12px;"><span class="badge-spreadsheet">📊 Spreadsheet Workbook / Data Sheet</span></div>';
-      } else if (note.asset_type === "transcript" || (note.title && note.title.toLowerCase().includes("transcript"))) {
-        badgeHtml = '<div style="margin-bottom:12px;"><span class="badge-transcript">🎙️ Audio Recording Transcript (ASR)</span></div>';
+      const cueCount = (note.cues || []).length;
+      const secCount = (note.sections || []).length;
+      const htmlRel = note.html_path || "";
+
+      let printLinkHtml = "";
+      if (htmlRel && htmlRel !== "#") {
+        printLinkHtml = `<a href="${htmlRel}" target="_blank" class="cornell-doc-btn" title="Open print-ready standalone HTML sheet"><span>📄</span> Standalone Sheet ↗</a>`;
       }
 
-      let html = `${badgeHtml}<h1 style="font-size:24px; margin-bottom:12px;">${note.title}</h1>`;
-      html += `<div style="font-size:13px; color:#555; margin-bottom:24px;">${note.course} &bull; ${note.source || ''}</div>`;
+      let headerHtml = `
+        <div class="cornell-doc-header">
+          <div class="cornell-doc-meta">
+            <div class="cornell-doc-pills">
+              <span class="cornell-doc-course-pill">${note.course}</span>
+              <span class="cornell-doc-module-pill">📅 ${note.module || "Module"}</span>
+              ${note.asset_type === "spreadsheet" ? '<span class="badge-spreadsheet">📊 Spreadsheet Workbook</span>' : ''}
+              ${note.asset_type === "transcript" ? '<span class="badge-transcript">🎙️ Audio Recording Transcript</span>' : ''}
+            </div>
+            <div class="cornell-doc-actions">
+              ${secCount > 0 ? '<button class="cornell-doc-btn" id="btnDocBlurToggle" onclick="toggleDocBlurAll()"><span>👁️</span> Reveal All Answers</button>' : ''}
+              ${printLinkHtml}
+              <button class="cornell-doc-btn" onclick="window.print()"><span>🖨️</span> Print</button>
+            </div>
+          </div>
+          <div class="cornell-doc-title">${note.title}</div>
+          <div class="cornell-doc-stats">
+            <span>⚡ ${cueCount} Active Recall Cues</span> &bull; 
+            <span>📂 ${secCount} Core Sections</span> &bull; 
+            <span style="color:#a6e3a1;">Interactive Cornell Notes Sheet</span>
+          </div>
+        </div>
+      `;
 
       if (!note.sections || note.sections.length === 0) {
         if (note.markdown_content) {
@@ -2250,25 +2503,89 @@
             content = content.replace(/`\[?(\d{1,2}:\d{2}(?::\d{2})?)\]?`/g, '<span class="transcript-timestamp">⏱ $1</span>')
                              .replace(/\[(\d{1,2}:\d{2}(?::\d{2})?)\]/g, '<span class="transcript-timestamp">⏱ $1</span>');
           }
-          html += `<div style="line-height:1.7; font-size:14px; color:#222;" class="doc-markdown-body">${renderMarkdownSafe(content)}</div>`;
+          paper.innerHTML = `
+            ${headerHtml}
+            <div style="line-height:1.7; font-size:14px; color:var(--text-main);" class="doc-markdown-body">
+              ${renderMarkdownSafe(content)}
+            </div>`;
         } else {
-          html += `<div style="color:#777; font-style:italic;">No content recorded for this note.</div>`;
+          paper.innerHTML = `
+            ${headerHtml}
+            <div style="color:var(--text-dim); font-style:italic; padding:20px;">No content recorded for this note.</div>`;
         }
       } else {
-        (note.sections || []).forEach(s => {
-          html += `<h2 style="font-size:18px; margin:20px 0 10px 0; border-bottom:1px solid #ddd; padding-bottom:4px;">${s.heading}</h2>`;
-          (s.entries || []).forEach(e => {
-            let parsedNotes = renderMarkdownSafe(e.notes || "");
-            html += `
-              <div style="display:grid; grid-template-columns: 200px 1fr; gap:16px; margin-bottom:16px; padding-bottom:12px; border-bottom:1px dashed #eee;">
-                <div style="font-weight:600; font-size:13px;">${e.cue}</div>
-                <div style="font-size:13px;">${parsedNotes}</div>
+        let sectionsHtml = "";
+        let globalCueIdx = 0;
+
+        note.sections.forEach((sec, sIdx) => {
+          let rowsHtml = "";
+          (sec.entries || []).forEach((e, eIdx) => {
+            const cueIdx = globalCueIdx++;
+            const cueBadge = e.badge || "CONCEPT";
+            const parsedNotes = renderMarkdownSafe(e.notes || "");
+
+            let videoBtnHtml = "";
+            let timeSeconds = e.seconds;
+            let timeStr = e.timestamp;
+            const evidence = e.video_evidence;
+            if (evidence && evidence.anchors && evidence.anchors.length > 0) {
+              const a = evidence.anchors[0];
+              timeSeconds = a.start_seconds;
+              timeStr = a.time_str;
+            }
+
+            if (typeof timeSeconds === "number" && timeSeconds >= 0) {
+              videoBtnHtml = `
+                <button class="cornell-cue-video-btn" onclick="event.stopPropagation(); switchViewMode('sync'); seekVideoAnchor(${timeSeconds}, ${cueIdx})" title="Jump to timestamp in Lecture Sync">
+                  <span>▶</span> ${timeStr || formatSeconds(timeSeconds)}
+                </button>
+              `;
+            }
+
+            rowsHtml += `
+              <div class="cornell-entry-pair">
+                <div class="cornell-cue-box">
+                  <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:4px;">
+                    <span class="cornell-cue-badge">${cueBadge}</span>
+                    ${videoBtnHtml}
+                  </div>
+                  <div class="cornell-cue-text">${e.cue}</div>
+                </div>
+                <div class="cornell-notes-box blurred" onclick="this.classList.toggle('revealed')">
+                  ${parsedNotes}
+                </div>
               </div>
             `;
           });
+
+          let summaryHtml = "";
+          if (sec.summary) {
+            summaryHtml = `
+              <div class="cornell-sec-summary">
+                <span style="font-size:15px;">💡</span>
+                <div><strong>Summary:</strong> ${sec.summary}</div>
+              </div>
+            `;
+          }
+
+          sectionsHtml += `
+            <div class="cornell-section-block">
+              <div class="cornell-sec-heading">
+                <span>📂</span> ${sec.heading || `Section ${sIdx + 1}`}
+              </div>
+              <div class="cornell-entries-list">
+                ${rowsHtml}
+              </div>
+              ${summaryHtml}
+            </div>
+          `;
         });
+
+        paper.innerHTML = `
+          ${headerHtml}
+          ${sectionsHtml}
+        `;
       }
-      paper.innerHTML = html;
       triggerMathRendering(paper);
     }
 
