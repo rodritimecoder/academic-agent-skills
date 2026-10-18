@@ -403,15 +403,20 @@ def week_sort_key(name: str) -> Tuple[int, int, str]:
 
 
 def normalize_stem(s: str) -> str:
-    """Normalize note stem by standardizing week prefixes, double underscores, and case."""
+    """Normalize note stem by standardizing week prefixes, stripping course prefixes and noise suffixes."""
     s = s.lower().replace("-", "_").replace(" ", "_")
+    # Strip course prefixes: e.g. 48520_, 48521_, 48430_, 41200_
+    s = re.sub(r'^(?:48520|48521|48430|41200)_+', '', s)
     m = re.match(r'^(?:w(?:eek)?_?(\d+)_+)+', s)
     if m:
         w_num = int(m.group(1))
         rest = s[m.end():]
         s = f"w{w_num:02d}_{rest}"
+    # Strip trailing noisy suffix numbers like _26, _tl, _1, _2
+    s = re.sub(r'_(?:26|tl|1|2)$', '', s)
     s = re.sub(r"_+", "_", s)
     return s.strip("_")
+
 
 
 def parse_time_to_seconds(ts: str) -> int:
@@ -704,12 +709,12 @@ def collect_cornell_map(bundle_root: Path) -> Dict[str, CornellInfo]:
                     cornell_map[normalize_stem(clean_jf_stem)] = info
                     if src:
                         src_stem = Path(src).stem.lower().replace("-", "_").replace(" ", "_")
-                        # Only index by src_stem if it has a week prefix or is specific
-                        # to prevent generic filenames like "tutorial_solutions" from colliding across weeks
-                        w_match = re.search(r'\b(?:week|w)[_\s-]*\d+\b', src_stem)
-                        if w_match:
+                        if src_stem not in ("index", "readme", "notes", "summary", "topic_notes", "tutorial_solutions"):
                             cornell_map[src_stem] = info
                             cornell_map[normalize_stem(src_stem)] = info
+                            clean_src = re.sub(r'^(?:48520|48521|48430|41200)_+', '', src_stem)
+                            cornell_map[clean_src] = info
+                            cornell_map[normalize_stem(clean_src)] = info
             except Exception:
                 pass
     return cornell_map
@@ -1327,16 +1332,20 @@ def generate_study_workspace(bundle_root: Path, nodes: List[Dict[str, Any]], cor
                     break
 
         is_transcript = "transcript" in clean_stem or "transcript" in d.get("label", "").lower()
-        is_solutions = "solution" in clean_stem or bool(matched_mp4 or zoom_url)
         is_spreadsheet = "excel" in clean_stem or "sheet" in clean_stem or bool(re.search(r'\|\s*[-:]+\s*\|', markdown_body))
-        if is_transcript:
+        is_solutions = "solution" in clean_stem
+        has_video = bool(matched_mp4 or zoom_url)
+
+        if cues_list:
+            asset_type = "cornell"
+        elif is_transcript:
             asset_type = "transcript"
         elif is_solutions:
             asset_type = "solutions"
+        elif has_video:
+            asset_type = "video"
         elif is_spreadsheet:
             asset_type = "spreadsheet"
-        elif cues_list:
-            asset_type = "cornell"
         else:
             asset_type = "document"
 

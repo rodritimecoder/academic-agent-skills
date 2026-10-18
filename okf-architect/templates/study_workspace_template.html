@@ -1399,7 +1399,7 @@
         <span>⚡</span> Active Recall Quiz
       </button>
       <button class="view-btn" id="btnDocView" onclick="switchViewMode('doc')">
-        <span>📄</span> Cornell Sheet
+        <span>📄</span> Document Reader
       </button>
     </div>
 
@@ -1426,7 +1426,8 @@
 
         <div class="material-filter-bar" id="materialFilterBar">
           <button class="mat-chip active" data-filter="all" onclick="setMaterialFilter('all', this)">All</button>
-          <button class="mat-chip" data-filter="study" onclick="setMaterialFilter('study', this)">⚡ Study Notes</button>
+          <button class="mat-chip" data-filter="cornell" onclick="setMaterialFilter('cornell', this)">⚡ Cornell Notes</button>
+          <button class="mat-chip" data-filter="video" onclick="setMaterialFilter('video', this)">🎬 Videos</button>
           <button class="mat-chip" data-filter="transcript" onclick="setMaterialFilter('transcript', this)">🎙️ Transcripts</button>
         </div>
         
@@ -1776,8 +1777,10 @@
       treeContainer.innerHTML = "";
 
       let notes = getNotesForCourse(courseId);
-      if (activeMaterialFilter === "study") {
-        notes = notes.filter(n => n.asset_type === "cornell" || n.asset_type === "solutions" || (n.cues && n.cues.length > 0));
+      if (activeMaterialFilter === "cornell" || activeMaterialFilter === "study") {
+        notes = notes.filter(n => (n.cues && n.cues.length > 0) || (n.sections && n.sections.length > 0));
+      } else if (activeMaterialFilter === "video") {
+        notes = notes.filter(n => n.video_src || n.zoom_url);
       } else if (activeMaterialFilter === "transcript") {
         notes = notes.filter(n => n.asset_type === "transcript" || n.title.toLowerCase().includes("transcript") || n.id.toLowerCase().includes("transcript"));
       }
@@ -1806,12 +1809,13 @@
           itemEl.id = `sidebar_item_${n.id}`;
           itemEl.onclick = () => selectNote(n.id);
 
+          const cueCount = n.cues ? n.cues.length : 0;
           const hasVideo = !!(n.video_src || n.zoom_url);
           let assetIcon = "📄";
-          if (n.asset_type === "cornell" || (n.cues && n.cues.length > 0)) assetIcon = "⚡";
-          else if (n.asset_type === "solutions" || hasVideo) assetIcon = "🎬";
+          if (cueCount > 0) assetIcon = "⚡";
           else if (n.asset_type === "transcript" || n.title.toLowerCase().includes("transcript")) assetIcon = "🎙️";
           else if (n.asset_type === "spreadsheet" || n.title.toLowerCase().includes("excel")) assetIcon = "📊";
+          else if (hasVideo) assetIcon = "🎬";
 
           itemEl.innerHTML = `
             <div class="lecture-left">
@@ -1819,7 +1823,7 @@
               <span style="overflow:hidden; text-overflow:ellipsis;">${n.title}</span>
             </div>
             <div class="lecture-badges">
-              <span class="badge-cues">⚡ ${n.cues ? n.cues.length : 0}</span>
+              <span class="badge-cues">⚡ ${cueCount}</span>
               ${hasVideo ? '<span class="badge-video">🎬</span>' : ''}
             </div>
           `;
@@ -1856,6 +1860,22 @@
       if (btnQuiz) {
         btnQuiz.innerHTML = `<span>⚡</span> Active Recall Quiz <span style="font-size:11px; opacity:0.8; margin-left:3px;">(${cueCount})</span>`;
         btnQuiz.style.opacity = cueCount === 0 ? "0.5" : "1";
+      }
+
+      // Update Doc/Cornell switcher button dynamically
+      const btnDoc = document.getElementById("btnDocView");
+      if (btnDoc) {
+        if (cueCount > 0) {
+          btnDoc.innerHTML = `<span>⚡</span> Cornell Sheet`;
+          btnDoc.title = "View structured Cornell Sheet with active-recall cue pairs";
+        } else {
+          btnDoc.innerHTML = `<span>📄</span> Document Reader`;
+          btnDoc.title = "View source Markdown document";
+        }
+      }
+      const brandBadge = document.querySelector(".brand-badge");
+      if (brandBadge && currentViewMode === "doc") {
+        brandBadge.textContent = cueCount > 0 ? "Cornell Sheet" : "Document Reader";
       }
 
       // Setup Video Player
@@ -2358,17 +2378,22 @@
       document.getElementById("viewQuizContainer").style.display = "none";
       document.getElementById("viewDocContainer").style.display = "none";
 
+      const brandBadge = document.querySelector(".brand-badge");
       if (mode === "sync") {
         document.getElementById("btnSyncView").classList.add("active");
         document.getElementById("viewSyncContainer").style.display = "flex";
+        if (brandBadge) brandBadge.textContent = "Lecture Sync";
         triggerMathRendering(document.getElementById("notesContainer"));
       } else if (mode === "quiz") {
         document.getElementById("btnQuizView").classList.add("active");
         document.getElementById("viewQuizContainer").style.display = "flex";
+        if (brandBadge) brandBadge.textContent = "Active Recall Quiz";
         renderQuizCard(currentQuizIndex);
       } else if (mode === "doc") {
         document.getElementById("btnDocView").classList.add("active");
         document.getElementById("viewDocContainer").style.display = "block";
+        const hasCues = currentNoteData && currentNoteData.cues && currentNoteData.cues.length > 0;
+        if (brandBadge) brandBadge.textContent = hasCues ? "Cornell Sheet" : "Document Reader";
         triggerMathRendering(document.getElementById("docSheetPaper"));
       }
     }
@@ -2478,12 +2503,34 @@
         printLinkHtml = `<a href="${htmlRel}" target="_blank" class="cornell-doc-btn" title="Open print-ready standalone HTML sheet"><span>📄</span> Standalone Sheet ↗</a>`;
       }
 
+      let statsHtml = "";
+      let typeBadge = "";
+      if (cueCount > 0 || secCount > 0) {
+        statsHtml = `
+          <div class="cornell-doc-stats">
+            <span>⚡ ${cueCount} Active Recall Cues</span> &bull; 
+            <span>📂 ${secCount} Core Sections</span> &bull; 
+            <span style="color:#a6e3a1;">Interactive Cornell Notes Sheet</span>
+          </div>`;
+        typeBadge = '<span class="badge-cornell" style="background:rgba(166,227,161,0.15); color:#a6e3a1; border:1px solid rgba(166,227,161,0.3); padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600;">⚡ Cornell Sheet</span>';
+      } else {
+        const typeLabel = note.asset_type === "spreadsheet" ? "Spreadsheet Workbook" : (note.asset_type === "transcript" ? "Audio Recording Transcript" : "Course Markdown Document");
+        const typeColor = note.asset_type === "spreadsheet" ? "#fab387" : (note.asset_type === "transcript" ? "#fbbf24" : "#89b4fa");
+        statsHtml = `
+          <div class="cornell-doc-stats">
+            <span style="color:${typeColor};">📄 ${typeLabel}</span> &bull; 
+            <span style="color:var(--text-dim); font-size:12px;">Reference Document (No active-recall cue pairs compiled)</span>
+          </div>`;
+        typeBadge = '<span style="background:rgba(137,180,250,0.15); color:#89b4fa; border:1px solid rgba(137,180,250,0.3); padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600;">📄 Source Document</span>';
+      }
+
       let headerHtml = `
         <div class="cornell-doc-header">
           <div class="cornell-doc-meta">
             <div class="cornell-doc-pills">
               <span class="cornell-doc-course-pill">${note.course}</span>
               <span class="cornell-doc-module-pill">📅 ${note.module || "Module"}</span>
+              ${typeBadge}
               ${note.asset_type === "spreadsheet" ? '<span class="badge-spreadsheet">📊 Spreadsheet Workbook</span>' : ''}
               ${note.asset_type === "transcript" ? '<span class="badge-transcript">🎙️ Audio Recording Transcript</span>' : ''}
             </div>
@@ -2494,11 +2541,7 @@
             </div>
           </div>
           <div class="cornell-doc-title">${note.title}</div>
-          <div class="cornell-doc-stats">
-            <span>⚡ ${cueCount} Active Recall Cues</span> &bull; 
-            <span>📂 ${secCount} Core Sections</span> &bull; 
-            <span style="color:#a6e3a1;">Interactive Cornell Notes Sheet</span>
-          </div>
+          ${statsHtml}
         </div>
       `;
 
