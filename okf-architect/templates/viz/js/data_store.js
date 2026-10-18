@@ -75,23 +75,30 @@
       }
       window.addEventListener("resize", resize);
 
-      // Title cleaner to remove redundant course code prefixes, double stems, and trailing version artifacts
       function cleanNodeTitle(raw) {
         if (!raw) return "";
         let s = raw;
-        // Strip bracket prefixes like [48520 W09], [41200], [48521 W01]
-        s = s.replace(/^\[[^\]]+\]\s*/, "");
-        // Strip repeated week prefixes like "Week 6 Week 6", "Week 06:", "W01 W01"
-        s = s.replace(/^(?:week|w)\s*\d+[\s:_-]*(?:week\s*\d+[\s:_-]*)?/i, "");
-        // Strip module prefixes like "Module 02:", "mod_02 -"
-        s = s.replace(/^module\s*\d+[\s:_-]*/i, "");
-        // Strip lecture/file prefixes like "F01 -", "L02:"
-        s = s.replace(/^(?:f|l)\s*\d+[\s:_-]*/i, "");
-        // Strip trailing number/version artifacts like " 26", " v2", " tl"
+        const mBracket = s.match(/^\[(?:\d+\s+)?(?:(W\d+)|([A-Za-z0-9_-]+))\]\s*/);
+        let wPrefix = "";
+        if (mBracket) {
+          if (mBracket[1]) {
+            wPrefix = mBracket[1].toUpperCase();
+          }
+          s = s.slice(mBracket[0].length);
+        }
+
+        s = s.replace(/\b(week\s*\d+)\s+(?:week\s*\d+)\b/gi, "$1");
+        s = s.replace(/\b(w\d+)\s+(?:w\d+)\b/gi, "$1");
+        s = s.replace(/^(?:week|w)\d+[\s:_-]+(week\s*\d+)/gi, "$1");
+        s = s.replace(/^(?:f|l)\s*\d+[\s:_-]+/gi, "");
         s = s.replace(/\s+(?:26|tl|v2)\b/gi, "");
-        // Normalize underscores and multiple spaces
         s = s.replace(/_+/g, " ").replace(/\s+/g, " ").trim();
-        // Capitalize first character cleanly
+
+        const hasWeek = /\b(?:week\s*\d+|w\d+|module\s*\d+)\b/i.test(s);
+        if (!hasWeek && wPrefix) {
+          s = `${wPrefix} ${s}`;
+        }
+
         if (s && s.length > 0 && s[0] >= 'a' && s[0] <= 'z') {
           s = s.charAt(0).toUpperCase() + s.slice(1);
         }

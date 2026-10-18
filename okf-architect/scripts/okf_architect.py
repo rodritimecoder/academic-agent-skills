@@ -359,22 +359,32 @@ def classify_canvas_module(rel_path_str: str, meta: Dict[str, Any], course_name:
 
 
 def clean_display_title(s: str) -> str:
-    """Clean note title by removing bracket prefixes, repeated week stems, and version suffixes."""
+    """Clean note title by removing redundant course codes and stutter while preserving week/module identity."""
     if not s:
         return ""
-    # Strip bracket prefixes like [48520 W09] or [41200]
-    s = re.sub(r'^\[[^\]]+\]\s*', '', s)
-    # Strip repeated week prefixes like "Week 6 Week 6 " or "W01 W01 "
-    s = re.sub(r'^(?:week|w)\s*\d+[\s:_-]*(?:week\s*\d+[\s:_-]*)?', '', s, flags=re.IGNORECASE)
-    # Strip module prefixes like "Module 02 "
-    s = re.sub(r'^module\s*\d+[\s:_-]*', '', s, flags=re.IGNORECASE)
-    # Strip lecture/file prefixes like "L01 " or "F01 "
-    s = re.sub(r'^(?:f|l)\s*\d+[\s:_-]*', '', s, flags=re.IGNORECASE)
-    # Strip trailing numbers/versions like " 26", " v2", " tl"
+    raw = s
+    m_bracket = re.match(r'^\[(?:\d+\s+)?(?:(W\d+)|([A-Za-z0-9_-]+))\]\s*', s)
+    w_prefix = ""
+    if m_bracket:
+        if m_bracket.group(1):
+            w_prefix = m_bracket.group(1).upper()
+        s = s[m_bracket.end():]
+
+    s = re.sub(r'\b(week\s*\d+)\s+(?:week\s*\d+)\b', r'\1', s, flags=re.IGNORECASE)
+    s = re.sub(r'\b(w\d+)\s+(?:w\d+)\b', r'\1', s, flags=re.IGNORECASE)
+    s = re.sub(r'^(?:week|w)\d+[\s:_-]+(week\s*\d+)', r'\1', s, flags=re.IGNORECASE)
+    s = re.sub(r'^(?:f|l)\s*\d+[\s:_-]+', '', s, flags=re.IGNORECASE)
     s = re.sub(r'\s+(?:26|tl|v2)\b', '', s, flags=re.IGNORECASE)
-    # Replace multiple underscores with space
-    s = re.sub(r'_+', ' ', s).strip()
-    return (s[0].upper() + s[1:]) if s and s[0].islower() else s
+    s = re.sub(r'_+', ' ', s)
+    s = re.sub(r'\s+', ' ', s).strip()
+
+    has_week = bool(re.search(r'\b(?:week\s*\d+|w\d+|module\s*\d+)\b', s, re.IGNORECASE))
+    if not has_week and w_prefix:
+        s = f"{w_prefix} {s}"
+
+    if s and s[0].islower():
+        s = s[0].upper() + s[1:]
+    return s or raw
 
 
 def week_sort_key(name: str) -> Tuple[int, int, str]:
