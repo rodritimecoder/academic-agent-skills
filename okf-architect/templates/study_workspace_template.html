@@ -1674,14 +1674,14 @@
 
     <!-- Mode Switcher -->
     <div class="view-switcher">
-      <button class="view-btn active" id="btnSyncView" onclick="switchViewMode('sync')">
+      <button class="view-btn active" id="btnDocView" onclick="switchViewMode('doc')">
+        <span>⚡</span> Cornell Sheet
+      </button>
+      <button class="view-btn" id="btnSyncView" onclick="switchViewMode('sync')">
         <span>🎬</span> Lecture Sync
       </button>
       <button class="view-btn" id="btnQuizView" onclick="switchViewMode('quiz')">
-        <span>⚡</span> Active Recall Quiz
-      </button>
-      <button class="view-btn" id="btnDocView" onclick="switchViewMode('doc')">
-        <span>📄</span> Document Reader
+        <span>🧠</span> Active Recall Quiz
       </button>
     </div>
 
@@ -1738,7 +1738,7 @@
     <main class="workspace-main">
 
       <!-- View 1: Synchronized Lecture View -->
-      <div class="view-sync-container" id="viewSyncContainer">
+      <div class="view-sync-container" id="viewSyncContainer" style="display:none;">
         
         <!-- Left: Media & Grounded Evidence Stage -->
         <section class="media-stage">
@@ -1893,7 +1893,7 @@
       </div>
 
       <!-- View 3: Printable Cornell Sheet Document Mode -->
-      <div class="view-doc-container" id="viewDocContainer">
+      <div class="view-doc-container" id="viewDocContainer" style="display:block;">
         <div class="doc-sheet-paper" id="docSheetPaper">
           <!-- Rendered 2-column print sheet -->
         </div>
@@ -1911,7 +1911,7 @@
     let currentNoteId = "";
     let currentNoteData = null;
     let activeCueIndex = 0;
-    let currentViewMode = "sync"; // 'sync' | 'quiz' | 'doc'
+    let currentViewMode = "doc"; // 'doc' | 'quiz' | 'sync'
     let currentQuizIndex = 0;
     let currentQuizCards = [];
     let activeMaterialFilter = "all"; // 'all' | 'study' | 'transcript'
@@ -2036,7 +2036,8 @@
 
       // Select Note
       const courseNotes = getNotesForCourse(currentCourse);
-      let targetNote = courseNotes[0] ? courseNotes[0].id : "";
+      const firstCornell = courseNotes.find(n => (n.cues && n.cues.length > 0) || (n.sections && n.sections.length > 0));
+      let targetNote = firstCornell ? firstCornell.id : (courseNotes[0] ? courseNotes[0].id : "");
       if (paramNote) {
         const normQuery = paramNote.toLowerCase().replace(/\+/g, " ").replace(/\s+/g, " ").trim();
         const found = courseNotes.find(n => {
@@ -2053,6 +2054,8 @@
 
       if (paramMode && ["sync", "quiz", "doc"].includes(paramMode)) {
         switchViewMode(paramMode);
+      } else {
+        switchViewMode("doc");
       }
 
       updateProgressStats();
@@ -2869,7 +2872,7 @@
               ${note.asset_type === "transcript" ? '<span class="badge-transcript">🎙️ Audio Recording Transcript</span>' : ''}
             </div>
             <div class="cornell-doc-actions">
-              ${secCount > 0 ? '<button class="cornell-doc-btn" id="btnDocBlurToggle" onclick="toggleDocBlurAll()"><span>👁️</span> Reveal All Answers</button>' : ''}
+              ${secCount > 0 ? '<button class="cornell-doc-btn" id="btnDocBlurToggle" onclick="toggleDocBlurAll()"><span>🙈</span> Blur Answers (Self-Quiz)</button>' : ''}
               ${printLinkHtml}
               <button class="cornell-doc-btn" onclick="window.print()"><span>🖨️</span> Print</button>
             </div>
@@ -2937,7 +2940,7 @@
                   </div>
                   <div class="cornell-cue-text">${cleanCueText(e.cue)}</div>
                 </div>
-                <div class="cornell-notes-box blurred" onclick="this.classList.toggle('revealed')">
+                <div class="cornell-notes-box revealed" onclick="this.classList.toggle('blurred')">
                   ${parsedNotes}
                 </div>
               </div>

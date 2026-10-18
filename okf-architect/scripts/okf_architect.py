@@ -980,8 +980,14 @@ def build_graph_nodes(
                 worked_weeks_by_course.setdefault(c, set()).add(int(m.group(1)))
 
     seen_body_hashes: Set[Tuple[str, str]] = set()
+    seen_dialogue_sigs: Set[Tuple[str, str]] = set()
 
-    for md_file in sorted(md_files):
+    def file_priority_key(mf: Path) -> Tuple[int, int, str]:
+        rel = mf.relative_to(bundle_root)
+        is_rec = "recordings" in rel.parts
+        return (1 if is_rec else 0, len(rel.parts), str(rel))
+
+    for md_file in sorted(md_files, key=file_priority_key):
         rel_path = md_file.relative_to(bundle_root)
         fname_low = md_file.name.lower()
         fstem_low = md_file.stem.lower()
@@ -1010,6 +1016,16 @@ def build_graph_nodes(
 
         if "canvas.uts.edu.au/courses" in body and words < 40 and "topic_notes" in fstem_low:
             continue
+
+        if "transcript" in fstem_low:
+            matches = re.findall(r'-\s*`?\[?\d{1,2}:\d{2}(?::\d{2})?\]?`?\s*\*\*[^*]+\*\*:[^\n]+', body)
+            if matches:
+                dia_sample = "".join(matches[:15])
+                dia_sig = hashlib.sha256(dia_sample.encode("utf-8")).hexdigest()
+                dia_key = (course, dia_sig)
+                if dia_key in seen_dialogue_sigs:
+                    continue
+                seen_dialogue_sigs.add(dia_key)
 
         body_hash = hashlib.sha256(body.strip().encode("utf-8")).hexdigest()
         hash_key = (course, body_hash)
