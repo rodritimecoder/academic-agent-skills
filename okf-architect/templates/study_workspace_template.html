@@ -1872,7 +1872,8 @@
 
           let content = note.markdown_content;
           if (note.asset_type === "transcript" || (note.title && note.title.toLowerCase().includes("transcript"))) {
-            content = content.replace(/\[?(\d{1,2}:\d{2}(?::\d{2})?)\]?/g, '<span class="transcript-timestamp">⏱ $1</span>');
+            content = content.replace(/`\[?(\d{1,2}:\d{2}(?::\d{2})?)\]?`/g, '<span class="transcript-timestamp">⏱ $1</span>')
+                             .replace(/\[(\d{1,2}:\d{2}(?::\d{2})?)\]/g, '<span class="transcript-timestamp">⏱ $1</span>');
           }
 
           container.innerHTML = `
@@ -2246,7 +2247,8 @@
         if (note.markdown_content) {
           let content = note.markdown_content;
           if (note.asset_type === "transcript" || (note.title && note.title.toLowerCase().includes("transcript"))) {
-            content = content.replace(/\[?(\d{1,2}:\d{2}(?::\d{2})?)\]?/g, '<span class="transcript-timestamp">⏱ $1</span>');
+            content = content.replace(/`\[?(\d{1,2}:\d{2}(?::\d{2})?)\]?`/g, '<span class="transcript-timestamp">⏱ $1</span>')
+                             .replace(/\[(\d{1,2}:\d{2}(?::\d{2})?)\]/g, '<span class="transcript-timestamp">⏱ $1</span>');
           }
           html += `<div style="line-height:1.7; font-size:14px; color:#222;" class="doc-markdown-body">${renderMarkdownSafe(content)}</div>`;
         } else {
