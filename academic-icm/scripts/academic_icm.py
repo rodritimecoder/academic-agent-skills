@@ -33,6 +33,7 @@ import math
 import shutil
 from collections import Counter
 from typing import Dict, List, Any, Optional, Tuple
+import urllib.request
 
 DEFAULT_NOTES_DIR = Path("/run/media/rodri/AI/University/notes")
 
@@ -844,6 +845,118 @@ def find_media_and_transcript_for_note(vault_root: Path, json_path: Path, note_d
 
     return transcript_path, media_target, passcode, q_map
 
+def get_embedding_gemma2(text: str, endpoint: str = "http://127.0.0.1:8082/embedding") -> Optional[List[float]]:
+    try:
+        req = urllib.request.Request(
+            endpoint,
+            data=json.dumps({"content": text}).encode("utf-8"),
+            headers={"Content-Type": "application/json"}
+        )
+        with urllib.request.urlopen(req, timeout=3.0) as resp:
+            if resp.status != 200:
+                return None
+            data = json.loads(resp.read().decode("utf-8"))
+            raw = data[0]["embedding"]
+            if isinstance(raw[0], list):
+                raw = raw[0]
+            norm = math.sqrt(sum(x * x for x in raw))
+            if norm == 0:
+                return raw
+            return [x / norm for x in raw]
+    except Exception:
+        return None
+
+def load_slide_vectors(vault_root: Path) -> List[Dict[str, Any]]:
+    for cand in [vault_root / "slide_vectors.json", vault_root / "viz_icm" / "slide_vectors.json"]:
+        if cand.is_file():
+            try:
+                return json.loads(cand.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+    return []
+
+def find_best_slide_diagram(
+    cue_vec: List[float],
+    slide_corpus: List[Dict[str, Any]],
+    course_hint: str,
+    min_sim: float = 0.62
+) -> Optional[Dict[str, Any]]:
+    if not cue_vec or not slide_corpus:
+        return None
+
+    course_nums = re.findall(r'\b\d{5}\b', course_hint)
+    pool = slide_corpus
+    if course_nums:
+        matching_course = [
+            s for s in slide_corpus
+            if any(num in s.get("course", "") or num in s.get("image_path", "") for num in course_nums)
+        ]
+        if matching_course:
+            pool = matching_course
+
+    best_sim = -1.0
+    best_slide = None
+    for s in pool:
+        s_vec = s.get("vector")
+        if not s_vec or len(s_vec) != len(cue_vec):
+            continue
+        sim = sum(a * b for a, b in zip(cue_vec, s_vec))
+        if sim > best_sim:
+            best_sim = sim
+            best_slide = s
+
+    if best_slide and best_sim >= min_sim:
+        res = dict(best_slide)
+        res["similarity"] = round(best_sim, 4)
+        return res
+    return None
+
+def clean_spoken_quote(raw_text: str, max_words: int = 28) -> str:
+    cleaned = re.sub(r'^(?:so|now|well|okay|right|yeah|um|uh|like|see)[\s,]+', '', raw_text.strip(), flags=re.I)
+    cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+    words = cleaned.split()
+    if len(words) > max_words:
+        snippet = " ".join(words[:max_words]).strip()
+        if not snippet.endswith((".", "!", "?")):
+            snippet += "..."
+    else:
+        snippet = " ".join(words)
+    return snippet
+
+def decide_best_timestamp_with_jev(
+    cue: str,
+    candidates: List[Dict[str, Any]],
+    jev_port: int = 8083
+) -> Optional[Dict[str, Any]]:
+    if len(candidates) <= 1:
+        return candidates[0] if candidates else None
+
+    letters = ["Option A", "Option B", "Option C", "Option D"]
+    opt_lines = []
+    for i, c in enumerate(candidates[:4]):
+        snippet = c["text"][:140].replace("\n", " ").strip()
+        opt_lines.append(f"{letters[i]} [{c['time_str']}]: \"{snippet}\"")
+
+    context = f"Question / Technical Cue: {cue}\n" + "\n".join(opt_lines)
+    question = "Which timestamp candidate presents the mathematical derivation, formal definition, or core technical explanation rather than conversational preamble?"
+    options = letters[:len(candidates[:4])]
+
+    try:
+        sys.path.append("/run/media/rodri/AI/skills/jev-decision/scripts")
+        from jev_engine import JevEngine
+        jev = JevEngine(port=jev_port)
+        if jev.is_online():
+            res = jev.decide_choice(context=context, question=question, options=options)
+            if res and "selection" in res:
+                sel = res["selection"]
+                for i, letter in enumerate(letters):
+                    if letter in sel and i < len(candidates):
+                        return candidates[i]
+    except Exception:
+        pass
+
+    return candidates[0]
+
 def stamp_cornell_json(
     json_path: Path,
     vault_root: Path,
@@ -857,8 +970,9 @@ def stamp_cornell_json(
         return {"file": json_path.name, "stamped": 0, "error": str(e)}
 
     transcript_path, media_target, passcode, q_map = find_media_and_transcript_for_note(vault_root, json_path, note_data)
-    if not transcript_path and not q_map:
-        return {"file": json_path.name, "stamped": 0, "skipped": "No transcript or media mappings found"}
+    slide_corpus = load_slide_vectors(vault_root)
+    if not transcript_path and not q_map and not slide_corpus:
+        return {"file": json_path.name, "stamped": 0, "skipped": "No transcript, media mappings, or slide vectors found"}
 
     raw_cues = []
     chunks = []
@@ -873,79 +987,151 @@ def stamp_cornell_json(
             ranker = BM25Ranker(chunks)
 
     stamped_count = 0
+    quotes_count = 0
+    slides_count = 0
     results_detail = []
 
     for sec in note_data.get("sections", []):
         for entry in sec.get("entries", []):
             orig_cue = entry.get("cue", "")
             has_existing = bool(re.search(r"\[▶.*?\]\(.*?\)", orig_cue))
-            if has_existing and not force:
-                continue
-
             base_cue = re.sub(r"\[▶.*?\]\(.*?\)", "", orig_cue).strip()
             notes_sample = entry.get("notes", "")[:300]
             
-            # Check question mapping first (e.g. Q1, Q3, Exercise 9.1)
             target_link = None
             matched_time_str = "00:00"
             matched_sec = 0
             match_score = 0.0
+            best_chunk = None
+            cue_vec = None
 
-            q_match = re.search(r"\b(?:q|question|exercise)\s*(\d+(?:-\d+)?)\b", base_cue, re.I)
-            if q_match:
-                q_num = q_match.group(1).lower()
-                if q_num in q_map:
-                    target_link = q_map[q_num]
-                    matched_time_str = "00:00"
-                    matched_sec = 0
-                    match_score = 1.0
+            # 1. Video Timestamp & Chunk Matching
+            if not has_existing or force:
+                # Check question mapping first (e.g. Q1, Q3, Exercise 9.1)
+                q_match = re.search(r"\b(?:q|question|exercise)\s*(\d+(?:-\d+)?)\b", base_cue, re.I)
+                if q_match:
+                    q_num = q_match.group(1).lower()
+                    if q_num in q_map:
+                        target_link = q_map[q_num]
+                        matched_time_str = "00:00"
+                        matched_sec = 0
+                        match_score = 1.0
 
-            if not target_link and ranker and chunks:
-                # Extract problem tag if any (e.g. "9.1", "9.3")
-                p_tag = None
-                p_m = re.search(r"\b(\d+\.\d+)\b", base_cue)
-                if p_m:
-                    p_tag = p_m.group(1)
+                if not target_link and ranker and chunks:
+                    p_tag = None
+                    p_m = re.search(r"\b(\d+\.\d+)\b", base_cue)
+                    if p_m:
+                        p_tag = p_m.group(1)
 
-                cue_tokens = clean_tokens(base_cue)
-                notes_tokens = [w for w in clean_tokens(notes_sample) if w not in cue_tokens][:10]
-                q_tokens = cue_tokens + notes_tokens
+                    cue_tokens = clean_tokens(base_cue)
+                    notes_tokens = [w for w in clean_tokens(notes_sample) if w not in cue_tokens][:10]
+                    q_tokens = cue_tokens + notes_tokens
 
-                scores = ranker.query(q_tokens, problem_tag=p_tag)
-                top_score, top_idx = scores[0]
-                max_possible = sum([ranker.idf.get(t, 0.0) * (ranker.k1 + 1.0) for t in set(q_tokens)])
-                norm_score = top_score / (max_possible or 1.0)
-                
-                if norm_score >= threshold or top_score >= 10.0 or (p_tag and top_score >= 12.0):
-                    best_chunk = chunks[top_idx]
-                    matched_time_str = best_chunk["time_str"]
-                    matched_sec = best_chunk["start_seconds"]
-                    match_score = norm_score
-                    if media_target:
-                        target_link = media_target
+                    scores = ranker.query(q_tokens, problem_tag=p_tag)
+                    top_score, top_idx = scores[0]
+                    max_possible = sum([ranker.idf.get(t, 0.0) * (ranker.k1 + 1.0) for t in set(q_tokens)])
+                    norm_score = top_score / (max_possible or 1.0)
 
-            if target_link:
-                # Format stamped link
-                # Check if target_link already has query or fragment
-                clean_target = re.sub(r"[#?].*$", "", target_link)
-                stamped_tag = f"[▶ {matched_time_str}]({clean_target}#t={matched_sec})"
-                new_cue = f"{base_cue} {stamped_tag}"
-                entry["cue"] = new_cue
-                stamped_count += 1
+                    # Get EmbeddingGemma-2 semantic vector
+                    cue_vec = get_embedding_gemma2(base_cue + " " + notes_sample[:100])
+                    candidate_chunks = []
+
+                    # Rescore top BM25 candidates with EmbeddingGemma-2 if available
+                    cand_indices = [idx for sc, idx in scores[:8] if sc > 0]
+                    if cue_vec and cand_indices:
+                        for idx in cand_indices:
+                            c = chunks[idx]
+                            c_vec = get_embedding_gemma2(c["text"])
+                            sim = 0.0
+                            if c_vec:
+                                sim = sum(a * b for a, b in zip(cue_vec, c_vec))
+                            bm25_val = next((sc for sc, ci in scores if ci == idx), 0.0)
+                            bm25_norm = min(1.0, bm25_val / (top_score or 1.0))
+                            hybrid = 0.45 * bm25_norm + 0.55 * max(0.0, sim)
+                            candidate_chunks.append({
+                                "chunk": c,
+                                "hybrid": hybrid,
+                                "sim": sim,
+                                "bm25": bm25_val,
+                                "time_str": c["time_str"],
+                                "seconds": c["start_seconds"],
+                                "text": c["text"]
+                            })
+                        candidate_chunks.sort(key=lambda x: x["hybrid"], reverse=True)
+
+                    if candidate_chunks:
+                        # If top 2 candidates are separated by >= 60 seconds with close scores, arbitrate with OneJev
+                        if len(candidate_chunks) >= 2:
+                            c1, c2 = candidate_chunks[0], candidate_chunks[1]
+                            if abs(c1["seconds"] - c2["seconds"]) >= 60 and c2["hybrid"] >= 0.55:
+                                winning = decide_best_timestamp_with_jev(base_cue, [c1, c2])
+                                if winning:
+                                    best_chunk = winning["chunk"]
+                                    match_score = winning["hybrid"]
+                        if not best_chunk:
+                            best_chunk = candidate_chunks[0]["chunk"]
+                            match_score = candidate_chunks[0]["hybrid"]
+                    elif norm_score >= threshold or top_score >= 10.0 or (p_tag and top_score >= 12.0):
+                        best_chunk = chunks[top_idx]
+                        match_score = norm_score
+
+                    if best_chunk and (match_score >= threshold or top_score >= 10.0):
+                        matched_time_str = best_chunk["time_str"]
+                        matched_sec = best_chunk["start_seconds"]
+                        if media_target:
+                            target_link = media_target
+
+                if target_link:
+                    clean_target = re.sub(r"[#?].*$", "", target_link)
+                    stamped_tag = f"[▶ {matched_time_str}]({clean_target}#t={matched_sec})"
+                    entry["cue"] = f"{base_cue} {stamped_tag}"
+                    stamped_count += 1
+            else:
+                m_existing = re.search(r"\[▶\s*([^\]]+)\]", orig_cue)
+                if m_existing:
+                    matched_time_str = m_existing.group(1).strip()
+
+            # 2. Spoken Transcript Quote Snippet Chip
+            if best_chunk and "💬 **Lecture" not in entry.get("notes", ""):
+                quote_snip = clean_spoken_quote(best_chunk["text"])
+                if quote_snip:
+                    entry["notes"] = f"{entry.get('notes', '').rstrip()}\n\n> 💬 **Lecture [{matched_time_str}]**: *\"{quote_snip}\"*"
+                    quotes_count += 1
+
+            # 3. Slide Keyframe & Visual Diagram Matching
+            if slide_corpus:
+                if not cue_vec:
+                    cue_vec = get_embedding_gemma2(base_cue + " " + notes_sample[:100])
+                if cue_vec:
+                    matched_slide = find_best_slide_diagram(cue_vec, slide_corpus, str(json_path), min_sim=0.62)
+                    if matched_slide:
+                        slide_filename = matched_slide.get("filename", "")
+                        if slide_filename and slide_filename not in entry.get("notes", ""):
+                            html_dir = json_path.parent.parent / "html"
+                            rel_img = os.path.relpath(matched_slide["image_path"], html_dir)
+                            slide_label = matched_slide.get("label") or Path(matched_slide["image_path"]).stem
+                            entry["notes"] = f"{entry.get('notes', '').rstrip()}\n\n![Slide Diagram: {slide_label}]({rel_img})"
+                            slides_count += 1
+
+            if target_link or (best_chunk and (not has_existing or force)):
                 results_detail.append({
                     "cue": base_cue[:60],
                     "time": matched_time_str,
                     "seconds": matched_sec,
-                    "target": clean_target,
-                    "score": f"{match_score:.2f}"
+                    "target": clean_target if target_link else media_target,
+                    "score": f"{match_score:.2f}",
+                    "quote": bool(best_chunk),
+                    "slide": bool(slide_corpus and cue_vec)
                 })
 
-    if stamped_count > 0 and not dry_run:
+    if (stamped_count > 0 or quotes_count > 0 or slides_count > 0) and not dry_run:
         json_path.write_text(json.dumps(note_data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
     return {
         "file": json_path.name,
         "stamped": stamped_count,
+        "quotes": quotes_count,
+        "slides": slides_count,
         "details": results_detail,
         "media": media_target or "None",
         "transcript": transcript_path.name if transcript_path else "None"
@@ -991,23 +1177,33 @@ def cmd_stamp_video(args: argparse.Namespace) -> int:
         return 1
 
     total_stamped = 0
+    total_quotes = 0
+    total_slides = 0
     total_files_changed = 0
 
     for jf in sorted(json_files):
         res = stamp_cornell_json(jf, vault_root, threshold=threshold, force=force, dry_run=dry_run)
         cnt = res.get("stamped", 0)
-        if cnt > 0:
+        q_cnt = res.get("quotes", 0)
+        s_cnt = res.get("slides", 0)
+        if cnt > 0 or q_cnt > 0 or s_cnt > 0:
             total_stamped += cnt
+            total_quotes += q_cnt
+            total_slides += s_cnt
             total_files_changed += 1
-            print(f"📄 {jf.name} -> {cnt} cues stamped (media: {res.get('media')})")
+            print(f"📄 {jf.name} -> {cnt} cues stamped, {q_cnt} quotes, {s_cnt} slide diagrams (media: {res.get('media')})")
             for d in res.get("details", []):
-                print(f"   • [{d['time']}] ({d['score']}) {d['cue']}...")
+                flags = []
+                if d.get("quote"): flags.append("💬 quote")
+                if d.get("slide"): flags.append("🖼️ slide")
+                flag_str = f" [{' '.join(flags)}]" if flags else ""
+                print(f"   • [{d['time']}] ({d['score']}){flag_str} {d['cue']}...")
         elif "skipped" in res:
             pass
 
     action_word = "Would stamp" if dry_run else "Stamped"
-    print(f"\n🎯 Summary: {action_word} {total_stamped} cues across {total_files_changed} notes (scanned {len(json_files)} total notes).")
-    if total_stamped > 0 and not dry_run:
+    print(f"\n🎯 Summary: {action_word} {total_stamped} cues, {total_quotes} lecture quotes, {total_slides} slide diagrams across {total_files_changed} notes (scanned {len(json_files)} total notes).")
+    if (total_stamped > 0 or total_quotes > 0 or total_slides > 0) and not dry_run:
         print("💡 Run 'academic-icm compile' to update your Knowledge Cosmos and Study Portal with new video drawers!")
     return 0
 

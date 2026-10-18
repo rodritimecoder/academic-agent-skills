@@ -199,6 +199,31 @@ class TestSrsReview(unittest.TestCase):
         self.assertEqual(len(custom_cards), 1)
         self.assertIn("Auxiliary KCL constraint equation", custom_cards[0][1])
 
+    def test_slide_diagram_and_lecture_quote_rendering(self):
+        text = (
+            "State the universal step response formula.\n\n"
+            "> 💬 **Lecture [04:00]**: *\"The step response formula applies to any first-order RC circuit.\"*\n\n"
+            "![Circuit Diagram](../../Week_9/markdown/Picture24.jpg)"
+        )
+        html_out = format_notes.format_text_block(text)
+        self.assertIn('<blockquote class="lecture-quote">', html_out)
+        self.assertIn('Lecture [04:00]', html_out)
+        self.assertIn('<figure class="slide-diagram-figure">', html_out)
+        self.assertIn('src="../../Week_9/markdown/Picture24.jpg"', html_out)
+        self.assertIn('<figcaption>Circuit Diagram</figcaption>', html_out)
+
+        # In Anki cards, the quote chip is stripped while the diagram and text remain
+        entry = {
+            "cue": "State the formula [▶ 04:00](video.mp4#t=240)",
+            "notes": text
+        }
+        cards = format_notes.atomize_entry_to_cards("Circuits", entry)
+        self.assertEqual(len(cards), 1)
+        front, back = cards[0]
+        self.assertNotIn("04:00", front)
+        self.assertNotIn("Lecture [04:00]", back)
+        self.assertIn('src="../../Week_9/markdown/Picture24.jpg"', back)
+
 
 if __name__ == "__main__":
     unittest.main()

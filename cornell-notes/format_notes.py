@@ -58,11 +58,19 @@ def render_inline(text: str) -> str:
     # 3. Escape all plain text safely
     text = html.escape(text)
 
-    # 4. Format links: [text](url)
+    # 4. Format images first: ![alt](url)
+    def render_image(match):
+        alt = match.group(1)
+        url = match.group(2)
+        return f'<img src="{url}" alt="{alt}" class="slide-diagram" loading="lazy">'
+
+    text = re.sub(r'!\[([^\]]*)\]\(([^)]+)\)', render_image, text)
+
+    # 5. Format links: [text](url)
     def render_link(match):
         label = match.group(1)
         url = match.group(2)
-        if re.match(r'^(https?://|mailto:|#|/|\.\/)', url, re.IGNORECASE):
+        if re.match(r'^(https?://|mailto:|#|/|\.\/|\.\.\/)', url, re.IGNORECASE):
             safe_url = html.escape(url, quote=True)
             return f'<a href="{safe_url}" target="_blank" rel="noopener">{label}</a>'
         return f'{label} ({url})'
@@ -115,6 +123,8 @@ def format_text_block(text: str) -> str:
     in_callout = False
     callout_type = "note"
     callout_lines = []
+    in_quote = False
+    quote_lines = []
 
     def flush_para():
         nonlocal para_lines
@@ -123,6 +133,15 @@ def format_text_block(text: str) -> str:
             if content:
                 output_html.append(f"<p>{render_inline(content)}</p>")
             para_lines = []
+
+    def flush_quote():
+        nonlocal in_quote, quote_lines
+        if in_quote and quote_lines:
+            content = " ".join(quote_lines).strip()
+            if content:
+                output_html.append(f'<blockquote class="lecture-quote">{render_inline(content)}</blockquote>')
+            quote_lines = []
+            in_quote = False
 
     def flush_ul():
         nonlocal in_ul
@@ -195,6 +214,25 @@ def format_text_block(text: str) -> str:
             code_lines.append(line)
             continue
 
+        # Check standalone image line: ![alt](url)
+        img_match = re.match(r'^!\[([^\]]*)\]\(([^)]+)\)$', stripped)
+        if img_match:
+            flush_para()
+            flush_ul()
+            flush_ol()
+            flush_table()
+            flush_callout()
+            flush_quote()
+            alt_txt = html.escape(img_match.group(1))
+            img_src = html.escape(img_match.group(2), quote=True)
+            output_html.append(
+                f'<figure class="slide-diagram-figure">'
+                f'<img src="{img_src}" alt="{alt_txt}" class="slide-diagram" loading="lazy">'
+                f'<figcaption>{alt_txt}</figcaption>'
+                f'</figure>'
+            )
+            continue
+
         # Check Obsidian Callouts: > [!NOTE], > [!TIP], > [!WARNING], > [!DANGER]
         callout_match = re.match(r'^>\s*\[!(NOTE|TIP|WARNING|DANGER|IMPORTANT|CAUTION)\]\s*(.*)$', stripped, re.IGNORECASE)
         if callout_match:
@@ -203,6 +241,7 @@ def format_text_block(text: str) -> str:
             flush_ol()
             flush_table()
             flush_callout()
+            flush_quote()
             c_tag = callout_match.group(1).lower()
             if c_tag in ['important', 'caution']:
                 c_tag = 'danger'
@@ -221,12 +260,25 @@ def format_text_block(text: str) -> str:
         elif in_callout:
             flush_callout()
 
+        # Check general blockquotes: > text (e.g. spoken transcript snippets)
+        if stripped.startswith('>'):
+            flush_para()
+            flush_ul()
+            flush_ol()
+            flush_table()
+            in_quote = True
+            quote_lines.append(stripped.lstrip('>').strip())
+            continue
+        elif in_quote:
+            flush_quote()
+
         # Check table line
         if stripped.startswith('|') and stripped.endswith('|') and '|' in stripped[1:-1]:
             flush_para()
             flush_ul()
             flush_ol()
             flush_callout()
+            flush_quote()
             in_table = True
             table_rows.append(stripped)
             continue
@@ -241,6 +293,7 @@ def format_text_block(text: str) -> str:
             flush_para()
             flush_ol()
             flush_callout()
+            flush_quote()
             if not in_ul:
                 output_html.append("<ul>")
                 in_ul = True
@@ -254,6 +307,7 @@ def format_text_block(text: str) -> str:
             flush_para()
             flush_ul()
             flush_callout()
+            flush_quote()
             if not in_ol:
                 output_html.append("<ol>")
                 in_ol = True
@@ -269,6 +323,7 @@ def format_text_block(text: str) -> str:
             flush_ol()
             flush_table()
             flush_callout()
+            flush_quote()
             continue
 
         # Regular text line (accumulates into paragraph)
@@ -283,6 +338,7 @@ def format_text_block(text: str) -> str:
     flush_ol()
     flush_table()
     flush_callout()
+    flush_quote()
 
     return "\n".join(output_html)
 
@@ -425,9 +481,14 @@ def atomize_entry_to_cards(sec_heading: str, entry: dict) -> list[tuple[str, str
             if cards:
                 return cards
 
+    # Strip spoken transcript quote chips from Anki cards to prevent clutter
+    notes_clean = re.sub(r'>\s*💬[^\n]+(?:\n\s*>[^\n]+)*', '', notes_raw).strip()
+    if not notes_clean:
+        notes_clean = notes_raw
+
     # Default / Clean fallback card:
     f = f"<strong>[{html.escape(sec_heading)}]</strong><br>{html.escape(cue_clean)}"
-    b = format_text_block(notes_raw)
+    b = format_text_block(notes_clean)
     return [(f.replace("\n", " "), b.replace("\n", " "))]
 
 
@@ -618,6 +679,13 @@ def determine_output_path(input_json_path: Path, output_arg: str | None) -> Path
         out_name = f"{stem}.html"
     else:
         out_name = f"{stem}_cornell.html"
+
+    # Canonical academic output routing: if json is in outputs/json, route html to outputs/html
+    if input_json_path.parent.name == "json" and input_json_path.parent.parent.name == "outputs":
+        html_dir = input_json_path.parent.parent / "html"
+        html_dir.mkdir(parents=True, exist_ok=True)
+        return html_dir / out_name
+
     return input_json_path.parent / out_name
 
 
