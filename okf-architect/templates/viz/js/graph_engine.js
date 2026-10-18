@@ -730,8 +730,9 @@
       const drag = d3.drag()
         .container(canvas)
         .subject(event => {
-          const e = event.sourceEvent;
-          return findNodeAt(e.clientX, e.clientY);
+          const [cx, cy] = d3.pointer(event, canvas);
+          const rect = canvas.getBoundingClientRect();
+          return findNodeAt(rect.left + cx, rect.top + cy);
         })
         .on("start", event => {
           if (!event.subject) return;
@@ -743,12 +744,9 @@
         })
         .on("drag", event => {
           if (!draggedNode) return;
-          const rect = canvas.getBoundingClientRect();
-          const e = event.sourceEvent;
-          const canvasX = e.clientX - rect.left;
-          const canvasY = e.clientY - rect.top;
-          draggedNode.fx = transform.invertX(canvasX);
-          draggedNode.fy = transform.invertY(canvasY);
+          const [cx, cy] = d3.pointer(event, canvas);
+          draggedNode.fx = transform.invertX(cx);
+          draggedNode.fy = transform.invertY(cy);
           requestRender();
         })
         .on("end", event => {
@@ -763,10 +761,12 @@
       // Pan & Zoom
       const zoom = d3.zoom()
         .scaleExtent([0.15, 6.0])
+        .translateExtent([[-width * 1.5, -height * 1.5], [width * 2.5, height * 2.5]])
         .filter(event => {
-          // Allow zoom/pan only when NOT initiating a node drag
           if (event.type === "mousedown" || event.type === "touchstart") {
-            const node = findNodeAt(event.clientX, event.clientY);
+            const [cx, cy] = d3.pointer(event, canvas);
+            const rect = canvas.getBoundingClientRect();
+            const node = findNodeAt(rect.left + cx, rect.top + cy);
             return !node;
           }
           return true;

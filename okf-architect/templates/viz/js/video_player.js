@@ -34,13 +34,13 @@
           zBtn.onclick = () => {
             if (targetPasscode) {
               navigator.clipboard.writeText(targetPasscode).then(() => {
-                alert(`📋 Passcode "${targetPasscode}" copied to clipboard! Opening Zoom...`);
+                const orig = zBtn.innerHTML;
+                zBtn.innerHTML = `<span>✅</span> Copied Passcode!`;
+                setTimeout(() => { zBtn.innerHTML = orig; }, 2000);
               }).catch(() => {});
             }
             if (targetUrl && targetUrl.startsWith("http")) {
               window.open(targetUrl, "_blank");
-            } else {
-              alert("⚠️ No valid Zoom Cloud URL configured for this recording.");
             }
           };
         }
@@ -129,9 +129,18 @@
             mp4El.style.display = "none";
             showZoomCard(vFallback || vSrc, vPasscode, timeStr, displayTitle);
           };
-          mp4El.src = vSrc;
-          mp4El.currentTime = seekSec;
-          mp4El.play().catch(() => {});
+          const applySeek = () => {
+            if (seekSec !== null && seekSec >= 0) {
+              mp4El.currentTime = seekSec;
+              mp4El.play().catch(() => {});
+            }
+          };
+          if (!mp4El.src || !mp4El.src.endsWith(vSrc)) {
+            mp4El.src = vSrc;
+            mp4El.addEventListener("loadedmetadata", applySeek, { once: true });
+          } else {
+            applySeek();
+          }
         } else if (vType === "zoom" && zoomCard) {
           showZoomCard(vSrc, vPasscode, timeStr, displayTitle);
         }
@@ -173,9 +182,7 @@
       function launchZoomWithPasscode() {
         if (!currentActiveVideo || currentActiveVideo.type !== "zoom") return;
         if (currentActiveVideo.passcode) {
-          navigator.clipboard.writeText(currentActiveVideo.passcode).then(() => {
-            alert(`📋 Passcode "${currentActiveVideo.passcode}" copied to clipboard! Opening Zoom...`);
-          }).catch(() => {});
+          navigator.clipboard.writeText(currentActiveVideo.passcode).catch(() => {});
         }
         window.open(currentActiveVideo.src, "_blank");
       }
