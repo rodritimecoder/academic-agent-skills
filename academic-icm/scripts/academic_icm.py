@@ -502,6 +502,7 @@ def cmd_compile(args: argparse.Namespace) -> int:
     if res.returncode == 0:
         print("\n✨ Compilation finished successfully!")
         print(f"   • Knowledge Cosmos: file://{vault_root / 'viz.html'}")
+        print(f"   • Study Workspace:  file://{vault_root / 'study.html'}")
         print(f"   • Study Portal:     file://{vault_root / 'cornell_index.html'}")
     return res.returncode
 

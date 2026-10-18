@@ -44,6 +44,7 @@ class CornellInfo:
     source: str
     cards: List[Dict[str, Any]]
     sections_data: List[Dict[str, Any]] = field(default_factory=list)
+    raw_data: Dict[str, Any] = field(default_factory=dict)
 
 
 def parse_frontmatter(file_path: Path) -> Tuple[Dict[str, Any], str]:
@@ -683,7 +684,8 @@ def collect_cornell_map(bundle_root: Path) -> Dict[str, CornellInfo]:
                         sections=len(c_data.get("sections", [])),
                         source=src,
                         cards=cards_list,
-                        sections_data=sections_list
+                        sections_data=sections_list,
+                        raw_data=c_data
                     )
                     # Index under original and normalized stems
                     cornell_map[clean_jf_stem] = info
@@ -1175,8 +1177,9 @@ def generate_cornell_portal(bundle_root: Path, nodes: List[Dict[str, Any]]) -> b
                 raw_title = itm.get("label", "Note")
                 clean_title = clean_display_title(raw_title)
                 cues = itm.get("cornell_cues", 0)
+                note_id = itm.get("id", "")
                 html_rel = itm.get("cornell_path", "#")
-                sections_html.append(f'        <div class="note-card" data-title="{clean_title.lower()}">\n          <div>\n            <div class="note-title">{clean_title}</div>\n            <div class="note-badges"><span class="badge-cues">⚡ {cues} Active Recall Cues</span></div>\n          </div>\n          <div class="card-actions"><a href="{html_rel}" class="btn-study" target="_blank">👁️ Self-Quiz Mode &rsaquo;</a></div>\n        </div>')
+                sections_html.append(f'        <div class="note-card" data-title="{clean_title.lower()}">\n          <div>\n            <div class="note-title">{clean_title}</div>\n            <div class="note-badges"><span class="badge-cues">⚡ {cues} Active Recall Cues</span></div>\n          </div>\n          <div class="card-actions"><a href="study.html?note={note_id}&mode=sync" class="btn-study" target="_blank">🎬 Study Workspace &rsaquo;</a><a href="{html_rel}" class="btn-study" style="background:#1a2332; color:#89b4fa; border-color:rgba(137,180,250,0.3);" target="_blank">📄 Print Sheet</a></div>\n        </div>')
             sections_html.append('      </div>\n    </div>')
         sections_html.append('  </section>')
 
@@ -1190,6 +1193,125 @@ def generate_cornell_portal(bundle_root: Path, nodes: List[Dict[str, Any]]) -> b
     portal_path.write_text(content, encoding="utf-8")
     print(f"  🎉 Cornell Study Portal generated: {portal_path.resolve()}")
     return True
+
+
+def generate_study_workspace(bundle_root: Path, nodes: List[Dict[str, Any]], cornell_map: Dict[str, CornellInfo]) -> bool:
+    """Generate standalone study.html interactive lecture companion and active recall workspace."""
+    template_path = TEMPLATE_DIR / "study_workspace_template.html"
+    if not template_path.is_file():
+        print(f"⚠️ Warning: Study workspace template not found at {template_path}")
+        return False
+
+    out_path = bundle_root / "study.html"
+    print(f"\n📖 [Study Workspace] Compiling Interactive Study Companion at {out_path.resolve()}")
+
+    courses_map: Dict[str, Dict[str, Any]] = {}
+    notes_payload: Dict[str, Any] = {}
+
+    all_mp4s: List[Path] = [p for p in bundle_root.rglob("*.mp4") if "viz_icm" not in p.parts and "02_workers" not in p.parts]
+
+    solutions_db = {}
+    sol_path = TEMPLATE_DIR / "viz" / "data" / "worked_solutions_db.json"
+    if sol_path.is_file():
+        try:
+            solutions_db = json.loads(sol_path.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+
+    for n in nodes:
+        d = n["data"]
+        course_name = d.get("course", "General")
+        mod_label = d.get("module", "Overview")
+        concept_id = d.get("id")
+
+        if course_name not in courses_map:
+            courses_map[course_name] = {
+                "id": course_name,
+                "label": course_name
+            }
+
+        if d.get("has_cornell") and d.get("cornell_path"):
+            clean_stem = Path(d["path"]).stem.lower().replace("-", "_").replace(" ", "_")
+            c_info = cornell_map.get(clean_stem) or cornell_map.get(normalize_stem(clean_stem))
+
+            raw_sections = []
+            cues_list = []
+            if c_info:
+                if c_info.raw_data and "sections" in c_info.raw_data:
+                    raw_sections = c_info.raw_data["sections"]
+                elif c_info.sections_data:
+                    raw_sections = c_info.sections_data
+                cues_list = c_info.cards
+
+            # Try to match local MP4 video
+            matched_mp4 = ""
+            course_code = course_name.split()[0]
+            w_match_mod = re.search(r'(?:week|w)[_\s-]*(\d{1,2})', mod_label, re.IGNORECASE)
+            target_week = int(w_match_mod.group(1)) if w_match_mod else None
+
+            for mp4 in all_mp4s:
+                if course_code in str(mp4):
+                    if target_week is not None:
+                        w_match_mp4 = re.search(r'(?:week|w)[_\s-]*(\d{1,2})', str(mp4), re.IGNORECASE)
+                        if w_match_mp4 and int(w_match_mp4.group(1)) == target_week:
+                            matched_mp4 = str(mp4.relative_to(bundle_root)).replace("\\", "/")
+                            break
+                    else:
+                        matched_mp4 = str(mp4.relative_to(bundle_root)).replace("\\", "/")
+                        break
+
+            # Find Zoom info
+            zoom_url = ""
+            passcode = ""
+            for sec in raw_sections:
+                for entry in sec.get("entries", []):
+                    ve = entry.get("video_evidence", {})
+                    for anc in ve.get("anchors", []):
+                        curl = anc.get("canonical_url", "")
+                        if "zoom.us" in curl:
+                            zoom_url = curl
+                            break
+                    if zoom_url:
+                        break
+                if zoom_url:
+                    break
+
+            if not zoom_url and not matched_mp4:
+                clean_id = concept_id.lower()
+                for k, v in solutions_db.items():
+                    if k in clean_id:
+                        zoom_url = v.get("videoSrc", "")
+                        passcode = v.get("passcode", "")
+                        break
+
+            note_entry = {
+                "id": concept_id,
+                "stem": clean_stem,
+                "title": clean_display_title(d.get("label", "Note")),
+                "course": course_name,
+                "module": mod_label,
+                "source": d.get("path", ""),
+                "html_path": d.get("cornell_path", ""),
+                "video_src": matched_mp4,
+                "zoom_url": zoom_url,
+                "passcode": passcode,
+                "sections": raw_sections,
+                "cues": cues_list
+            }
+            notes_payload[concept_id] = note_entry
+
+    courses_list = sorted(list(courses_map.values()), key=lambda x: x["label"])
+    study_payload = {
+        "courses": courses_list,
+        "notes": notes_payload
+    }
+
+    template_content = template_path.read_text(encoding="utf-8")
+    rendered = template_content.replace("/* __STUDY_DATA__ */ {}", f"window.STUDY_DATA = {json.dumps(study_payload, indent=2)};")
+    out_path.write_text(rendered, encoding="utf-8")
+    print(f"  🎉 Study Workspace generated: {out_path.resolve()}")
+    return True
+
 
 
 def load_and_assemble_viz_template(template_dir: Path) -> str:
@@ -1279,6 +1401,7 @@ def generate_viz(bundle_root: Path, output_file: Optional[Path] = None, tree_fil
     print(f"  🎉 Knowledge graph generated: {out_path.resolve()}")
 
     generate_cornell_portal(bundle_root, nodes)
+    generate_study_workspace(bundle_root, nodes, cornell_map)
     return True
 
 

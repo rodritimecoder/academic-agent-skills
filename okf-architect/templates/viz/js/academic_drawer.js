@@ -10,6 +10,14 @@
         document.getElementById("dTrust").textContent = n.trust;
         document.getElementById("dDesc").textContent = n.description || "Comprehensive notes, derivations, and examples for this module.";
 
+        // Study Workspace Launch Link
+        const sLink = /** @type {HTMLAnchorElement | null} */ (document.getElementById("dStudyWorkspaceLink"));
+        if (sLink) {
+          const courseParam = encodeURIComponent(n.course || "");
+          const noteParam = encodeURIComponent(n.id || "");
+          sLink.href = `study.html?course=${courseParam}&note=${noteParam}&mode=sync`;
+        }
+
         // Cornell Interactive Button
         const cBlock = document.getElementById("dCornellBlock");
         const cLink = /** @type {HTMLAnchorElement | null} */ (document.getElementById("dCornellLink"));
