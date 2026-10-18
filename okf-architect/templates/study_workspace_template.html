@@ -426,8 +426,178 @@
       gap: 8px;
       transition: background 0.15s ease;
     }
-    .btn-zoom-launch:hover {
-      background: #0077ee;
+    /* Interactive Video Timeline Bar with Annotated Cue Pips */
+    .video-timeline-wrap {
+      background: var(--bg-card);
+      border-top: 1px solid var(--border);
+      padding: 10px 14px 6px 14px;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      user-select: none;
+    }
+    .timeline-scrubber {
+      position: relative;
+      height: 18px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+    }
+    .timeline-track {
+      position: relative;
+      width: 100%;
+      height: 8px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 4px;
+      overflow: visible;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    .timeline-buffered {
+      position: absolute;
+      left: 0;
+      top: 0;
+      height: 100%;
+      width: 0%;
+      background: rgba(255, 255, 255, 0.18);
+      border-radius: 4px;
+      pointer-events: none;
+      transition: width 0.2s ease;
+    }
+    .timeline-progress {
+      position: absolute;
+      left: 0;
+      top: 0;
+      height: 100%;
+      width: 0%;
+      background: var(--accent-blue);
+      border-radius: 4px;
+      pointer-events: none;
+      transition: width 0.08s linear;
+    }
+    .timeline-pips-container {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+    .timeline-pip {
+      position: absolute;
+      top: -3px;
+      width: 6px;
+      height: 14px;
+      transform: translateX(-50%);
+      background: #f9e2af;
+      border-radius: 3px;
+      box-shadow: 0 0 6px rgba(249, 226, 175, 0.75);
+      cursor: pointer;
+      pointer-events: auto;
+      z-index: 5;
+      transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+    }
+    .timeline-pip:hover {
+      transform: translateX(-50%) scaleY(1.3) scaleX(1.4);
+      background: #ffe066;
+      box-shadow: 0 0 10px rgba(255, 224, 102, 0.95);
+      z-index: 20;
+    }
+    .timeline-pip.role-example {
+      background: #74c0fc;
+      box-shadow: 0 0 6px rgba(116, 192, 252, 0.75);
+    }
+    .timeline-pip.role-example:hover {
+      background: #a5d8ff;
+      box-shadow: 0 0 10px rgba(165, 216, 255, 0.95);
+    }
+    .timeline-pip.role-theory {
+      background: #ffd43b;
+      box-shadow: 0 0 6px rgba(255, 212, 59, 0.75);
+    }
+    .timeline-pip.role-theory:hover {
+      background: #ffe066;
+      box-shadow: 0 0 10px rgba(255, 224, 102, 0.95);
+    }
+    .timeline-info-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-family: monospace;
+      color: var(--text-dim);
+    }
+    .timeline-time {
+      color: var(--text-main);
+      font-weight: 600;
+    }
+    .timeline-cue-count {
+      margin-left: auto;
+      font-size: 11px;
+      color: var(--accent-amber);
+      font-family: 'Inter', sans-serif;
+      font-weight: 500;
+    }
+    .timeline-tooltip {
+      position: absolute;
+      bottom: calc(100% + 8px);
+      transform: translateX(-50%);
+      background: #1c2128;
+      border: 1px solid var(--border-focus);
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 12px;
+      color: var(--text-main);
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.5);
+      pointer-events: none;
+      z-index: 100;
+      white-space: nowrap;
+      max-width: 320px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: none;
+      animation: tooltipFadeIn 0.15s ease-out;
+    }
+    .timeline-tooltip::after {
+      content: "";
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      margin-left: -5px;
+      border-width: 5px;
+      border-style: solid;
+      border-color: var(--border-focus) transparent transparent transparent;
+    }
+    @keyframes tooltipFadeIn {
+      from { opacity: 0; transform: translate(-50%, 4px); }
+      to { opacity: 1; transform: translate(-50%, 0); }
+    }
+    .tooltip-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 4px;
+    }
+    .tooltip-time {
+      font-weight: 700;
+      color: var(--accent-amber);
+      font-family: monospace;
+    }
+    .tooltip-badge {
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--text-dim);
+      font-weight: 600;
+    }
+    .tooltip-cue-text {
+      font-size: 11px;
+      color: var(--text-main);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 280px;
     }
 
     .video-controls-bar {
@@ -942,6 +1112,24 @@
             <video id="activeVideoPlayer" controls playsinline preload="metadata">
               Your browser does not support HTML5 video.
             </video>
+
+            <!-- Interactive Annotated Timeline Bar -->
+            <div class="video-timeline-wrap" id="videoTimelineWrap">
+              <div class="timeline-scrubber" id="timelineScrubber" onclick="onTimelineTrackClick(event)">
+                <div class="timeline-track" id="timelineTrack">
+                  <div class="timeline-buffered" id="timelineBuffered"></div>
+                  <div class="timeline-progress" id="timelineProgress"></div>
+                  <div class="timeline-pips-container" id="timelinePipsContainer"></div>
+                </div>
+              </div>
+              <div class="timeline-info-row">
+                <span class="timeline-time" id="timelineTimeCurrent">00:00</span>
+                <span style="color:var(--text-sub)">/</span>
+                <span class="timeline-time" id="timelineTimeTotal">00:00</span>
+                <span class="timeline-cue-count" id="timelineCueCount">0 annotations</span>
+              </div>
+              <div class="timeline-tooltip" id="timelineTooltip"></div>
+            </div>
           </div>
 
           <!-- Zoom Cloud Recording Launcher Card (Shown when video is cloud Zoom) -->
@@ -1095,6 +1283,44 @@
     // Local Storage Progress Store
     const STORAGE_KEY_PREFIX = "icm_retention_";
 
+    function renderMarkdownSafe(text) {
+      if (!text) return "";
+      if (!window.marked || typeof window.marked.parse !== "function") return text;
+      const mathTokens = [];
+      const masked = text.replace(/(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$[^$\n]+\$)/g, (match) => {
+        const token = `@@@MATH_${mathTokens.length}@@@`;
+        mathTokens.push(match);
+        return token;
+      });
+      let html = marked.parse(masked);
+      for (let i = 0; i < mathTokens.length; i++) {
+        const token = `@@@MATH_${i}@@@`;
+        html = html.replace(token, () => mathTokens[i]);
+      }
+      return html;
+    }
+
+    function triggerMathRendering(targetEl = document.body) {
+      if (!targetEl) return;
+      if (typeof window.renderMathInElement === "function") {
+        try {
+          window.renderMathInElement(targetEl, {
+            delimiters: [
+              { left: "$$", right: "$$", display: true },
+              { left: "\\[", right: "\\]", display: true },
+              { left: "\\(", right: "\\)", display: false },
+              { left: "$", right: "$", display: false }
+            ],
+            throwOnError: false
+          });
+        } catch (e) {
+          console.warn("KaTeX render error:", e);
+        }
+      } else {
+        setTimeout(() => triggerMathRendering(targetEl), 60);
+      }
+    }
+
     function initWorkspace() {
       if (typeof STUDY_DATA === "undefined" || !STUDY_DATA.courses || STUDY_DATA.courses.length === 0) {
         console.warn("No STUDY_DATA found or courses empty.");
@@ -1156,6 +1382,7 @@
 
       updateProgressStats();
       setupKeyboardShortcuts();
+      initVideoTimelineListeners();
     }
 
     function getNotesForCourse(courseId) {
@@ -1255,25 +1482,162 @@
       // Render Document Sheet
       renderDocSheet(currentNoteData);
 
-      if (window.renderMathInElement) {
-        setTimeout(() => {
-          window.renderMathInElement(document.body, {
-            delimiters: [
-              { left: "$$", right: "$$", display: true },
-              { left: "\\[", right: "\\]", display: true },
-              { left: "\\(", right: "\\)", display: false },
-              { left: "$", right: "$", display: false }
-            ],
-            throwOnError: false
-          });
-        }, 50);
+      triggerMathRendering(document.body);
+    }
+
+    let currentTimelineAnchors = [];
+
+    function collectTimelineAnchors(note) {
+      const anchors = [];
+      let globalCueIdx = 0;
+      (note.sections || []).forEach(sec => {
+        (sec.entries || []).forEach(entry => {
+          const cueIdx = globalCueIdx++;
+          const ve = entry.video_evidence;
+          if (ve && ve.anchors && ve.anchors.length > 0) {
+            ve.anchors.forEach(a => {
+              if (typeof a.start_seconds === "number" && a.start_seconds >= 0) {
+                anchors.push({
+                  seconds: a.start_seconds,
+                  time_str: a.time_str || formatSeconds(a.start_seconds),
+                  cue: entry.cue,
+                  badge: entry.badge || "CONCEPT",
+                  role: a.role || "concept_explanation",
+                  cueIdx: cueIdx
+                });
+              }
+            });
+          }
+        });
+      });
+      return anchors;
+    }
+
+    function renderTimelinePips() {
+      const pipsContainer = document.getElementById("timelinePipsContainer");
+      if (!pipsContainer) return;
+      pipsContainer.innerHTML = "";
+
+      const videoEl = document.getElementById("activeVideoPlayer");
+      const duration = videoEl ? videoEl.duration : 0;
+      const countEl = document.getElementById("timelineCueCount");
+
+      if (countEl) {
+        countEl.textContent = `${currentTimelineAnchors.length} timestamp cue${currentTimelineAnchors.length === 1 ? '' : 's'}`;
       }
+
+      if (!duration || isNaN(duration) || duration <= 0) {
+        return;
+      }
+
+      currentTimelineAnchors.forEach((anc) => {
+        const pct = Math.min(100, Math.max(0, (anc.seconds / duration) * 100));
+        const pip = document.createElement("div");
+        pip.className = `timeline-pip ${anc.role === 'worked_example' ? 'role-example' : 'role-theory'}`;
+        pip.style.left = `${pct}%`;
+        pip.setAttribute("data-seconds", anc.seconds);
+        pip.setAttribute("data-time", anc.time_str);
+        pip.setAttribute("data-cue", anc.cue);
+        pip.setAttribute("data-role", anc.role);
+        pip.setAttribute("data-idx", anc.cueIdx);
+
+        pip.addEventListener("mouseenter", () => {
+          showPipTooltip(anc, pip);
+        });
+        pip.addEventListener("mouseleave", hidePipTooltip);
+        pip.addEventListener("click", (e) => {
+          e.stopPropagation();
+          seekVideoAnchor(anc.seconds, anc.cueIdx, e);
+        });
+
+        pipsContainer.appendChild(pip);
+      });
+    }
+
+    function showPipTooltip(anchor, pipEl) {
+      const tooltip = document.getElementById("timelineTooltip");
+      const track = document.getElementById("timelineTrack");
+      if (!tooltip || !track) return;
+
+      const roleLabel = anchor.role === "worked_example" ? "Example" : (anchor.role === "concept_explanation" ? "Theory" : "Cue");
+      tooltip.innerHTML = `
+        <div class="tooltip-header">
+          <span class="tooltip-time">▶ ${anchor.time_str}</span>
+          <span class="tooltip-badge">${roleLabel}</span>
+          <span class="tooltip-badge">#${anchor.cueIdx + 1}</span>
+        </div>
+        <div class="tooltip-cue-text">${anchor.cue}</div>
+      `;
+      tooltip.style.display = "block";
+
+      const trackRect = track.getBoundingClientRect();
+      const pipRect = pipEl.getBoundingClientRect();
+      const offsetLeft = (pipRect.left - trackRect.left) + (pipRect.width / 2);
+      tooltip.style.left = `${offsetLeft}px`;
+    }
+
+    function hidePipTooltip() {
+      const tooltip = document.getElementById("timelineTooltip");
+      if (tooltip) tooltip.style.display = "none";
+    }
+
+    function onTimelineTrackClick(e) {
+      const video = document.getElementById("activeVideoPlayer");
+      const track = document.getElementById("timelineTrack");
+      if (!video || !video.duration || isNaN(video.duration) || !track) return;
+      const rect = track.getBoundingClientRect();
+      const pos = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      video.currentTime = pos * video.duration;
+      video.play().catch(() => {});
+    }
+
+    function initVideoTimelineListeners() {
+      const videoEl = document.getElementById("activeVideoPlayer");
+      if (!videoEl || videoEl._timelineListenersBound) return;
+      videoEl._timelineListenersBound = true;
+
+      videoEl.addEventListener("timeupdate", () => {
+        const cur = videoEl.currentTime || 0;
+        const dur = videoEl.duration || 0;
+        const curEl = document.getElementById("timelineTimeCurrent");
+        const totEl = document.getElementById("timelineTimeTotal");
+        const progEl = document.getElementById("timelineProgress");
+
+        if (curEl) curEl.textContent = formatSeconds(cur);
+        if (totEl && dur > 0) totEl.textContent = formatSeconds(dur);
+        if (progEl && dur > 0) {
+          progEl.style.width = `${Math.min(100, (cur / dur) * 100)}%`;
+        }
+      });
+
+      videoEl.addEventListener("progress", () => {
+        const dur = videoEl.duration || 0;
+        const bufEl = document.getElementById("timelineBuffered");
+        if (bufEl && videoEl.buffered && videoEl.buffered.length > 0 && dur > 0) {
+          const bufEnd = videoEl.buffered.end(videoEl.buffered.length - 1);
+          bufEl.style.width = `${Math.min(100, (bufEnd / dur) * 100)}%`;
+        }
+      });
+
+      videoEl.addEventListener("loadedmetadata", () => {
+        const dur = videoEl.duration || 0;
+        const totEl = document.getElementById("timelineTimeTotal");
+        if (totEl && dur > 0) totEl.textContent = formatSeconds(dur);
+        renderTimelinePips();
+      });
+
+      videoEl.addEventListener("durationchange", () => {
+        renderTimelinePips();
+      });
     }
 
     function setupVideoForNote(note, targetTime = null) {
       const videoEl = document.getElementById("activeVideoPlayer");
       const zoomCard = document.getElementById("zoomCloudCard");
       const videoViewport = document.getElementById("videoViewport");
+
+      currentTimelineAnchors = collectTimelineAnchors(note);
+      renderTimelinePips();
 
       const vSrc = note.video_src || "";
       const zUrl = note.zoom_url || "";
@@ -1283,6 +1647,7 @@
         zoomCard.style.display = "none";
         videoViewport.style.display = "block";
         const applySeek = () => {
+          renderTimelinePips();
           if (targetTime !== null && targetTime >= 0) {
             videoEl.currentTime = targetTime;
             videoEl.play().catch(() => {});
@@ -1312,7 +1677,18 @@
       container.innerHTML = "";
 
       if (!note.sections || note.sections.length === 0) {
-        container.innerHTML = `<div style="color:var(--text-dim); padding:20px;">No Cornell sections compiled for this note.</div>`;
+        if (note.markdown_content) {
+          container.innerHTML = `
+            <div class="raw-markdown-reader" style="padding:24px; background:var(--surface); border:1px solid var(--border); border-radius:10px; line-height:1.7; color:var(--text-main);">
+              <div style="display:flex; align-items:center; gap:8px; margin-bottom:16px; padding-bottom:12px; border-bottom:1px solid var(--border); color:var(--accent); font-weight:600; font-size:14px;">
+                <span>📄</span> <span>Course Note Document</span>
+              </div>
+              <div class="markdown-body-rendered">${renderMarkdownSafe(note.markdown_content)}</div>
+            </div>`;
+          triggerMathRendering(container);
+          return;
+        }
+        container.innerHTML = `<div style="color:var(--text-dim); padding:20px;">No Cornell sections or notes compiled for this note.</div>`;
         return;
       }
 
@@ -1345,22 +1721,6 @@
               anchorsHtml += `<button class="cue-time-chip" onclick="seekVideoAnchor(${a.start_seconds}, ${cueIdx}, event)">▶ ${a.time_str || formatSeconds(a.start_seconds)} ${label}</button>`;
             });
           }
-
-    function renderMarkdownSafe(text) {
-      if (!text) return "";
-      if (!window.marked) return text;
-      const mathTokens = [];
-      const masked = text.replace(/(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$[^$\n]+\$)/g, (match) => {
-        const token = `@@@MATH_${mathTokens.length}@@@`;
-        mathTokens.push(match);
-        return token;
-      });
-      let html = marked.parse(masked);
-      for (let i = 0; i < mathTokens.length; i++) {
-        html = html.replace(`@@@MATH_${i}@@@`, mathTokens[i]);
-      }
-      return html;
-    }
 
           // Format notes markdown
           let parsedNotes = renderMarkdownSafe(entry.notes || "");
@@ -1421,7 +1781,10 @@
     function highlightActiveCue(cueIdx) {
       document.querySelectorAll(".cornell-cue-card").forEach(c => c.classList.remove("active-cue"));
       const targetCard = document.getElementById(`cue_card_${cueIdx}`);
-      if (targetCard) targetCard.classList.add("active-cue");
+      if (targetCard) {
+        targetCard.classList.add("active-cue");
+        targetCard.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
 
       const cue = getCueByIndex(cueIdx);
       if (!cue) return;
@@ -1583,6 +1946,7 @@
       if (mode === "sync") {
         document.getElementById("btnSyncView").classList.add("active");
         document.getElementById("viewSyncContainer").style.display = "flex";
+        triggerMathRendering(document.getElementById("notesContainer"));
       } else if (mode === "quiz") {
         document.getElementById("btnQuizView").classList.add("active");
         document.getElementById("viewQuizContainer").style.display = "flex";
@@ -1590,6 +1954,7 @@
       } else if (mode === "doc") {
         document.getElementById("btnDocView").classList.add("active");
         document.getElementById("viewDocContainer").style.display = "block";
+        triggerMathRendering(document.getElementById("docSheetPaper"));
       }
     }
 
@@ -1606,7 +1971,19 @@
     }
 
     function renderQuizCard(idx) {
-      if (currentQuizCards.length === 0) return;
+      if (currentQuizCards.length === 0) {
+        document.getElementById("quizBadge").textContent = "NO CUES";
+        document.getElementById("quizCounter").textContent = "Card 0 of 0";
+        document.getElementById("quizQuestionHero").innerHTML = `
+          <div style="color:var(--text-dim); font-size:16px; padding:20px;">
+            This note does not have active recall cues compiled yet.<br>
+            <span style="font-size:13px; color:var(--text-sub);">Switch to Cornell Sync or Document view to read the source note.</span>
+          </div>`;
+        document.getElementById("quizAnswerHero").style.display = "none";
+        document.getElementById("btnQuizReveal").style.display = "none";
+        document.getElementById("quizRatingGroup").style.display = "none";
+        return;
+      }
       const card = currentQuizCards[idx];
       document.getElementById("quizBadge").textContent = card.badge || "CONCEPT";
       document.getElementById("quizCounter").textContent = `Card ${idx + 1} of ${currentQuizCards.length}`;
@@ -1619,25 +1996,15 @@
       document.getElementById("btnQuizReveal").style.display = "inline-flex";
       document.getElementById("quizRatingGroup").style.display = "none";
 
-      if (window.renderMathInElement) {
-        setTimeout(() => {
-          window.renderMathInElement(document.getElementById("viewQuizContainer"), {
-            delimiters: [
-              { left: "$$", right: "$$", display: true },
-              { left: "\\[", right: "\\]", display: true },
-              { left: "\\(", right: "\\)", display: false },
-              { left: "$", right: "$", display: false }
-            ],
-            throwOnError: false
-          });
-        }, 30);
-      }
+      triggerMathRendering(document.getElementById("quizQuestionHero"));
     }
 
     function revealQuizAnswer() {
-      document.getElementById("quizAnswerHero").style.display = "block";
+      const ansEl = document.getElementById("quizAnswerHero");
+      ansEl.style.display = "block";
       document.getElementById("btnQuizReveal").style.display = "none";
       document.getElementById("quizRatingGroup").style.display = "flex";
+      triggerMathRendering(ansEl);
     }
 
     function rateQuizCard(rating) {
@@ -1671,19 +2038,28 @@
       let html = `<h1 style="font-size:24px; margin-bottom:12px;">${note.title}</h1>`;
       html += `<div style="font-size:13px; color:#555; margin-bottom:24px;">${note.course} &bull; ${note.source || ''}</div>`;
 
-      (note.sections || []).forEach(s => {
-        html += `<h2 style="font-size:18px; margin:20px 0 10px 0; border-bottom:1px solid #ddd; padding-bottom:4px;">${s.heading}</h2>`;
-        (s.entries || []).forEach(e => {
-          let parsedNotes = renderMarkdownSafe(e.notes || "");
-          html += `
-            <div style="display:grid; grid-template-columns: 200px 1fr; gap:16px; margin-bottom:16px; padding-bottom:12px; border-bottom:1px dashed #eee;">
-              <div style="font-weight:600; font-size:13px;">${e.cue}</div>
-              <div style="font-size:13px;">${parsedNotes}</div>
-            </div>
-          `;
+      if (!note.sections || note.sections.length === 0) {
+        if (note.markdown_content) {
+          html += `<div style="line-height:1.7; font-size:14px; color:#222;" class="doc-markdown-body">${renderMarkdownSafe(note.markdown_content)}</div>`;
+        } else {
+          html += `<div style="color:#777; font-style:italic;">No content recorded for this note.</div>`;
+        }
+      } else {
+        (note.sections || []).forEach(s => {
+          html += `<h2 style="font-size:18px; margin:20px 0 10px 0; border-bottom:1px solid #ddd; padding-bottom:4px;">${s.heading}</h2>`;
+          (s.entries || []).forEach(e => {
+            let parsedNotes = renderMarkdownSafe(e.notes || "");
+            html += `
+              <div style="display:grid; grid-template-columns: 200px 1fr; gap:16px; margin-bottom:16px; padding-bottom:12px; border-bottom:1px dashed #eee;">
+                <div style="font-weight:600; font-size:13px;">${e.cue}</div>
+                <div style="font-size:13px;">${parsedNotes}</div>
+              </div>
+            `;
+          });
         });
-      });
+      }
       paper.innerHTML = html;
+      triggerMathRendering(paper);
     }
 
     function formatSeconds(sec) {

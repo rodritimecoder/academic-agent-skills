@@ -1230,75 +1230,89 @@ def generate_study_workspace(bundle_root: Path, nodes: List[Dict[str, Any]], cor
                 "label": course_name
             }
 
-        if d.get("has_cornell") and d.get("cornell_path"):
-            clean_stem = Path(d["path"]).stem.lower().replace("-", "_").replace(" ", "_")
-            c_info = cornell_map.get(clean_stem) or cornell_map.get(normalize_stem(clean_stem))
+        if d.get("type") == "ModuleHub":
+            continue
 
-            raw_sections = []
-            cues_list = []
-            if c_info:
-                if c_info.raw_data and "sections" in c_info.raw_data:
-                    raw_sections = c_info.raw_data["sections"]
-                elif c_info.sections_data:
-                    raw_sections = c_info.sections_data
-                cues_list = c_info.cards
+        file_path_str = d.get("path", "")
+        clean_stem = Path(file_path_str).stem.lower().replace("-", "_").replace(" ", "_") if file_path_str else concept_id
+        c_info = cornell_map.get(clean_stem) or cornell_map.get(normalize_stem(clean_stem)) if clean_stem else None
 
-            # Try to match local MP4 video
-            matched_mp4 = ""
-            course_code = course_name.split()[0]
-            w_match_mod = re.search(r'(?:week|w)[_\s-]*(\d{1,2})', mod_label, re.IGNORECASE)
-            target_week = int(w_match_mod.group(1)) if w_match_mod else None
+        raw_sections = []
+        cues_list = []
+        if c_info:
+            if c_info.raw_data and "sections" in c_info.raw_data:
+                raw_sections = c_info.raw_data["sections"]
+            elif c_info.sections_data:
+                raw_sections = c_info.sections_data
+            cues_list = c_info.cards
 
-            for mp4 in all_mp4s:
-                if course_code in str(mp4):
-                    if target_week is not None:
-                        w_match_mp4 = re.search(r'(?:week|w)[_\s-]*(\d{1,2})', str(mp4), re.IGNORECASE)
-                        if w_match_mp4 and int(w_match_mp4.group(1)) == target_week:
-                            matched_mp4 = str(mp4.relative_to(bundle_root)).replace("\\", "/")
-                            break
-                    else:
+        # Read markdown fallback if sections are empty
+        markdown_body = ""
+        if file_path_str:
+            full_md_path = bundle_root / file_path_str
+            if full_md_path.is_file():
+                try:
+                    _, markdown_body = parse_frontmatter(full_md_path)
+                except Exception:
+                    pass
+
+        # Try to match local MP4 video
+        matched_mp4 = ""
+        course_code = course_name.split()[0]
+        w_match_mod = re.search(r'(?:week|w)[_\s-]*(\d{1,2})', mod_label, re.IGNORECASE)
+        target_week = int(w_match_mod.group(1)) if w_match_mod else None
+
+        for mp4 in all_mp4s:
+            if course_code in str(mp4):
+                if target_week is not None:
+                    w_match_mp4 = re.search(r'(?:week|w)[_\s-]*(\d{1,2})', str(mp4), re.IGNORECASE)
+                    if w_match_mp4 and int(w_match_mp4.group(1)) == target_week:
                         matched_mp4 = str(mp4.relative_to(bundle_root)).replace("\\", "/")
                         break
+                else:
+                    matched_mp4 = str(mp4.relative_to(bundle_root)).replace("\\", "/")
+                    break
 
-            # Find Zoom info
-            zoom_url = ""
-            passcode = ""
-            for sec in raw_sections:
-                for entry in sec.get("entries", []):
-                    ve = entry.get("video_evidence", {})
-                    for anc in ve.get("anchors", []):
-                        curl = anc.get("canonical_url", "")
-                        if "zoom.us" in curl:
-                            zoom_url = curl
-                            break
-                    if zoom_url:
+        # Find Zoom info
+        zoom_url = ""
+        passcode = ""
+        for sec in raw_sections:
+            for entry in sec.get("entries", []):
+                ve = entry.get("video_evidence", {})
+                for anc in ve.get("anchors", []):
+                    curl = anc.get("canonical_url", "")
+                    if "zoom.us" in curl:
+                        zoom_url = curl
                         break
                 if zoom_url:
                     break
+            if zoom_url:
+                break
 
-            if not zoom_url and not matched_mp4:
-                clean_id = concept_id.lower()
-                for k, v in solutions_db.items():
-                    if k in clean_id:
-                        zoom_url = v.get("videoSrc", "")
-                        passcode = v.get("passcode", "")
-                        break
+        if not zoom_url and not matched_mp4:
+            clean_id = concept_id.lower()
+            for k, v in solutions_db.items():
+                if k in clean_id:
+                    zoom_url = v.get("videoSrc", "")
+                    passcode = v.get("passcode", "")
+                    break
 
-            note_entry = {
-                "id": concept_id,
-                "stem": clean_stem,
-                "title": clean_display_title(d.get("label", "Note")),
-                "course": course_name,
-                "module": mod_label,
-                "source": d.get("path", ""),
-                "html_path": d.get("cornell_path", ""),
-                "video_src": matched_mp4,
-                "zoom_url": zoom_url,
-                "passcode": passcode,
-                "sections": raw_sections,
-                "cues": cues_list
-            }
-            notes_payload[concept_id] = note_entry
+        note_entry = {
+            "id": concept_id,
+            "stem": clean_stem,
+            "title": clean_display_title(d.get("label", "Note")),
+            "course": course_name,
+            "module": mod_label,
+            "source": file_path_str,
+            "html_path": d.get("cornell_path", ""),
+            "video_src": matched_mp4,
+            "zoom_url": zoom_url,
+            "passcode": passcode,
+            "sections": raw_sections,
+            "cues": cues_list,
+            "markdown_content": markdown_body
+        }
+        notes_payload[concept_id] = note_entry
 
     courses_list = sorted(list(courses_map.values()), key=lambda x: x["label"])
     study_payload = {
@@ -1355,7 +1369,16 @@ def generate_viz(bundle_root: Path, output_file: Optional[Path] = None, tree_fil
         print(f"❌ Error: Not a directory: {bundle_root}")
         return False
 
-    md_files = [f for f in bundle_root.rglob("*.md") if "viz_icm" not in f.parts and "02_workers" not in f.parts and ".git" not in f.parts and "outputs" not in f.parts]
+    md_files = [
+        f for f in bundle_root.rglob("*.md")
+        if "viz_icm" not in f.parts
+        and "02_workers" not in f.parts
+        and ".git" not in f.parts
+        and ".kanban" not in f.parts
+        and "outputs" not in f.parts
+        and not any(p.startswith(".") for p in f.parts)
+        and len(f.relative_to(bundle_root).parts) > 1
+    ]
     cornell_map = collect_cornell_map(bundle_root)
 
     active_tree = tree_file
