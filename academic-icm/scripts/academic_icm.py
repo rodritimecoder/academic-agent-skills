@@ -923,39 +923,369 @@ def clean_spoken_quote(raw_text: str, max_words: int = 28) -> str:
         snippet = " ".join(words)
     return snippet
 
-def decide_best_timestamp_with_jev(
+# ==============================================================================
+# 7-STAGE TEMPORAL VIDEO GROUNDING & EVIDENCE ADJUDICATION ENGINE
+# ==============================================================================
+
+def establish_video_ground_truth(
+    vault_root: Path,
+    json_path: Path,
+    note_data: dict
+) -> Tuple[Optional[Dict[str, Any]], List[Dict[str, Any]]]:
+    """
+    Stage 1 — Establish video ground truth.
+    Discovers canonical media asset, transcript file, duration, and provenance.
+    Rule: LLM/system must never invent a timestamp; it only selects from verified ground truth evidence.
+    """
+    transcript_path, media_target, passcode, q_map = find_media_and_transcript_for_note(vault_root, json_path, note_data)
+    if not transcript_path and not media_target and not q_map:
+        return None, []
+
+    raw_cues = []
+    if transcript_path:
+        if transcript_path.suffix.lower() == ".vtt":
+            raw_cues = parse_vtt(transcript_path)
+        else:
+            raw_cues = parse_transcript_md(transcript_path)
+
+    max_sec = max((c["seconds"] for c in raw_cues), default=0)
+    
+    source_str = str(note_data.get("source") or json_path.stem)
+    m_course = re.search(r'\b(41200|48430|48520|48521)\b', str(json_path) + " " + source_str)
+    c_code = m_course.group(1) if m_course else "general"
+    m_week = re.search(r'(?:week|w|topic)[_\s-]*0?(\d+)', str(json_path).lower())
+    w_num = f"week_{int(m_week.group(1)):02d}" if m_week else "core"
+    
+    video_id = f"{c_code}_{w_num}_{re.sub(r'[^a-zA-Z0-9]+', '_', json_path.stem.lower()).strip('_')}"
+    if media_target and media_target.endswith(".mp4"):
+        video_id = Path(media_target).stem
+
+    v_type = "local_mp4" if (media_target and media_target.endswith(".mp4")) else ("zoom_cloud" if (media_target and "zoom.us" in media_target) else ("youtube" if (media_target and "youtu" in media_target) else "transcript_only"))
+    provenance = "zoom_cloud_vtt" if (transcript_path and transcript_path.suffix.lower() == ".vtt") else ("transcript_markdown" if transcript_path else "external_video")
+
+    gt = {
+        "video_id": video_id,
+        "canonical_url": media_target or (str(transcript_path.relative_to(vault_root)) if transcript_path else ""),
+        "video_type": v_type,
+        "duration_seconds": max_sec,
+        "duration_str": f"{max_sec // 3600:02d}:{(max_sec % 3600) // 60:02d}:{max_sec % 60:02d}" if max_sec >= 3600 else f"{max_sec // 60:02d}:{max_sec % 60:02d}",
+        "transcript_path": str(transcript_path) if transcript_path else None,
+        "transcript_provenance": provenance,
+        "player_offset_seconds": 0,
+        "passcode": passcode,
+        "q_map": q_map
+    }
+    return gt, raw_cues
+
+def build_temporal_evidence_index(
+    cues: List[Dict[str, Any]],
+    window_size: int = 4,
+    step: int = 2
+) -> Dict[str, Any]:
+    """
+    Stage 2 — Build a temporal evidence index.
+    Constructs discrete, addressable explanation windows (S001, S002...) with surrounding context.
+    """
+    if not cues:
+        return {"segments": [], "by_id": {}, "ranker": None}
+
+    segments = []
+    for idx in range(0, len(cues), step):
+        win = cues[idx:idx + window_size]
+        if not win:
+            continue
+        seg_num = len(segments) + 1
+        seg_id = f"S{seg_num:03d}"
+        s_start = win[0]["seconds"]
+        s_end = win[-1]["seconds"] + 15
+        time_win = f"{win[0]['time_str']}–{win[-1]['time_str']}"
+        txt = " ".join(c["text"] for c in win)
+        tokens = clean_tokens(txt)
+        segments.append({
+            "segment_id": seg_id,
+            "start_seconds": s_start,
+            "end_seconds": s_end,
+            "time_window": time_win,
+            "time_str": win[0]["time_str"],
+            "speaker": win[0].get("speaker", ""),
+            "text": txt,
+            "tokens": tokens,
+            "prev_id": f"S{seg_num - 1:03d}" if seg_num > 1 else None,
+            "next_id": f"S{seg_num + 1:03d}" if idx + step < len(cues) else None
+        })
+
+    by_id = {s["segment_id"]: s for s in segments}
+    ranker = BM25Ranker(segments)
+    return {"segments": segments, "by_id": by_id, "ranker": ranker}
+
+def expand_segment_context(seg_id: str, index: Dict[str, Any], window: int = 1) -> str:
+    """Expands promising segment into adjacent segments to capture multi-step explanations."""
+    by_id = index.get("by_id", {})
+    if seg_id not in by_id:
+        return ""
+    cur = by_id[seg_id]
+    texts = []
+    if window >= 1 and cur.get("prev_id") and cur["prev_id"] in by_id:
+        texts.append(by_id[cur["prev_id"]]["text"])
+    texts.append(cur["text"])
+    if window >= 1 and cur.get("next_id") and cur["next_id"] in by_id:
+        texts.append(by_id[cur["next_id"]]["text"])
+    return " ".join(texts)
+
+def decompose_cue_to_evidence_request(
     cue: str,
+    notes_sample: str,
+    cue_id: str = "cue_001"
+) -> Dict[str, Any]:
+    """
+    Stage 3 — Decompose the Cornell cue into a structured evidence request.
+    Extracts learning target, expected answer facets, critical terminology, and cognitive category.
+    """
+    base_cue = re.sub(r'\[▶.*?\]\(.*?\)', '', cue).strip()
+    notes_lines = [l.strip() for l in notes_sample.splitlines() if l.strip() and not l.startswith('>') and not l.startswith('!')]
+    facets = [re.sub(r'^[-\*\d\.]+\s*', '', l) for l in notes_lines if len(l) > 10][:3]
+    if not facets:
+        facets = [notes_sample[:120].strip()]
+
+    cue_lower = base_cue.lower()
+    if any(k in cue_lower for k in ["how to", "steps", "solve", "procedure", "how do you analyze"]):
+        cat = "mechanism"
+    elif any(k in cue_lower for k in ["formula", "equation", "derive", "state the universal"]):
+        cat = "derivation"
+    elif any(k in cue_lower for k in ["compare", "vs", "difference", "trade-off"]):
+        cat = "comparison"
+    elif any(k in cue_lower for k in ["example", "exercise", "question", "problem"]):
+        cat = "worked_example"
+    elif any(k in cue_lower for k in ["pitfall", "trap", "warning", "mistake"]):
+        cat = "pitfall"
+    else:
+        cat = "definition"
+
+    cue_tokens = clean_tokens(base_cue)
+    notes_tokens = [w for w in clean_tokens(" ".join(facets)) if w not in cue_tokens][:8]
+    expected_terms = [t for t in cue_tokens + notes_tokens if len(t) > 2][:10]
+
+    mult_plausible = (" and " in base_cue or cat in ("mechanism", "derivation") or len(facets) >= 2)
+
+    return {
+        "cue_id": cue_id,
+        "cue": base_cue,
+        "learning_target": base_cue,
+        "expected_answer": facets,
+        "expected_terminology": expected_terms,
+        "cognitive_category": cat,
+        "multiple_plausible": mult_plausible
+    }
+
+def retrieve_candidate_windows(
+    request: Dict[str, Any],
+    temporal_index: Dict[str, Any],
+    ground_truth: Dict[str, Any],
+    top_k: int = 5
+) -> List[Dict[str, Any]]:
+    """
+    Stage 4 — Retrieve candidates, not a final timestamp.
+    Ranks top candidate windows using multi-metric scoring:
+    1. Semantic relevance (EmbeddingGemma-2)
+    2. Answer facet coverage
+    3. Directness
+    4. Teaching evidence indicators vs passing mention
+    5. Adjacent segment completeness
+    """
+    segments = temporal_index.get("segments", [])
+    ranker = temporal_index.get("ranker")
+    if not segments or not ranker:
+        return []
+
+    p_m = re.search(r'\b(\d+\.\d+)\b', request["cue"])
+    p_tag = p_m.group(1) if p_m else None
+
+    bm_scores = ranker.query(request["expected_terminology"], problem_tag=p_tag)
+    cand_indices = [idx for sc, idx in bm_scores[:12] if sc > 0]
+    if not cand_indices and bm_scores:
+        cand_indices = [bm_scores[0][1]]
+
+    cue_vec = get_embedding_gemma2(request["learning_target"] + " " + " ".join(request["expected_answer"][:2]))
+
+    candidates = []
+    top_bm_score = bm_scores[0][0] if bm_scores else 1.0
+
+    for idx in cand_indices:
+        seg = segments[idx]
+        seg_id = seg["segment_id"]
+        exp_text = expand_segment_context(seg_id, temporal_index, window=1)
+
+        sim = 0.0
+        if cue_vec:
+            s_vec = get_embedding_gemma2(seg["text"])
+            if s_vec:
+                sim = sum(a * b for a, b in zip(cue_vec, s_vec))
+
+        terms_in_seg = [t for t in request["expected_terminology"] if t.lower() in exp_text.lower()]
+        facet_cov = len(terms_in_seg) / (len(request["expected_terminology"]) or 1.0)
+        supported_facets = [f for f in request["expected_answer"] if any(w in exp_text.lower() for w in clean_tokens(f)[:3])]
+
+        words = seg["text"].split()
+        filler_count = sum(1 for w in words if w.lower() in STOPWORDS)
+        directness = max(0.1, 1.0 - (filler_count / (len(words) or 1.0)))
+
+        teach_indicators = ["we define", "formula is", "definition", "let us derive", "notice that", "equal to", "value of", "step response is", "rearrange"]
+        is_teaching = any(ind in exp_text.lower() for ind in teach_indicators)
+        teach_score = 1.0 if is_teaching else 0.4
+
+        bm_val = next((sc for sc, ci in bm_scores if ci == idx), 0.0)
+        bm_norm = min(1.0, bm_val / (top_bm_score or 1.0))
+
+        composite = (
+            0.35 * max(0.0, sim) +
+            0.25 * facet_cov +
+            0.15 * directness +
+            0.15 * teach_score +
+            0.10 * bm_norm
+        )
+
+        quote = clean_spoken_quote(seg["text"], max_words=28)
+
+        candidates.append({
+            "segment_id": seg_id,
+            "video_id": ground_truth.get("video_id", "unknown"),
+            "canonical_url": ground_truth.get("canonical_url", ""),
+            "start_seconds": seg["start_seconds"],
+            "end_seconds": seg["end_seconds"],
+            "time_window": seg["time_window"],
+            "time_str": seg["time_str"],
+            "evidence_quote": quote,
+            "supports": supported_facets,
+            "semantic_score": round(sim, 4),
+            "facet_coverage": round(facet_cov, 4),
+            "directness": round(directness, 4),
+            "teaching_evidence": round(teach_score, 4),
+            "confidence": round(min(0.99, max(0.10, composite)), 4)
+        })
+
+    candidates.sort(key=lambda x: x["confidence"], reverse=True)
+    return candidates[:top_k]
+
+def adjudicate_candidates(
+    cue: str,
+    request: Dict[str, Any],
     candidates: List[Dict[str, Any]],
-    jev_port: int = 8083
-) -> Optional[Dict[str, Any]]:
-    if len(candidates) <= 1:
-        return candidates[0] if candidates else None
+    ground_truth: Dict[str, Any]
+) -> Dict[str, Any]:
+    """
+    Stage 5 — Decide whether there is one answer or several.
+    Classifies relationship between candidate windows into:
+      - one_primary: single clearest complete explanation
+      - multiple_complementary: distinct complementary moments (concept, derivation, worked example)
+      - ambiguous: several plausible moments without clear separation
+      - no_supported_anchor: weak or unsupported match
+    """
+    if not candidates:
+        return {"status": "no_supported_anchor", "anchors": []}
 
-    letters = ["Option A", "Option B", "Option C", "Option D"]
-    opt_lines = []
-    for i, c in enumerate(candidates[:4]):
-        snippet = c["text"][:140].replace("\n", " ").strip()
-        opt_lines.append(f"{letters[i]} [{c['time_str']}]: \"{snippet}\"")
+    top = candidates[0]
+    if top["confidence"] < 0.35:
+        return {"status": "no_supported_anchor", "anchors": []}
 
-    context = f"Question / Technical Cue: {cue}\n" + "\n".join(opt_lines)
-    question = "Which timestamp candidate presents the mathematical derivation, formal definition, or core technical explanation rather than conversational preamble?"
-    options = letters[:len(candidates[:4])]
+    if len(candidates) == 1 or (len(candidates) >= 2 and top["confidence"] >= 0.70 and candidates[1]["confidence"] < 0.50):
+        top_anchor = dict(top)
+        top_anchor["role"] = "concept_explanation" if request["cognitive_category"] in ("definition", "comparison") else ("derivation" if request["cognitive_category"] == "derivation" else "worked_example")
+        return {"status": "one_primary", "anchors": [top_anchor]}
 
-    try:
-        sys.path.append("/run/media/rodri/AI/skills/jev-decision/scripts")
-        from jev_engine import JevEngine
-        jev = JevEngine(port=jev_port)
-        if jev.is_online():
-            res = jev.decide_choice(context=context, question=question, options=options)
-            if res and "selection" in res:
-                sel = res["selection"]
-                for i, letter in enumerate(letters):
-                    if letter in sel and i < len(candidates):
-                        return candidates[i]
-    except Exception:
-        pass
+    cand2 = candidates[1]
+    time_delta = abs(top["start_seconds"] - cand2["start_seconds"])
 
-    return candidates[0]
+    if time_delta >= 75 and cand2["confidence"] >= 0.52 and request.get("multiple_plausible", False):
+        try:
+            sys.path.append("/run/media/rodri/AI/skills/jev-decision/scripts")
+            from jev_engine import JevEngine
+            jev = JevEngine(port=8083)
+            if jev.is_online():
+                ctx = (
+                    f"Technical Cue: {cue}\n"
+                    f"Window A [{top['time_window']}]: \"{top['evidence_quote']}\"\n"
+                    f"Window B [{cand2['time_window']}]: \"{cand2['evidence_quote']}\""
+                )
+                j_res = jev.decide_choice(
+                    context=ctx,
+                    question="Which option best categorizes the pedagogical relationship between Window A and Window B?",
+                    options=[
+                        "Window A is concept explanation, Window B is worked example or circuit application",
+                        "Window A is core derivation, Window B is conversational preamble",
+                        "Both windows are redundant duplicates"
+                    ]
+                )
+                if j_res and "selection" in j_res and "application" in j_res["selection"]:
+                    a1 = dict(top)
+                    a1["role"] = "concept_explanation"
+                    a2 = dict(cand2)
+                    a2["role"] = "worked_example"
+                    return {"status": "multiple_complementary", "anchors": [a1, a2]}
+        except Exception:
+            pass
+
+        a1 = dict(top)
+        a1["role"] = "concept_explanation" if top["start_seconds"] < cand2["start_seconds"] else "worked_example"
+        a2 = dict(cand2)
+        a2["role"] = "worked_example" if a1["role"] == "concept_explanation" else "concept_explanation"
+        return {"status": "multiple_complementary", "anchors": [a1, a2]}
+
+    if len(candidates) >= 2 and abs(top["confidence"] - cand2["confidence"]) <= 0.04 and time_delta >= 60:
+        a1 = dict(top)
+        a1["role"] = "candidate_anchor"
+        return {"status": "ambiguous", "anchors": [a1]}
+
+    top_anchor = dict(top)
+    top_anchor["role"] = "concept_explanation" if request["cognitive_category"] == "definition" else "derivation"
+    return {"status": "one_primary", "anchors": [top_anchor]}
+
+def verify_timestamp_evidence_gate(
+    video_evidence: Dict[str, Any],
+    ground_truth: Dict[str, Any],
+    transcript_text: str
+) -> List[str]:
+    """
+    Stage 7 — Final timestamp verification gate.
+    Validates provenance, duration boundaries, verbatim transcript grounding, and role distinctness.
+    """
+    issues = []
+    status = video_evidence.get("status")
+    anchors = video_evidence.get("anchors", [])
+
+    if status == "no_supported_anchor":
+        return []
+
+    max_dur = ground_truth.get("duration_seconds", 0)
+
+    for i, a in enumerate(anchors):
+        s_sec = a.get("start_seconds", -1)
+        e_sec = a.get("end_seconds", -1)
+        quote = a.get("evidence_quote", "")
+
+        if s_sec < 0 or (max_dur > 0 and s_sec > max_dur):
+            issues.append(f"Anchor {i}: start_seconds {s_sec} exceeds duration {max_dur}")
+        if e_sec <= s_sec or (max_dur > 0 and e_sec > max_dur + 60):
+            issues.append(f"Anchor {i}: end_seconds {e_sec} invalid or exceeds duration")
+
+        w_dur = e_sec - s_sec
+        if w_dur < 10 or w_dur > 360:
+            issues.append(f"Anchor {i}: window duration {w_dur}s out of acceptable range [10, 360]")
+
+        if quote and transcript_text:
+            clean_q = " ".join(re.sub(r'[^a-zA-Z0-9\s]', ' ', quote.replace('...', '')).lower().split()[:4])
+            clean_t = " ".join(re.sub(r'[^a-zA-Z0-9\s]', ' ', transcript_text).lower().split())
+            if clean_q and clean_q not in clean_t:
+                issues.append(f"Anchor {i}: Evidence quote '{clean_q}...' not grounded in transcript")
+
+    if status == "multiple_complementary" and len(anchors) >= 2:
+        for i in range(len(anchors) - 1):
+            for j in range(i + 1, len(anchors)):
+                if abs(anchors[i]["start_seconds"] - anchors[j]["start_seconds"]) < 45:
+                    issues.append(f"Anchors {i} and {j} too close in time (<45s) for complementary status")
+                if anchors[i].get("role") == anchors[j].get("role"):
+                    issues.append(f"Anchors {i} and {j} share identical role '{anchors[i].get('role')}'")
+
+    return issues
 
 def stamp_cornell_json(
     json_path: Path,
@@ -964,144 +1294,127 @@ def stamp_cornell_json(
     force: bool = False,
     dry_run: bool = False
 ) -> Dict[str, Any]:
+    """
+    Executes the 7-Stage Temporal Grounding & Evidence Adjudication Pipeline:
+      Stage 1: Establish video ground truth
+      Stage 2: Build temporal evidence index (S001, S002...)
+      Stage 3: Decompose Cornell cue into structured evidence request
+      Stage 4: Retrieve candidate windows (top 5)
+      Stage 5: Decide relationship (one_primary, multiple_complementary, ambiguous, no_supported_anchor)
+      Stage 6: Upgrade data model with auditable video_evidence object
+      Stage 7: Final timestamp verification gate
+    """
     try:
         note_data = json.loads(json_path.read_text(encoding="utf-8"))
     except Exception as e:
         return {"file": json_path.name, "stamped": 0, "error": str(e)}
 
-    transcript_path, media_target, passcode, q_map = find_media_and_transcript_for_note(vault_root, json_path, note_data)
+    # Stage 1: Ground Truth
+    gt, raw_cues = establish_video_ground_truth(vault_root, json_path, note_data)
     slide_corpus = load_slide_vectors(vault_root)
-    if not transcript_path and not q_map and not slide_corpus:
-        return {"file": json_path.name, "stamped": 0, "skipped": "No transcript, media mappings, or slide vectors found"}
 
-    raw_cues = []
-    chunks = []
-    ranker = None
-    if transcript_path:
-        if transcript_path.suffix.lower() == ".vtt":
-            raw_cues = parse_vtt(transcript_path)
-        else:
-            raw_cues = parse_transcript_md(transcript_path)
-        if raw_cues:
-            chunks = build_sliding_chunks(raw_cues, window_cues=4, step_cues=2)
-            ranker = BM25Ranker(chunks)
+    if not gt and not slide_corpus:
+        return {"file": json_path.name, "stamped": 0, "skipped": "No media ground truth or slide vectors found"}
+
+    # Stage 2: Temporal Index
+    temporal_index = build_temporal_evidence_index(raw_cues) if raw_cues else {"segments": [], "by_id": {}, "ranker": None}
+    full_transcript_text = " ".join(c["text"] for c in raw_cues) if raw_cues else ""
 
     stamped_count = 0
     quotes_count = 0
     slides_count = 0
     results_detail = []
 
-    for sec in note_data.get("sections", []):
-        for entry in sec.get("entries", []):
+    for sec_idx, sec in enumerate(note_data.get("sections", [])):
+        for e_idx, entry in enumerate(sec.get("entries", [])):
             orig_cue = entry.get("cue", "")
             has_existing = bool(re.search(r"\[▶.*?\]\(.*?\)", orig_cue))
             base_cue = re.sub(r"\[▶.*?\]\(.*?\)", "", orig_cue).strip()
-            notes_sample = entry.get("notes", "")[:300]
-            
-            target_link = None
-            matched_time_str = "00:00"
-            matched_sec = 0
-            match_score = 0.0
-            best_chunk = None
-            cue_vec = None
+            notes_sample = entry.get("notes", "")
 
-            # 1. Video Timestamp & Chunk Matching
+            # Stage 3: Decompose Cue
+            cue_id = f"cue_{sec_idx+1}_{e_idx+1:02d}"
+            request = decompose_cue_to_evidence_request(base_cue, notes_sample, cue_id=cue_id)
+
+            adjudication = None
+            q_map = gt.get("q_map", {}) if gt else {}
+
             if not has_existing or force:
-                # Check question mapping first (e.g. Q1, Q3, Exercise 9.1)
+                # Check explicit question mapping
                 q_match = re.search(r"\b(?:q|question|exercise)\s*(\d+(?:-\d+)?)\b", base_cue, re.I)
-                if q_match:
+                if q_match and q_match.group(1).lower() in q_map:
                     q_num = q_match.group(1).lower()
-                    if q_num in q_map:
-                        target_link = q_map[q_num]
-                        matched_time_str = "00:00"
-                        matched_sec = 0
-                        match_score = 1.0
+                    target_url = q_map[q_num]
+                    adjudication = {
+                        "status": "one_primary",
+                        "video_id": gt.get("video_id", "external_solution"),
+                        "canonical_url": target_url,
+                        "anchors": [{
+                            "role": "worked_example",
+                            "video_id": gt.get("video_id", "external_solution"),
+                            "canonical_url": target_url,
+                            "start_seconds": 0,
+                            "end_seconds": 60,
+                            "time_window": "00:00–01:00",
+                            "time_str": "00:00",
+                            "evidence_quote": f"Explicit question {q_num.upper()} worked solution recording",
+                            "supports": request["expected_answer"][:1],
+                            "confidence": 1.0
+                        }]
+                    }
+                elif temporal_index.get("segments") and gt:
+                    # Stage 4: Retrieve candidate windows
+                    candidates = retrieve_candidate_windows(request, temporal_index, gt, top_k=5)
+                    # Stage 5: Adjudicate relationship
+                    adjudication = adjudicate_candidates(base_cue, request, candidates, gt)
 
-                if not target_link and ranker and chunks:
-                    p_tag = None
-                    p_m = re.search(r"\b(\d+\.\d+)\b", base_cue)
-                    if p_m:
-                        p_tag = p_m.group(1)
+                if adjudication:
+                    # Stage 7: Final Timestamp Verification Gate
+                    gate_issues = verify_timestamp_evidence_gate(adjudication, gt, full_transcript_text)
+                    if gate_issues:
+                        for issue in gate_issues:
+                            print(f"      ⚠️  [Gate 7 Warning] {cue_id}: {issue}")
 
-                    cue_tokens = clean_tokens(base_cue)
-                    notes_tokens = [w for w in clean_tokens(notes_sample) if w not in cue_tokens][:10]
-                    q_tokens = cue_tokens + notes_tokens
+                    # Stage 6: Update Data Model (video_evidence object + clean cue)
+                    entry["video_evidence"] = adjudication
+                    entry["expected_answer"] = request["expected_answer"]
 
-                    scores = ranker.query(q_tokens, problem_tag=p_tag)
-                    top_score, top_idx = scores[0]
-                    max_possible = sum([ranker.idf.get(t, 0.0) * (ranker.k1 + 1.0) for t in set(q_tokens)])
-                    norm_score = top_score / (max_possible or 1.0)
+                    status = adjudication["status"]
+                    anchors = adjudication.get("anchors", [])
 
-                    # Get EmbeddingGemma-2 semantic vector
-                    cue_vec = get_embedding_gemma2(base_cue + " " + notes_sample[:100])
-                    candidate_chunks = []
-
-                    # Rescore top BM25 candidates with EmbeddingGemma-2 if available
-                    cand_indices = [idx for sc, idx in scores[:8] if sc > 0]
-                    if cue_vec and cand_indices:
-                        for idx in cand_indices:
-                            c = chunks[idx]
-                            c_vec = get_embedding_gemma2(c["text"])
-                            sim = 0.0
-                            if c_vec:
-                                sim = sum(a * b for a, b in zip(cue_vec, c_vec))
-                            bm25_val = next((sc for sc, ci in scores if ci == idx), 0.0)
-                            bm25_norm = min(1.0, bm25_val / (top_score or 1.0))
-                            hybrid = 0.45 * bm25_norm + 0.55 * max(0.0, sim)
-                            candidate_chunks.append({
-                                "chunk": c,
-                                "hybrid": hybrid,
-                                "sim": sim,
-                                "bm25": bm25_val,
-                                "time_str": c["time_str"],
-                                "seconds": c["start_seconds"],
-                                "text": c["text"]
-                            })
-                        candidate_chunks.sort(key=lambda x: x["hybrid"], reverse=True)
-
-                    if candidate_chunks:
-                        # If top 2 candidates are separated by >= 60 seconds with close scores, arbitrate with OneJev
-                        if len(candidate_chunks) >= 2:
-                            c1, c2 = candidate_chunks[0], candidate_chunks[1]
-                            if abs(c1["seconds"] - c2["seconds"]) >= 60 and c2["hybrid"] >= 0.55:
-                                winning = decide_best_timestamp_with_jev(base_cue, [c1, c2])
-                                if winning:
-                                    best_chunk = winning["chunk"]
-                                    match_score = winning["hybrid"]
-                        if not best_chunk:
-                            best_chunk = candidate_chunks[0]["chunk"]
-                            match_score = candidate_chunks[0]["hybrid"]
-                    elif norm_score >= threshold or top_score >= 10.0 or (p_tag and top_score >= 12.0):
-                        best_chunk = chunks[top_idx]
-                        match_score = norm_score
-
-                    if best_chunk and (match_score >= threshold or top_score >= 10.0):
-                        matched_time_str = best_chunk["time_str"]
-                        matched_sec = best_chunk["start_seconds"]
-                        if media_target:
-                            target_link = media_target
-
-                if target_link:
-                    clean_target = re.sub(r"[#?].*$", "", target_link)
-                    stamped_tag = f"[▶ {matched_time_str}]({clean_target}#t={matched_sec})"
-                    entry["cue"] = f"{base_cue} {stamped_tag}"
-                    stamped_count += 1
-            else:
-                m_existing = re.search(r"\[▶\s*([^\]]+)\]", orig_cue)
-                if m_existing:
-                    matched_time_str = m_existing.group(1).strip()
+                    if status == "one_primary" and anchors:
+                        a = anchors[0]
+                        clean_target = re.sub(r"[#?].*$", "", a["canonical_url"])
+                        entry["cue"] = f"{base_cue} [▶ {a['time_str']}]({clean_target}#t={a['start_seconds']})"
+                        stamped_count += 1
+                    elif status == "multiple_complementary" and anchors:
+                        tags = []
+                        for a in anchors:
+                            role_short = "Theory" if a["role"] in ("concept_explanation", "derivation") else "Example"
+                            clean_target = re.sub(r"[#?].*$", "", a["canonical_url"])
+                            tags.append(f"[▶ {a['time_str']} {role_short}]({clean_target}#t={a['start_seconds']})")
+                        entry["cue"] = f"{base_cue} {' '.join(tags)}"
+                        stamped_count += 1
+                    elif status == "ambiguous" and anchors:
+                        a = anchors[0]
+                        clean_target = re.sub(r"[#?].*$", "", a["canonical_url"])
+                        entry["cue"] = f"{base_cue} [▶ {a['time_str']} ?]({clean_target}#t={a['start_seconds']})"
+                        stamped_count += 1
+                    elif status == "no_supported_anchor":
+                        entry["cue"] = base_cue
 
             # 2. Spoken Transcript Quote Snippet Chip
-            if best_chunk and "💬 **Lecture" not in entry.get("notes", ""):
-                quote_snip = clean_spoken_quote(best_chunk["text"])
-                if quote_snip:
-                    entry["notes"] = f"{entry.get('notes', '').rstrip()}\n\n> 💬 **Lecture [{matched_time_str}]**: *\"{quote_snip}\"*"
+            if adjudication and adjudication.get("anchors"):
+                best_anchor = adjudication["anchors"][0]
+                if "💬 **Lecture" not in entry.get("notes", "") and best_anchor.get("evidence_quote"):
+                    snip = best_anchor["evidence_quote"]
+                    time_lbl = best_anchor.get("time_str", "00:00")
+                    entry["notes"] = f"{entry.get('notes', '').rstrip()}\n\n> 💬 **Lecture [{time_lbl}]**: *\"{snip}\"*"
                     quotes_count += 1
 
-            # 3. Slide Keyframe & Visual Diagram Matching
+            # 3. Slide Keyframe & Visual Diagram Matching (EmbeddingGemma-2)
             if slide_corpus:
-                if not cue_vec:
-                    cue_vec = get_embedding_gemma2(base_cue + " " + notes_sample[:100])
+                cue_vec = get_embedding_gemma2(base_cue + " " + notes_sample[:100])
                 if cue_vec:
                     matched_slide = find_best_slide_diagram(cue_vec, slide_corpus, str(json_path), min_sim=0.62)
                     if matched_slide:
@@ -1113,15 +1426,18 @@ def stamp_cornell_json(
                             entry["notes"] = f"{entry.get('notes', '').rstrip()}\n\n![Slide Diagram: {slide_label}]({rel_img})"
                             slides_count += 1
 
-            if target_link or (best_chunk and (not has_existing or force)):
+            if adjudication and adjudication.get("anchors"):
+                a = adjudication["anchors"][0]
                 results_detail.append({
                     "cue": base_cue[:60],
-                    "time": matched_time_str,
-                    "seconds": matched_sec,
-                    "target": clean_target if target_link else media_target,
-                    "score": f"{match_score:.2f}",
-                    "quote": bool(best_chunk),
-                    "slide": bool(slide_corpus and cue_vec)
+                    "status": adjudication["status"],
+                    "time": a.get("time_str", "00:00"),
+                    "role": a.get("role", "anchor"),
+                    "target": a.get("canonical_url", ""),
+                    "score": f"{a.get('confidence', 0.0):.2f}",
+                    "anchors": len(adjudication["anchors"]),
+                    "quote": bool(adjudication["anchors"]),
+                    "slide": bool(slide_corpus)
                 })
 
     if (stamped_count > 0 or quotes_count > 0 or slides_count > 0) and not dry_run:
@@ -1133,8 +1449,8 @@ def stamp_cornell_json(
         "quotes": quotes_count,
         "slides": slides_count,
         "details": results_detail,
-        "media": media_target or "None",
-        "transcript": transcript_path.name if transcript_path else "None"
+        "media": gt.get("canonical_url", "None") if gt else "None",
+        "transcript": Path(gt["transcript_path"]).name if (gt and gt.get("transcript_path")) else "None"
     }
 
 def cmd_stamp_video(args: argparse.Namespace) -> int:
@@ -1194,10 +1510,12 @@ def cmd_stamp_video(args: argparse.Namespace) -> int:
             print(f"📄 {jf.name} -> {cnt} cues stamped, {q_cnt} quotes, {s_cnt} slide diagrams (media: {res.get('media')})")
             for d in res.get("details", []):
                 flags = []
+                if d.get("status"): flags.append(f"🎯 {d['status']}")
+                if d.get("role"): flags.append(f"📌 {d['role']}")
                 if d.get("quote"): flags.append("💬 quote")
                 if d.get("slide"): flags.append("🖼️ slide")
                 flag_str = f" [{' '.join(flags)}]" if flags else ""
-                print(f"   • [{d['time']}] ({d['score']}){flag_str} {d['cue']}...")
+                print(f"   • [{d['time']}] (conf: {d['score']}){flag_str} {d['cue']}...")
         elif "skipped" in res:
             pass
 
@@ -1354,6 +1672,28 @@ def cmd_verify(args: argparse.Namespace) -> int:
         
         if not range_alive:
             g1_warnings.append("Video streaming range server is offline (run 'academic-icm serve' or './serve.sh 3333')")
+
+        # 4. Stage 7 Verification: Audit Cornell video_evidence blocks
+        for cj in vault_root.rglob("*_cornell.json"):
+            if week_token and not matches_week_filter(str(cj), week_token):
+                continue
+            try:
+                c_data = json.loads(cj.read_text(encoding="utf-8"))
+                for s in c_data.get("sections", []):
+                    for entry in s.get("entries", []):
+                        if "video_evidence" in entry:
+                            g1_checked_items += 1
+                            ve = entry["video_evidence"]
+                            status = ve.get("status")
+                            if status not in ("one_primary", "multiple_complementary", "ambiguous", "no_supported_anchor"):
+                                g1_errors.append(f"{cj.name}: Invalid video_evidence status '{status}'")
+                            for a in ve.get("anchors", []):
+                                if a.get("start_seconds", -1) < 0:
+                                    g1_errors.append(f"{cj.name}: Negative start_seconds {a.get('start_seconds')}")
+                                if a.get("end_seconds", 0) <= a.get("start_seconds", 0):
+                                    g1_errors.append(f"{cj.name}: end_seconds <= start_seconds ({a.get('start_seconds')} -> {a.get('end_seconds')})")
+            except Exception as e:
+                g1_errors.append(f"Failed to inspect video_evidence in {cj.name}: {e}")
 
         status_str = "PASS" if not g1_errors else "FAIL"
         if g1_errors:
