@@ -621,6 +621,11 @@ def sanitize_cornell_card(cue: str, notes: str) -> Tuple[str, str]:
     notes = re.sub(r'\d{1,2}/\d{1,2}/\d{4}\s+48520\s+E&C:[^\n]+', '', notes)
     # Strip isolated private unicode bullets (e.g. \uf000-\uf8ff)
     notes = re.sub(r'[\uf000-\uf8ff]', '', notes)
+    # Strip any residual video timestamp badges or links from the cue
+    cue = re.sub(r'\[▶\s*[^\]]+\]\([^)]+\)', '', cue)
+    cue = re.sub(r'\[(?:Timestamp:?\s*)?[0-9]{1,2}:\d{2}(?::\d{2})?\]\([^)]*\)', '', cue)
+    cue = re.sub(r'\[(?:Timestamp:?\s*)?[0-9]{1,2}:\d{2}(?::\d{2})?\]', '', cue)
+    cue = re.sub(r'\s{2,}', ' ', cue).strip()
     # Clean generic repetitive cues like 'What is the key principle or formula in Second Order Circuits?'
     m_cue = re.match(r'^What is the key principle or formula in (.+)\??$', cue.strip(), re.IGNORECASE)
     if m_cue:
@@ -686,6 +691,14 @@ def collect_cornell_map(bundle_root: Path) -> Dict[str, CornellInfo]:
                                 }
                                 if video_payload:
                                     card_item["video"] = video_payload
+                                    card_item["video_evidence"] = {
+                                        "anchors": [{
+                                            "start_seconds": video_payload.get("seconds", 0),
+                                            "time_str": video_payload.get("time_str", "00:00"),
+                                            "canonical_url": video_payload.get("src", ""),
+                                            "role": "concept_explanation"
+                                        }]
+                                    }
                                 cards_list.append(card_item)
                                 sec_entries.append(card_item)
                         sections_list.append({
@@ -1274,10 +1287,10 @@ def generate_study_workspace(bundle_root: Path, nodes: List[Dict[str, Any]], cor
         raw_sections = []
         cues_list = []
         if c_info:
-            if c_info.raw_data and "sections" in c_info.raw_data:
-                raw_sections = c_info.raw_data["sections"]
-            elif c_info.sections_data:
+            if c_info.sections_data:
                 raw_sections = c_info.sections_data
+            elif c_info.raw_data and "sections" in c_info.raw_data:
+                raw_sections = c_info.raw_data["sections"]
             cues_list = c_info.cards
 
         # Read markdown fallback if sections are empty

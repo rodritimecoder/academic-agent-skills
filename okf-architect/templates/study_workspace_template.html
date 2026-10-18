@@ -1644,6 +1644,15 @@
     // Local Storage Progress Store
     const STORAGE_KEY_PREFIX = "icm_retention_";
 
+    function cleanCueText(cue) {
+      if (!cue) return "";
+      return cue.replace(/\[▶\s*[^\]]+\]\([^)]+\)/g, "")
+                .replace(/\[(?:Timestamp:?\s*)?[0-9]{1,2}:\d{2}(?::\d{2})?\]\([^)]*\)/g, "")
+                .replace(/\[(?:Timestamp:?\s*)?[0-9]{1,2}:\d{2}(?::\d{2})?\]/g, "")
+                .replace(/\s{2,}/g, " ")
+                .trim();
+    }
+
     function renderMarkdownSafe(text) {
       if (!text) return "";
       if (!window.marked || typeof window.marked.parse !== "function") return text;
@@ -1918,12 +1927,21 @@
                 anchors.push({
                   seconds: a.start_seconds,
                   time_str: a.time_str || formatSeconds(a.start_seconds),
-                  cue: entry.cue,
+                  cue: cleanCueText(entry.cue),
                   badge: entry.badge || "CONCEPT",
                   role: a.role || "concept_explanation",
                   cueIdx: cueIdx
                 });
               }
+            });
+          } else if (entry.video && typeof entry.video.seconds === "number" && entry.video.seconds >= 0) {
+            anchors.push({
+              seconds: entry.video.seconds,
+              time_str: entry.video.time_str || formatSeconds(entry.video.seconds),
+              cue: cleanCueText(entry.cue),
+              badge: entry.badge || "CONCEPT",
+              role: "concept_explanation",
+              cueIdx: cueIdx
             });
           }
         });
@@ -2155,6 +2173,8 @@
               const label = a.role === "concept_explanation" ? "Theory" : (a.role === "worked_example" ? "Example" : "Timestamp");
               anchorsHtml += `<button class="cue-time-chip" onclick="seekVideoAnchor(${a.start_seconds}, ${cueIdx}, event)">▶ ${a.time_str || formatSeconds(a.start_seconds)} ${label}</button>`;
             });
+          } else if (entry.video && typeof entry.video.seconds === "number" && entry.video.seconds >= 0) {
+            anchorsHtml += `<button class="cue-time-chip" onclick="seekVideoAnchor(${entry.video.seconds}, ${cueIdx}, event)">▶ ${entry.video.time_str || formatSeconds(entry.video.seconds)} Video</button>`;
           }
 
           // Format notes markdown
@@ -2166,7 +2186,7 @@
                 <span class="cue-type-tag">${entry.badge || 'CONCEPT'}</span>
                 <span style="font-size:11px; color:var(--text-sub);">Cue #${cueIdx + 1}</span>
               </div>
-              <div class="cue-question-text">${entry.cue}</div>
+              <div class="cue-question-text">${cleanCueText(entry.cue)}</div>
               <div class="cue-anchors-inline">${anchorsHtml}</div>
             </div>
             <div class="cue-card-body" id="cue_body_${cueIdx}">
@@ -2427,7 +2447,7 @@
       const card = currentQuizCards[idx];
       document.getElementById("quizBadge").textContent = card.badge || "CONCEPT";
       document.getElementById("quizCounter").textContent = `Card ${idx + 1} of ${currentQuizCards.length}`;
-      document.getElementById("quizQuestionHero").innerHTML = card.cue;
+      document.getElementById("quizQuestionHero").innerHTML = cleanCueText(card.cue);
 
       const ansEl = document.getElementById("quizAnswerHero");
       ansEl.innerHTML = renderMarkdownSafe(card.notes || "");
@@ -2581,6 +2601,9 @@
               const a = evidence.anchors[0];
               timeSeconds = a.start_seconds;
               timeStr = a.time_str;
+            } else if (e.video && typeof e.video.seconds === "number") {
+              timeSeconds = e.video.seconds;
+              timeStr = e.video.time_str;
             }
 
             if (typeof timeSeconds === "number" && timeSeconds >= 0) {
@@ -2598,7 +2621,7 @@
                     <span class="cornell-cue-badge">${cueBadge}</span>
                     ${videoBtnHtml}
                   </div>
-                  <div class="cornell-cue-text">${e.cue}</div>
+                  <div class="cornell-cue-text">${cleanCueText(e.cue)}</div>
                 </div>
                 <div class="cornell-notes-box blurred" onclick="this.classList.toggle('revealed')">
                   ${parsedNotes}
