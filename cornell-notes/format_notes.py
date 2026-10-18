@@ -360,24 +360,99 @@ def validate_schema(data: dict) -> list[str]:
     return errors
 
 
-def export_anki_tsv(data: dict, output_tsv_path: Path):
+def clean_cue_text(cue: str) -> str:
+    """Strips video timestamps and seek chips from the flashcard cue."""
+    clean = re.sub(r'\[▶\s*[^\]]+\]\([^)]+\)', '', cue)
+    clean = re.sub(r'\[\d{1,2}:\d{2}(?::\d{2})?\]', '', clean)
+    return clean.strip()
+
+
+def atomize_entry_to_cards(sec_heading: str, entry: dict) -> list[tuple[str, str]]:
     """
-    Exports cue-note pairs as a tab-separated TSV file ready for Anki import.
-    Field 1: Front (Section + Cue)
-    Field 2: Back (Formatted Notes)
+    Atomizes a single Cornell entry into high-yield, quick-to-review Anki cards (under 35 words).
+    Returns list of (front_html, back_html).
+    """
+    # 1. Explicit cards array declared in JSON entry: use verbatim
+    if "cards" in entry and isinstance(entry["cards"], list) and entry["cards"]:
+        cards = []
+        for c in entry["cards"]:
+            if isinstance(c, dict) and "front" in c and "back" in c:
+                f = f"<strong>[{html.escape(sec_heading)}]</strong><br>{format_text_block(c['front'])}"
+                b = format_text_block(c['back'])
+                cards.append((f.replace("\n", " "), b.replace("\n", " ")))
+        if cards:
+            return cards
+
+    cue_raw = entry.get("cue", "").strip()
+    cue_clean = clean_cue_text(cue_raw)
+    notes_raw = entry.get("notes", "").strip()
+    lines = notes_raw.splitlines()
+
+    # 2. Check for Markdown Tables: Atomize each table row into an individual decision card
+    table_lines = [l for l in lines if l.strip().startswith("|")]
+    if len(table_lines) >= 3:
+        header = [c.strip() for c in table_lines[0].split("|")[1:-1]]
+        data_rows = []
+        for l in table_lines[2:]:
+            cols = [c.strip() for c in l.split("|")[1:-1]]
+            if len(cols) == len(header):
+                data_rows.append(cols)
+
+        if data_rows and len(header) >= 2 and any("scenario" in h.lower() or "method" in h.lower() for h in header):
+            cards = []
+            for row in data_rows:
+                scenario = row[0].replace("**", "").strip()
+                method = row[1].strip() if len(row) > 1 else ""
+                rationale = f" — {row[2].strip()}" if len(row) > 2 else ""
+                f = f"<strong>[{html.escape(sec_heading)}]</strong> Scenario: <em>{html.escape(scenario)}</em><br>{html.escape(cue_clean)}"
+                b = f"{format_text_block(method)}{html.escape(rationale)}"
+                cards.append((f.replace("\n", " "), b.replace("\n", " ")))
+            return cards
+
+    # 3. Check for multi-point Pitfalls/Traps: extract distinct warnings
+    if any(kw in cue_clean.lower() for kw in ["pitfall", "trap", "mistake", "warning"]) or any("warning" in l.lower() or "pitfall" in l.lower() for l in lines):
+        pitfalls = [re.sub(r'^\d+\.\s*', '', l).strip() for l in lines if re.match(r'^\d+\.\s*\*\*', l)]
+        if len(pitfalls) >= 2:
+            cards = []
+            for p in pitfalls:
+                parts = p.split("**:", 1)
+                if len(parts) == 2:
+                    p_title = parts[0].replace("**", "").strip()
+                    p_desc = parts[1].strip()
+                    f = f"<strong>[{html.escape(sec_heading)}]</strong> ⚠️ Pitfall in {html.escape(cue_clean)}:<br><strong>{html.escape(p_title)}</strong>"
+                    b = format_text_block(p_desc)
+                    cards.append((f.replace("\n", " "), b.replace("\n", " ")))
+            if cards:
+                return cards
+
+    # Default / Clean fallback card:
+    f = f"<strong>[{html.escape(sec_heading)}]</strong><br>{html.escape(cue_clean)}"
+    b = format_text_block(notes_raw)
+    return [(f.replace("\n", " "), b.replace("\n", " "))]
+
+
+def export_anki_tsv(data: dict, output_tsv_path: Path) -> int:
+    """
+    Exports cue-note pairs as an atomic, high-yield TSV file ready for Anki import.
+    Field 1: Front (Section + Clean Cue or Scenario Prompt)
+    Field 2: Back (Atomic Explanation / Cloze / Answer, under 35 words)
     Field 3: Tag (Title / Heading)
+    Returns total number of cards written.
     """
     output_tsv_path.parent.mkdir(parents=True, exist_ok=True)
+    card_count = 0
     with open(output_tsv_path, "w", encoding="utf-8", newline="") as f:
         writer = csv.writer(f, delimiter="\t")
         for section in data.get("sections", []):
             sec_heading = section.get("heading", "")
+            tag = re.sub(r'[^a-zA-Z0-9_-]', '_', sec_heading)
             for entry in section.get("entries", []):
-                cue = entry.get("cue", "").strip()
-                notes_html = format_text_block(entry.get("notes", "")).replace("\n", " ")
-                front = f"<strong>[{html.escape(sec_heading)}]</strong><br>{html.escape(cue)}"
-                tag = re.sub(r'[^a-zA-Z0-9_-]', '_', sec_heading)
-                writer.writerow([front, notes_html, tag])
+                cards = atomize_entry_to_cards(sec_heading, entry)
+                for front, back in cards:
+                    writer.writerow([front, back, tag])
+                    card_count += 1
+    return card_count
+
 
 
 def render_cornell_html(data: dict, template_path: Path, srs_path: Path | None = None) -> str:
@@ -704,13 +779,18 @@ def main():
         sys.exit(1)
 
     tsv_path = None
+    card_count = 0
     if args.anki:
-        tsv_path = input_path.parent / f"{input_path.stem}_anki.tsv"
+        if input_path.parent.name == "json" and (input_path.parent.parent / "anki").is_dir():
+            tsv_path = input_path.parent.parent / "anki" / f"{input_path.stem}_anki.tsv"
+        else:
+            tsv_path = input_path.parent / f"{input_path.stem}_anki.tsv"
         try:
-            export_anki_tsv(data, tsv_path)
+            card_count = export_anki_tsv(data, tsv_path)
         except Exception as e:
             print(f"Error writing Anki TSV file: {e}", file=sys.stderr)
             tsv_path = None
+
 
     # Emit Token-Shielded Receipt or human output
     total_cues = sum(len(s.get("entries", [])) for s in data.get("sections", []))
@@ -736,8 +816,9 @@ def main():
             {"metric": "Sections", "value": str(receipt["sections"])},
             {"metric": "Cue-Note Pairs", "value": str(receipt["cues"])},
             {"metric": "Generated HTML", "value": f"{output_path.name} ({receipt['html_size_kb']} KB)"},
-            {"metric": "Anki Cards", "value": f"{tsv_path.name} ({total_cues} cards)" if tsv_path else "Disabled"},
+            {"metric": "Anki Cards", "value": f"{tsv_path.name} ({card_count} cards)" if tsv_path else "Disabled"},
         ]
+
         print(f"### Cornell Notes Receipt\n")
         print(render_table(rows, ["metric", "value"], ["Metric", "Value"]))
         return

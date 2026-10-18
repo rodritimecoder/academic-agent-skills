@@ -174,6 +174,32 @@ class TestSrsReview(unittest.TestCase):
                 "new": 3
             })
 
+    def test_atomize_tables_and_pitfalls(self):
+        # 1. Test table atomization (1 card per scenario row)
+        table_entry = {
+            "cue": "When should an engineer choose Nodal Analysis over Mesh Analysis? [▶ 00:05:00](url)",
+            "notes": "| Scenario | Recommended Method | Rationale |\n| :--- | :--- | :--- |\n| **Non-planar circuits** | **Nodal Only** | Mesh requires planar |\n| **Many parallel branches** | **Nodal Analysis** | Current sources enter rhs |"
+        }
+        cards = format_notes.atomize_entry_to_cards("Circuit Methods", table_entry)
+        self.assertEqual(len(cards), 2)
+        self.assertIn("Scenario: <em>Non-planar circuits</em>", cards[0][0])
+        self.assertIn("Nodal Only", cards[0][1])
+        # Clean cue stripped video timestamp
+        self.assertNotIn("00:05:00", cards[0][0])
+
+        # 2. Test explicit cards override
+        custom_entry = {
+            "cue": "Supernode definition",
+            "notes": "Long detailed paragraph derivation...",
+            "cards": [
+                {"front": "What equation resolves a supernode?", "back": "Auxiliary KCL constraint equation"}
+            ]
+        }
+        custom_cards = format_notes.atomize_entry_to_cards("Supernodes", custom_entry)
+        self.assertEqual(len(custom_cards), 1)
+        self.assertIn("Auxiliary KCL constraint equation", custom_cards[0][1])
+
 
 if __name__ == "__main__":
     unittest.main()
+
