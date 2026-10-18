@@ -1326,6 +1326,20 @@ def generate_study_workspace(bundle_root: Path, nodes: List[Dict[str, Any]], cor
                     passcode = v.get("passcode", "")
                     break
 
+        is_transcript = "transcript" in clean_stem or "transcript" in d.get("label", "").lower()
+        is_solutions = "solution" in clean_stem or bool(matched_mp4 or zoom_url)
+        is_spreadsheet = "excel" in clean_stem or "sheet" in clean_stem or bool(re.search(r'\|\s*[-:]+\s*\|', markdown_body))
+        if is_transcript:
+            asset_type = "transcript"
+        elif is_solutions:
+            asset_type = "solutions"
+        elif is_spreadsheet:
+            asset_type = "spreadsheet"
+        elif cues_list:
+            asset_type = "cornell"
+        else:
+            asset_type = "document"
+
         note_entry = {
             "id": concept_id,
             "stem": clean_stem,
@@ -1333,6 +1347,7 @@ def generate_study_workspace(bundle_root: Path, nodes: List[Dict[str, Any]], cor
             "course": course_name,
             "module": mod_label,
             "source": file_path_str,
+            "asset_type": asset_type,
             "html_path": d.get("cornell_path", ""),
             "video_src": matched_mp4,
             "zoom_url": zoom_url,

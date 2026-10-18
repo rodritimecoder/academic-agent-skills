@@ -1012,6 +1012,135 @@
       overflow-y: hidden;
     }
 
+    /* Table & Tabular Document Styling */
+    .table-responsive {
+      width: 100%;
+      overflow-x: auto;
+      margin: 16px 0;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--bg-card);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    }
+    .markdown-body-rendered table,
+    .doc-sheet-paper table,
+    .raw-markdown-reader table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      text-align: left;
+    }
+    .markdown-body-rendered th,
+    .raw-markdown-reader th {
+      background: #1e293b;
+      color: #93c5fd;
+      font-weight: 600;
+      padding: 10px 14px;
+      border-bottom: 2px solid var(--border);
+      white-space: nowrap;
+      text-transform: uppercase;
+      font-size: 11px;
+      letter-spacing: 0.5px;
+    }
+    .doc-sheet-paper th {
+      background: #f1f5f9;
+      color: #1e293b;
+      font-weight: 600;
+      padding: 10px 14px;
+      border-bottom: 2px solid #cbd5e1;
+      white-space: nowrap;
+      font-size: 11px;
+      letter-spacing: 0.5px;
+    }
+    .markdown-body-rendered td,
+    .raw-markdown-reader td {
+      padding: 9px 14px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-main);
+      vertical-align: middle;
+    }
+    .doc-sheet-paper td {
+      padding: 9px 14px;
+      color: #334155;
+      border-bottom: 1px solid #e2e8f0;
+      vertical-align: middle;
+    }
+    .markdown-body-rendered tbody tr:nth-child(even),
+    .raw-markdown-reader tbody tr:nth-child(even) {
+      background: rgba(255, 255, 255, 0.02);
+    }
+    .doc-sheet-paper tbody tr:nth-child(even) {
+      background: #f8fafc;
+    }
+    .markdown-body-rendered tbody tr:hover,
+    .doc-sheet-paper tbody tr:hover,
+    .raw-markdown-reader tbody tr:hover {
+      background: rgba(147, 197, 253, 0.06);
+    }
+    td.num-cell, td:has(span.katex) {
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Sidebar Material Filter Chips */
+    .material-filter-bar {
+      display: flex;
+      gap: 6px;
+      padding: 2px 0;
+      overflow-x: auto;
+    }
+    .mat-chip {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      color: var(--text-sub);
+      padding: 4px 9px;
+      border-radius: 14px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.2s ease;
+    }
+    .mat-chip:hover {
+      color: var(--text-main);
+      border-color: var(--accent);
+    }
+    .mat-chip.active {
+      background: rgba(147, 197, 253, 0.15);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    /* Asset Badges & Formatting */
+    .badge-spreadsheet {
+      background: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .badge-transcript {
+      background: rgba(245, 158, 11, 0.15);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .transcript-timestamp {
+      display: inline-block;
+      background: rgba(147, 197, 253, 0.12);
+      color: var(--accent);
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-family: monospace;
+      margin-right: 6px;
+      font-weight: 600;
+    }
+
     /* Responsive adjustments */
     @media (max-width: 1024px) {
       .view-sync-container {
@@ -1077,6 +1206,12 @@
         <select class="course-select-box" id="courseSelect" onchange="onCourseSelectChange(this.value)">
           <!-- Populated dynamically -->
         </select>
+
+        <div class="material-filter-bar" id="materialFilterBar">
+          <button class="mat-chip active" data-filter="all" onclick="setMaterialFilter('all', this)">All</button>
+          <button class="mat-chip" data-filter="study" onclick="setMaterialFilter('study', this)">⚡ Study Notes</button>
+          <button class="mat-chip" data-filter="transcript" onclick="setMaterialFilter('transcript', this)">🎙️ Transcripts</button>
+        </div>
         
         <div class="sidebar-search-box">
           <span class="sidebar-search-icon">&#128269;</span>
@@ -1279,6 +1414,14 @@
     let currentViewMode = "sync"; // 'sync' | 'quiz' | 'doc'
     let currentQuizIndex = 0;
     let currentQuizCards = [];
+    let activeMaterialFilter = "all"; // 'all' | 'study' | 'transcript'
+
+    function setMaterialFilter(filterType, btnEl) {
+      activeMaterialFilter = filterType;
+      document.querySelectorAll("#materialFilterBar .mat-chip").forEach(c => c.classList.remove("active"));
+      if (btnEl) btnEl.classList.add("active");
+      renderSidebarTree(currentCourse);
+    }
 
     // Local Storage Progress Store
     const STORAGE_KEY_PREFIX = "icm_retention_";
@@ -1297,6 +1440,7 @@
         const token = `@@@MATH_${i}@@@`;
         html = html.replace(token, () => mathTokens[i]);
       }
+      html = html.replace(/<table(\s*[^>]*)>/gi, '<div class="table-responsive"><table$1>').replace(/<\/table>/gi, '</table></div>');
       return html;
     }
 
@@ -1414,7 +1558,13 @@
       const treeContainer = document.getElementById("sidebarTree");
       treeContainer.innerHTML = "";
 
-      const notes = getNotesForCourse(courseId);
+      let notes = getNotesForCourse(courseId);
+      if (activeMaterialFilter === "study") {
+        notes = notes.filter(n => n.asset_type === "cornell" || n.asset_type === "solutions" || (n.cues && n.cues.length > 0));
+      } else if (activeMaterialFilter === "transcript") {
+        notes = notes.filter(n => n.asset_type === "transcript" || n.title.toLowerCase().includes("transcript") || n.id.toLowerCase().includes("transcript"));
+      }
+
       // Group by module
       const modulesMap = {};
       notes.forEach(n => {
@@ -1424,6 +1574,7 @@
       });
 
       Object.entries(modulesMap).forEach(([modName, modNotes]) => {
+        if (!modNotes || modNotes.length === 0) return;
         const groupEl = document.createElement("div");
         groupEl.className = "module-group";
 
@@ -1439,9 +1590,15 @@
           itemEl.onclick = () => selectNote(n.id);
 
           const hasVideo = !!(n.video_src || n.zoom_url);
+          let assetIcon = "📄";
+          if (n.asset_type === "cornell" || (n.cues && n.cues.length > 0)) assetIcon = "⚡";
+          else if (n.asset_type === "solutions" || hasVideo) assetIcon = "🎬";
+          else if (n.asset_type === "transcript" || n.title.toLowerCase().includes("transcript")) assetIcon = "🎙️";
+          else if (n.asset_type === "spreadsheet" || n.title.toLowerCase().includes("excel")) assetIcon = "📊";
+
           itemEl.innerHTML = `
             <div class="lecture-left">
-              <span>📝</span>
+              <span>${assetIcon}</span>
               <span style="overflow:hidden; text-overflow:ellipsis;">${n.title}</span>
             </div>
             <div class="lecture-badges">
@@ -1473,8 +1630,16 @@
       // Update Lecture Heading Area
       document.getElementById("lectureTitle").textContent = currentNoteData.title;
       document.getElementById("lectureCourseBadge").textContent = currentNoteData.course;
-      document.getElementById("lectureCueCount").textContent = `${currentNoteData.cues ? currentNoteData.cues.length : 0} Cues`;
+      const cueCount = currentNoteData.cues ? currentNoteData.cues.length : 0;
+      document.getElementById("lectureCueCount").textContent = `${cueCount} Cues`;
       document.getElementById("lectureSourcePath").textContent = currentNoteData.source || "";
+
+      // Update Quiz switcher button with badge count
+      const btnQuiz = document.getElementById("btnQuizView");
+      if (btnQuiz) {
+        btnQuiz.innerHTML = `<span>⚡</span> Active Recall Quiz <span style="font-size:11px; opacity:0.8; margin-left:3px;">(${cueCount})</span>`;
+        btnQuiz.style.opacity = cueCount === 0 ? "0.5" : "1";
+      }
 
       // Setup Video Player
       setupVideoForNote(currentNoteData, targetTime);
@@ -1491,6 +1656,12 @@
 
       // Render Document Sheet
       renderDocSheet(currentNoteData);
+
+      // Smart view routing: if note has NO video and NO cues, default to doc mode when in sync mode
+      const hasVideo = !!(currentNoteData.video_src || currentNoteData.zoom_url);
+      if (!hasVideo && cueCount === 0 && currentViewMode === "sync") {
+        switchViewMode("doc");
+      }
 
       triggerMathRendering(document.body);
     }
@@ -1652,8 +1823,10 @@
       const vSrc = note.video_src || "";
       const zUrl = note.zoom_url || "";
       const zPass = note.passcode || "";
+      const mediaStage = document.querySelector(".media-stage");
 
       if (vSrc && vSrc.endsWith(".mp4")) {
+        if (mediaStage) mediaStage.style.display = "flex";
         zoomCard.style.display = "none";
         videoViewport.style.display = "block";
         const applySeek = () => {
@@ -1670,6 +1843,7 @@
           applySeek();
         }
       } else if (zUrl) {
+        if (mediaStage) mediaStage.style.display = "flex";
         videoViewport.style.display = "none";
         zoomCard.style.display = "flex";
         document.getElementById("zoomPasscodeText").textContent = zPass || "(No Passcode Required)";
@@ -1677,6 +1851,7 @@
         window.currentZoomUrl = zUrl;
         window.currentZoomPasscode = zPass;
       } else {
+        if (mediaStage) mediaStage.style.display = "none";
         videoViewport.style.display = "none";
         zoomCard.style.display = "none";
       }
@@ -1688,12 +1863,24 @@
 
       if (!note.sections || note.sections.length === 0) {
         if (note.markdown_content) {
+          let badgeHtml = '<span>📄</span> <span>Course Document</span>';
+          if (note.asset_type === "spreadsheet" || (note.title && note.title.toLowerCase().includes("excel"))) {
+            badgeHtml = '<span class="badge-spreadsheet">📊 Spreadsheet Workbook / Data Sheet</span>';
+          } else if (note.asset_type === "transcript" || (note.title && note.title.toLowerCase().includes("transcript"))) {
+            badgeHtml = '<span class="badge-transcript">🎙️ Audio Recording Transcript (ASR)</span>';
+          }
+
+          let content = note.markdown_content;
+          if (note.asset_type === "transcript" || (note.title && note.title.toLowerCase().includes("transcript"))) {
+            content = content.replace(/\[?(\d{1,2}:\d{2}(?::\d{2})?)\]?/g, '<span class="transcript-timestamp">⏱ $1</span>');
+          }
+
           container.innerHTML = `
             <div class="raw-markdown-reader" style="padding:24px; background:var(--surface); border:1px solid var(--border); border-radius:10px; line-height:1.7; color:var(--text-main);">
-              <div style="display:flex; align-items:center; gap:8px; margin-bottom:16px; padding-bottom:12px; border-bottom:1px solid var(--border); color:var(--accent); font-weight:600; font-size:14px;">
-                <span>📄</span> <span>Course Note Document</span>
+              <div style="display:flex; align-items:center; gap:8px; margin-bottom:16px; padding-bottom:12px; border-bottom:1px solid var(--border); font-weight:600; font-size:14px;">
+                ${badgeHtml}
               </div>
-              <div class="markdown-body-rendered">${renderMarkdownSafe(note.markdown_content)}</div>
+              <div class="markdown-body-rendered">${renderMarkdownSafe(content)}</div>
             </div>`;
           triggerMathRendering(container);
           return;
@@ -2045,12 +2232,23 @@
 
     function renderDocSheet(note) {
       const paper = document.getElementById("docSheetPaper");
-      let html = `<h1 style="font-size:24px; margin-bottom:12px;">${note.title}</h1>`;
+      let badgeHtml = "";
+      if (note.asset_type === "spreadsheet" || (note.title && note.title.toLowerCase().includes("excel"))) {
+        badgeHtml = '<div style="margin-bottom:12px;"><span class="badge-spreadsheet">📊 Spreadsheet Workbook / Data Sheet</span></div>';
+      } else if (note.asset_type === "transcript" || (note.title && note.title.toLowerCase().includes("transcript"))) {
+        badgeHtml = '<div style="margin-bottom:12px;"><span class="badge-transcript">🎙️ Audio Recording Transcript (ASR)</span></div>';
+      }
+
+      let html = `${badgeHtml}<h1 style="font-size:24px; margin-bottom:12px;">${note.title}</h1>`;
       html += `<div style="font-size:13px; color:#555; margin-bottom:24px;">${note.course} &bull; ${note.source || ''}</div>`;
 
       if (!note.sections || note.sections.length === 0) {
         if (note.markdown_content) {
-          html += `<div style="line-height:1.7; font-size:14px; color:#222;" class="doc-markdown-body">${renderMarkdownSafe(note.markdown_content)}</div>`;
+          let content = note.markdown_content;
+          if (note.asset_type === "transcript" || (note.title && note.title.toLowerCase().includes("transcript"))) {
+            content = content.replace(/\[?(\d{1,2}:\d{2}(?::\d{2})?)\]?/g, '<span class="transcript-timestamp">⏱ $1</span>');
+          }
+          html += `<div style="line-height:1.7; font-size:14px; color:#222;" class="doc-markdown-body">${renderMarkdownSafe(content)}</div>`;
         } else {
           html += `<div style="color:#777; font-style:italic;">No content recorded for this note.</div>`;
         }
