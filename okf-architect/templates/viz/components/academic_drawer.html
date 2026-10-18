@@ -7,36 +7,15 @@
     <div id="dCourseBadge" class="course-badge">Course Name</div>
 
     <div class="action-block" id="dStudyWorkspaceBlock" style="margin: 4px 0 6px 0;">
-      <a id="dStudyWorkspaceLink" href="study.html" target="_blank" class="study-workspace-btn" style="display:flex; align-items:center; justify-content:center; gap:8px; background:linear-gradient(135deg, #1f6feb, #238636); color:#ffffff; padding:9px 14px; border-radius:6px; font-weight:600; font-size:12px; text-decoration:none; border:1px solid rgba(255,255,255,0.15); box-shadow:0 2px 6px rgba(0,0,0,0.3); transition:all 0.2s ease;">
+      <a id="dStudyWorkspaceLink" href="study.html" target="_blank" class="study-workspace-btn" style="display:flex; align-items:center; justify-content:center; gap:8px; background:linear-gradient(135deg, #1f6feb, #238636); color:#ffffff; padding:10px 14px; border-radius:8px; font-weight:600; font-size:13px; text-decoration:none; border:1px solid rgba(255,255,255,0.2); box-shadow:0 2px 8px rgba(0,0,0,0.4); transition:all 0.2s ease;">
         <span>📖</span> Open in Study Workspace &rsaquo;
       </a>
     </div>
 
     <div class="action-block" id="dCornellBlock" style="display:none; margin: 4px 0 6px 0;">
-      <a id="dCornellLink" href="#" target="_blank" class="cornell-action-btn">
-        <span>📝</span> Open Interactive Cornell Notes (<span id="dCornellCues">0</span> Cues)
+      <a id="dCornellLink" href="#" target="_blank" class="cornell-action-btn" style="display:flex; align-items:center; justify-content:center; gap:8px; background:rgba(166,227,161,0.12); color:#a6e3a1; border:1px solid rgba(166,227,161,0.3); padding:8px 12px; border-radius:6px; font-size:12px; text-decoration:none;">
+        <span>📝</span> View Cornell Notes (<span id="dCornellCues">0</span> Cues) &rsaquo;
       </a>
-    </div>
-
-    <div class="action-block" id="dAnkiBlock" style="display:none; margin: 0 0 10px 0;">
-      <button id="dAnkiBtn" class="anki-action-btn" type="button">
-        <span>🎴</span> Study Anki Flashcards (<span id="dAnkiCount">0</span> Cards)
-      </button>
-    </div>
-
-    <!-- PDF Problem Sheet Button -->
-    <div class="action-block" id="dPdfBlock" style="display:none; margin: 4px 0 6px 0;">
-      <button id="dPdfBtn" class="btn-pdf-view" type="button">
-        <span>📄</span> View Problem Sheet (PDF)
-      </button>
-    </div>
-
-    <!-- Worked Solution Video Cues -->
-    <div class="action-block" id="dSolutionCuesBlock" style="display:none; margin: 8px 0 10px 0; background:rgba(137,180,250,0.06); border:1px solid rgba(137,180,250,0.3); border-radius:8px; padding:12px;">
-      <div style="font-weight:600; font-size:13px; color:#89b4fa; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
-        <span>🎬</span> Worked Solution Cues (Click to Seek)
-      </div>
-      <div id="dSolutionCuesList" style="display:flex; flex-direction:column; gap:6px;"></div>
     </div>
 
     <div class="meta-block">
@@ -64,4 +43,3 @@
       <ul class="connections-list" id="dLinks"></ul>
     </div>
   </div>
-

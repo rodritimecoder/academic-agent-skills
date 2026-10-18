@@ -1,61 +1,3 @@
-    /* ============================================================
-       CORNELL NOTES & ANKI SPACED REPETITION MODES
-       ============================================================ */
-    .cornell-launch-btn {
-      background: linear-gradient(135deg, rgba(166, 227, 161, 0.15), rgba(137, 180, 250, 0.2)) !important;
-      border: 1px solid rgba(166, 227, 161, 0.35) !important;
-      color: #a6e3a1 !important;
-      box-shadow: 0 0 12px rgba(166, 227, 161, 0.2);
-    }
-    .cornell-launch-btn:hover {
-      background: linear-gradient(135deg, rgba(166, 227, 161, 0.3), rgba(137, 180, 250, 0.35)) !important;
-      border-color: #a6e3a1 !important;
-      box-shadow: 0 0 18px rgba(166, 227, 161, 0.4);
-      transform: translateY(-1px);
-    }
-    .anki-launch-btn {
-      background: linear-gradient(135deg, rgba(243, 139, 168, 0.15), rgba(203, 166, 247, 0.2)) !important;
-      border: 1px solid rgba(243, 139, 168, 0.35) !important;
-      color: #f5c2e7 !important;
-      box-shadow: 0 0 12px rgba(243, 139, 168, 0.2);
-    }
-    .anki-launch-btn:hover {
-      background: linear-gradient(135deg, rgba(243, 139, 168, 0.3), rgba(203, 166, 247, 0.35)) !important;
-      border-color: #f38ba8 !important;
-      box-shadow: 0 0 18px rgba(243, 139, 168, 0.4);
-      transform: translateY(-1px);
-    }
-    .anki-action-btn {
-      width: 100%;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      padding: 9px 14px;
-      background: linear-gradient(135deg, rgba(203, 166, 247, 0.2), rgba(137, 180, 250, 0.2));
-      border: 1px solid rgba(203, 166, 247, 0.4);
-      border-radius: 8px;
-      color: #cba6f7;
-      font-weight: 600;
-      font-size: 12px;
-      cursor: pointer;
-      text-decoration: none;
-      transition: all 0.2s ease;
-      box-shadow: 0 2px 8px rgba(203, 166, 247, 0.15);
-    }
-    .anki-action-btn:hover {
-      background: linear-gradient(135deg, rgba(203, 166, 247, 0.35), rgba(137, 180, 250, 0.35));
-      border-color: #cba6f7;
-      box-shadow: 0 4px 14px rgba(203, 166, 247, 0.35);
-      transform: translateY(-1px);
-      color: #fff;
-    }
-
-
-    .toggle-active .toggle-switch::after {
-      transform: translateX(14px);
-    }
-
     /* Details Drawer */
     #detailsDrawer {
       position: absolute;
@@ -175,4 +117,3 @@
       color: var(--accent);
       font-weight: bold;
     }
-

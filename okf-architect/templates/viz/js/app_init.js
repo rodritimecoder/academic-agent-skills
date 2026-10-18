@@ -67,41 +67,27 @@
       if (searchInput) {
         searchInput.oninput = e => {
           searchQuery = (/** @type {HTMLInputElement} */ (e.target).value).toLowerCase().trim();
-        if (searchQuery) {
-          const match = nodes.find(n => n.label.toLowerCase().includes(searchQuery));
-          if (match) {
-            d3.select(canvas).transition().duration(500).call(
-              zoom.transform,
-              d3.zoomIdentity.translate(width / 2, height / 2).scale(1.2).translate(-match.x, -match.y)
-            );
+          if (searchQuery) {
+            const match = nodes.find(n => n.label.toLowerCase().includes(searchQuery));
+            if (match) {
+              d3.select(canvas).transition().duration(500).call(
+                zoom.transform,
+                d3.zoomIdentity.translate(width / 2, height / 2).scale(1.2).translate(-match.x, -match.y)
+              );
+            }
           }
-        }
-        requestRender();
-      };
-    }
+          requestRender();
+        };
+      }
 
-
-      // Initialize view mode state after all functions and models are defined
+      // Initialize view mode state
       setViewMode(currentViewMode, false);
 
-      // Expose for testing and external inspection
+      // Expose for inspection
       window.__graph = {
         nodes,
         selectNode,
         simulation,
         requestRender,
-        setViewMode,
-                openCornellModal,
-        openDigUpModal,
-        closeDigUpModal,
-        performDigUpSearch,
-        runDigUpTest: () => {
-          const hasModal = !!document.getElementById("digupModal");
-          const hasCorpus = Array.isArray(digupSlideCorpus) && digupSlideCorpus.length > 0;
-          return { passed: hasModal && hasCorpus, slideCount: digupSlideCorpus.length };
-        },
-        openAnkiModal,
-        startAnkiSession,
-        renderKanbanBoard,
-        filterKanbanCourse
+        setViewMode
       };

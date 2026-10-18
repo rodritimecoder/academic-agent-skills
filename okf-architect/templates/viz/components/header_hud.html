@@ -18,7 +18,7 @@
     </div>
 
     <div class="hud-right">
-      <div class="view-mode-toggle" id="viewModeToggle" title="Toggle between Canvas Week Constellations, Classic Semantic Obsidian Web, Radial Sunburst, Study Kanban, Cornell Notes, and Anki Decks">
+      <div class="view-mode-toggle" id="viewModeToggle" title="Toggle between Canvas Week Constellations, Classic Semantic Obsidian Web, and Radial Sunburst">
         <button class="mode-btn active" id="btnModeConstellation" onclick="setViewMode('constellation')">
           <span>📅</span> Canvas Constellations
         </button>
@@ -28,18 +28,12 @@
         <button class="mode-btn" id="btnModeSunburst" onclick="setViewMode('sunburst')">
           <span>☀️</span> Radial Sunburst
         </button>
-        <button class="mode-btn" id="btnModeKanban" onclick="setViewMode('kanban')" title="Study &amp; Retention Pipeline Kanban (Press K)">
-          <span>📋</span> Kanban Board
-        </button>
         <a href="study.html" target="_blank" class="mode-btn cornell-launch-btn" id="btnModeStudy" title="Open Interactive Study Workspace (Lecture Sync + Cues + Quiz)" style="text-decoration:none; display:inline-flex; align-items:center; gap:6px; color:#ffffff; background:rgba(88,166,255,0.18); border:1px solid rgba(88,166,255,0.4);">
-          <span>📖</span> Study Workspace
+          <span>📖</span> Study Workspace ↗
         </a>
-        <button class="mode-btn cornell-launch-btn" id="btnModeCornell" onclick="openCornellModal('cornell_index.html', 'Cornell Study Portal &amp; Revision Notes')" title="Open Cornell Notes Study Portal (Press C)">
-          <span>📝</span> Cornell Notes
-        </button>
-        <button class="mode-btn anki-launch-btn" id="btnModeAnki" onclick="openAnkiModal()" title="Study Spaced Repetition Decks (Press A)">
-          <span>🎴</span> Anki Decks
-        </button>
+        <a href="cornell_index.html" target="_blank" class="mode-btn anki-launch-btn" id="btnModePortal" title="Open Flashcards &amp; Revision Index" style="text-decoration:none; display:inline-flex; align-items:center; gap:6px; color:#f5c2e7;">
+          <span>🎴</span> Flashcards &amp; Notes ↗
+        </a>
       </div>
 
       <div class="glass-card" style="padding: 4px 6px;">
@@ -56,16 +50,6 @@
   <!-- Canvas Module / Week Filter Chips -->
   <div class="week-chips-bar" id="weekFilterBar">
     <div class="week-chips-scroll" id="weekChips"></div>
-    <button class="cornell-toggle-chip" id="digupToggleChip" onclick="openDigUpModal()" title="DigUp Multimodal Search (Ctrl+Shift+Space or D)" style="border-color: rgba(137,180,250,0.5); color: #89b4fa; background: rgba(137,180,250,0.08);">
-      <span class="chip-dot" style="background:#89b4fa;"></span>🔍 DigUp Search (<span id="digupSlideCount">21</span>)
-    </button>
-
-    <button class="cornell-toggle-chip" id="cornellToggleChip" onclick="toggleCornellFilter()" title="Filter to notes with Cornell Revision HTML">
-      <span class="chip-dot" style="background:#a6e3a1;"></span>📝 Cornell Notes (<span id="cornellCount">0</span>)
-    </button>
-    <button class="cornell-toggle-chip" onclick="openAnkiModal()" title="Study Anki Spaced Repetition Decks" style="border-color: rgba(203,166,247,0.4); color: #cba6f7;">
-      <span class="chip-dot" style="background:#cba6f7;"></span>🎴 Flashcards (<span id="ankiTotalCardsCount">303</span>)
-    </button>
     <a href="cornell_index.html" target="_blank" class="cornell-portal-link" title="Open Canvas Cornell Study Portal">
       📖 Study Portal &rsaquo;
     </a>
@@ -102,5 +86,3 @@
       <div class="toggle-switch"></div>
     </div>
   </div>
-
-  <!-- Details Drawer (Slide-out Inspector) -->
