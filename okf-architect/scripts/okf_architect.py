@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import hashlib
 import json
 import os
 import re
@@ -14,7 +15,15 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 OKF_VERSION = "0.2"
-RESERVED_FILENAMES = {"index.md", "log.md"}
+RESERVED_FILENAMES = {
+    "index.md", "log.md", "readme.md", "context.md", "agents.md", "state.md", "curriculum_tree.md"
+}
+ADMIN_PATTERNS = {
+    "meet_the_team", "faq", "frequently_asked_questions", "how_to_be_successful", "welcome",
+    "how_we_run", "assessment_overview", "epa_overview", "modules_overview", "weekly_program",
+    "your_path_to_becoming", "uts_library", "important_guidance", "study_resources",
+    "subject_resources", "teaching_staff", "subject_schedule", "open_labs", "study_help"
+}
 TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates"
 
 
@@ -326,41 +335,68 @@ def extract_links(body: str) -> List[str]:
     return links
 
 
-def classify_canvas_module(rel_path_str: str, meta: Dict[str, Any], course_name: str) -> Tuple[str, str, int]:
+def classify_canvas_module(rel_path_input: Any, meta: Dict[str, Any], course_name: str) -> Tuple[str, str, int]:
     """Classify a note into its canonical Canvas LMS Module or Week."""
-    if meta.get("module"):
-        m_str = str(meta["module"]).strip()
-        m_w = re.search(r'(?:week|w)[_\s-]*(\d{1,2})', m_str, re.IGNORECASE)
-        order = int(m_w.group(1)) if m_w else 50
-        slug = f"w{int(m_w.group(1)):02d}" if m_w else re.sub(r'[^a-zA-Z0-9]+', '_', m_str).lower().strip('_')
-        return f"{course_name}/mod_{slug}", m_str, order
-
     c_tag = course_name.split()[0] if course_name else "Course"
+    rel_p = Path(rel_path_input)
+    parts = rel_p.parts
+    top_folder = parts[1] if len(parts) > 1 else ""
+    low_sub = "/".join(parts[1:]).lower() if len(parts) > 1 else str(rel_p).lower()
 
-    m_week = re.search(r'(?:week|w)[_\s-]*(\d{1,2})', rel_path_str, re.IGNORECASE)
-    if m_week:
-        w_num = int(m_week.group(1))
-        return f"{course_name}/mod_w{w_num:02d}", f"[{c_tag}] Week {w_num:02d}", w_num
-
-    m_mod = re.search(r'\bmodule\s*(\d{1,2})\b', rel_path_str, re.IGNORECASE)
-    if m_mod:
-        m_num = int(m_mod.group(1))
-        return f"{course_name}/mod_m{m_num:02d}", f"[{c_tag}] Module {m_num:02d}", m_num
-
-    low = rel_path_str.lower()
-    if any(k in low for k in [
-        "meet_the_team", "faq", "how_to_be_successful", "welcome", "how_we_run",
+    if any(k in low_sub for k in [
+        "get started", "meet_the_team", "faq", "how_to_be_successful", "welcome", "how_we_run",
         "assessment_overview", "epa_overview", "modules_overview", "weekly_program",
         "your_path", "uts_library", "guidance", "study_resources", "subject_resources",
-        "get started", "teaching_staff", "subject_schedule", "open_labs", "general_knowledge"
+        "teaching_staff", "subject_schedule", "open_labs"
     ]):
         return f"{course_name}/mod_orientation", f"[{c_tag}] 🧭 Orientation & Course Admin", 950
 
-    if "assignment" in low:
+    if meta.get("module"):
+        m_str = str(meta["module"]).strip()
+        m_m = re.search(r'\bmodule[_\s-]*(\d{1,2})\b', m_str, re.IGNORECASE)
+        m_w = re.search(r'\b(?:week|w)[_\s-]*(\d{1,2})\b', m_str, re.IGNORECASE)
+        if m_m:
+            num = int(m_m.group(1))
+            return f"{course_name}/mod_m{num:02d}", f"[{c_tag}] Module {num:02d}", num
+        elif m_w:
+            num = int(m_w.group(1))
+            return f"{course_name}/mod_w{num:02d}", f"[{c_tag}] Week {num:02d}", num
+        else:
+            clean_slug = "mod_" + re.sub(r'[^a-zA-Z0-9]+', '_', m_str.lower()).strip('_')
+            return f"{course_name}/{clean_slug}", f"[{c_tag}] {m_str}", 50
+
+    if top_folder.lower() == "recordings" and len(parts) > 2:
+        rec_folder = parts[2]
+        m_rec_w = re.search(r'(?:^|[\s/_-])(?:week|w)[_\s-]*(\d{1,2})(?!\d)', rec_folder, re.IGNORECASE)
+        if m_rec_w:
+            w_num = int(m_rec_w.group(1))
+            return f"{course_name}/mod_w{w_num:02d}", f"[{c_tag}] Week {w_num:02d}", w_num
+
+    m_top_m = re.search(r'(?:^|[\s/_-])module[_\s-]*(\d{1,2})(?!\d)', top_folder, re.IGNORECASE)
+    if m_top_m:
+        m_num = int(m_top_m.group(1))
+        return f"{course_name}/mod_m{m_num:02d}", f"[{c_tag}] Module {m_num:02d}", m_num
+
+    m_top_w = re.search(r'(?:^|[\s/_-])(?:week|w)[_\s-]*(\d{1,2})(?!\d)', top_folder, re.IGNORECASE)
+    if m_top_w:
+        w_num = int(m_top_w.group(1))
+        return f"{course_name}/mod_w{w_num:02d}", f"[{c_tag}] Week {w_num:02d}", w_num
+
+    m_sub_m = re.search(r'(?:^|[\s/_-])module[_\s-]*(\d{1,2})(?!\d)', low_sub, re.IGNORECASE)
+    if m_sub_m:
+        m_num = int(m_sub_m.group(1))
+        return f"{course_name}/mod_m{m_num:02d}", f"[{c_tag}] Module {m_num:02d}", m_num
+
+    m_sub_w = re.search(r'(?:^|[\s/_-])(?:week|w)[_\s-]*(\d{1,2})(?!\d)', low_sub, re.IGNORECASE)
+    if m_sub_w:
+        w_num = int(m_sub_w.group(1))
+        return f"{course_name}/mod_w{w_num:02d}", f"[{c_tag}] Week {w_num:02d}", w_num
+
+    if "assignment" in low_sub or "project" in low_sub:
         return f"{course_name}/mod_assignments", f"[{c_tag}] Assignments & Projects", 90
-    if "quiz" in low:
+    if "quiz" in low_sub or "past_paper" in low_sub:
         return f"{course_name}/mod_quizzes", f"[{c_tag}] Quizzes & Practice", 85
-    if "slide" in low:
+    if "slide" in low_sub:
         return f"{course_name}/mod_slides", f"[{c_tag}] Lecture Slides", 80
 
     return f"{course_name}/mod_overview", f"[{c_tag}] Course Overview", 0
@@ -923,9 +959,9 @@ def build_graph_nodes(
     bundle_root: Path,
     md_files: List[Path],
     cornell_map: Dict[str, CornellInfo],
-    tree_hubs: Optional[Dict[str, Dict[str, ModuleHub]]],
-    path_assignments: Optional[Dict[Tuple[str, str], NoteAssignment]],
-    stem_assignments: Optional[Dict[str, NoteAssignment]],
+    tree_hubs: Optional[Dict[str, Dict[str, ModuleHub]]] = None,
+    path_assignments: Optional[Dict[Tuple[str, str], NoteAssignment]] = None,
+    stem_assignments: Optional[Dict[str, NoteAssignment]] = None,
 ) -> Tuple[List[Dict[str, Any]], Set[str], Dict[str, str], Dict[str, Dict[str, ModuleHub]]]:
     """Extract content nodes and module hub nodes for the graph simulation."""
     nodes: List[Dict[str, Any]] = []
@@ -933,28 +969,64 @@ def build_graph_nodes(
     file_to_id: Dict[str, str] = {}
     module_hubs: Dict[str, Dict[str, ModuleHub]] = dict(tree_hubs) if tree_hubs else {}
 
-    for md_file in md_files:
+    worked_weeks_by_course: Dict[str, Set[int]] = {}
+    for mf in md_files:
+        rel = mf.relative_to(bundle_root)
+        c = rel.parts[0] if len(rel.parts) > 1 else "General"
+        s_low = mf.stem.lower()
+        if "worked_solutions" in s_low:
+            m = re.search(r'(?:^|[\s/_-])(?:week|w)[_\s-]*(\d{1,2})(?!\d)', s_low)
+            if m:
+                worked_weeks_by_course.setdefault(c, set()).add(int(m.group(1)))
+
+    seen_body_hashes: Set[Tuple[str, str]] = set()
+
+    for md_file in sorted(md_files):
         rel_path = md_file.relative_to(bundle_root)
-        if md_file.name in RESERVED_FILENAMES or "outputs" in md_file.parts or md_file.name == "CURRICULUM_TREE.md":
+        fname_low = md_file.name.lower()
+        fstem_low = md_file.stem.lower()
+        parts = rel_path.parts
+        course = parts[0] if len(parts) > 1 else "General"
+
+        if fname_low in RESERVED_FILENAMES or "outputs" in md_file.parts:
             continue
+
+        if any(pat in fstem_low for pat in ADMIN_PATTERNS) or "get started" in str(rel_path).lower():
+            continue
+
+        if "passcode" in fstem_low:
+            continue
+
+        if ("tutorial_solutions" in fstem_low or "tutorial_solutions_ocr" in fstem_low) and "worked" not in fstem_low:
+            m_w = re.search(r'(?:^|[\s/_-])(?:week|w)[_\s-]*(\d{1,2})(?!\d)', fstem_low)
+            if m_w and int(m_w.group(1)) in worked_weeks_by_course.get(course, set()):
+                continue
+
+        meta, body = parse_frontmatter(md_file)
+
+        words = len(re.findall(r'\b\w+\b', body))
+        if words < 25:
+            continue
+
+        if "canvas.uts.edu.au/courses" in body and words < 40 and "topic_notes" in fstem_low:
+            continue
+
+        body_hash = hashlib.sha256(body.strip().encode("utf-8")).hexdigest()
+        hash_key = (course, body_hash)
+        if hash_key in seen_body_hashes:
+            continue
+        seen_body_hashes.add(hash_key)
 
         concept_id = str(rel_path.with_suffix("")).replace("\\", "/")
         file_to_id[str(rel_path).replace("\\", "/")] = concept_id
         file_to_id[md_file.name] = concept_id
 
-        meta, _ = parse_frontmatter(md_file)
         title = meta.get("title", md_file.stem.replace("_", " ").title())
         desc = meta.get("description", "")
         ctype = meta.get("type", "Concept")
         tags = meta.get("tags", [])
         if isinstance(tags, str):
             tags = [tags]
-
-        parts = rel_path.parts
-        course = parts[0] if len(parts) > 1 else "General"
-        if md_file.name == "CONTEXT.md":
-            c_tag = course.split()[0] if course else "Subject"
-            title = f"[{c_tag}] Subject Context"
 
         assigned: Optional[NoteAssignment] = None
         if path_assignments and stem_assignments:
@@ -979,11 +1051,9 @@ def build_graph_nodes(
             if assigned.custom_title:
                 title = assigned.custom_title
         elif path_assignments is not None and len(path_assignments) > 0:
-            # When CURRICULUM_TREE.md is present, it is the strict canonical source of truth.
-            # Loose unassigned scratch files or superseded duplicate notes are excluded.
             continue
         else:
-            mod_id, mod_label, mod_order = classify_canvas_module(str(rel_path).replace("\\", "/"), meta, course)
+            mod_id, mod_label, mod_order = classify_canvas_module(rel_path, meta, course)
 
         module_hubs.setdefault(course, {})
         if mod_id not in module_hubs[course]:
@@ -1478,11 +1548,6 @@ def generate_viz(bundle_root: Path, output_file: Optional[Path] = None, tree_fil
     cornell_map = collect_cornell_map(bundle_root)
 
     active_tree = tree_file
-    if not active_tree:
-        default_tree = bundle_root / "CURRICULUM_TREE.md"
-        if default_tree.is_file():
-            active_tree = default_tree
-
     tree_hubs = None
     path_assignments = None
     stem_assignments = None
@@ -1525,12 +1590,8 @@ def generate_viz(bundle_root: Path, output_file: Optional[Path] = None, tree_fil
 
 
 def compile_tree(bundle_root: Path, tree_file: Optional[Path] = None, init: bool = False, output_file: Optional[Path] = None) -> bool:
-    """Compile CURRICULUM_TREE.md outline into interactive knowledge cosmos and study portal."""
-    target_tree = tree_file if tree_file else (bundle_root / "CURRICULUM_TREE.md")
-    if init or not target_tree.is_file():
-        generate_curriculum_tree_template(bundle_root, target_tree)
-
-    return generate_viz(bundle_root, output_file=output_file, tree_file=target_tree)
+    """Compile university notes into interactive knowledge cosmos and study portal using dynamic discovery."""
+    return generate_viz(bundle_root, output_file=output_file, tree_file=tree_file)
 
 
 def clean_concept_filename(old_name: str, parent_dir_name: str = "") -> str:
