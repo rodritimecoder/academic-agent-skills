@@ -1921,6 +1921,10 @@
       document.querySelectorAll("#materialFilterBar .mat-chip").forEach(c => c.classList.remove("active"));
       if (btnEl) btnEl.classList.add("active");
       renderSidebarTree(currentCourse);
+      const searchInput = document.getElementById("sidebarSearchInput");
+      if (searchInput && searchInput.value) {
+        onSearchFilter(searchInput.value);
+      }
     }
 
     // Local Storage Progress Store
@@ -1931,6 +1935,10 @@
       return cue.replace(/\[▶\s*[^\]]+\]\([^)]+\)/g, "")
                 .replace(/\[(?:Timestamp:?\s*)?[0-9]{1,2}:\d{2}(?::\d{2})?\]\([^)]*\)/g, "")
                 .replace(/\[(?:Timestamp:?\s*)?[0-9]{1,2}:\d{2}(?::\d{2})?\]/g, "")
+                .replace(/\(?https?:\/\/[^\s\)]+\)?/g, "")
+                .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+                .replace(/\$H\(/g, "$H(s)$")
+                .replace(/\$Z\(/g, "$Z(s)$")
                 .replace(/\s{2,}/g, " ")
                 .trim();
     }
@@ -2987,6 +2995,23 @@
         groupEl.querySelectorAll(".lecture-item").forEach(itemEl => {
           const noteId = itemEl.id.replace("sidebar_item_", "");
           const note = (typeof STUDY_DATA !== "undefined" && STUDY_DATA.notes) ? STUDY_DATA.notes[noteId] : null;
+
+          if (!note) return;
+
+          // Enforce active material filter
+          let matchesFilter = true;
+          if (activeMaterialFilter === "cornell" || activeMaterialFilter === "study") {
+            matchesFilter = (note.cues && note.cues.length > 0) || (note.sections && note.sections.length > 0);
+          } else if (activeMaterialFilter === "video") {
+            matchesFilter = !!(note.video_src || note.zoom_url);
+          } else if (activeMaterialFilter === "transcript") {
+            matchesFilter = (note.asset_type === "transcript" || (note.title && note.title.toLowerCase().includes("transcript")) || (note.id && note.id.toLowerCase().includes("transcript")));
+          }
+
+          if (!matchesFilter) {
+            itemEl.style.display = "none";
+            return;
+          }
 
           if (!q) {
             itemEl.style.display = "flex";

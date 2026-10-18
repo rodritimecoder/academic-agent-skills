@@ -633,6 +633,10 @@ def sanitize_cornell_card(cue: str, notes: str) -> Tuple[str, str]:
     cue = re.sub(r'\[▶\s*[^\]]+\]\([^)]+\)', '', cue)
     cue = re.sub(r'\[(?:Timestamp:?\s*)?[0-9]{1,2}:\d{2}(?::\d{2})?\]\([^)]*\)', '', cue)
     cue = re.sub(r'\[(?:Timestamp:?\s*)?[0-9]{1,2}:\d{2}(?::\d{2})?\]', '', cue)
+    cue = re.sub(r'\(?https?://[^\s\)]+\)?', '', cue)
+    cue = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', cue)
+    cue = re.sub(r'\$H\(', '$H(s)$', cue)
+    cue = re.sub(r'\$Z\(', '$Z(s)$', cue)
     cue = re.sub(r'\s{2,}', ' ', cue).strip()
     # Clean generic repetitive cues like 'What is the key principle or formula in Second Order Circuits?'
     m_cue = re.match(r'^What is the key principle or formula in (.+)\??$', cue.strip(), re.IGNORECASE)
@@ -811,6 +815,7 @@ def parse_curriculum_tree(
         if sline.startswith("# ") and not current_course:
             continue
 
+        if sline.startswith("## "):
             current_course = sline.replace("## ", "").strip()
             c_tag = current_course.split()[0] if current_course else "Course"
             current_module_label = f"[{c_tag}] Course Overview"
@@ -973,6 +978,10 @@ def build_graph_nodes(
             course = assigned.course
             if assigned.custom_title:
                 title = assigned.custom_title
+        elif path_assignments is not None and len(path_assignments) > 0:
+            # When CURRICULUM_TREE.md is present, it is the strict canonical source of truth.
+            # Loose unassigned scratch files or superseded duplicate notes are excluded.
+            continue
         else:
             mod_id, mod_label, mod_order = classify_canvas_module(str(rel_path).replace("\\", "/"), meta, course)
 
@@ -1317,16 +1326,29 @@ def generate_study_workspace(bundle_root: Path, nodes: List[Dict[str, Any]], cor
         w_match_mod = re.search(r'(?:week|w)[_\s-]*(\d{1,2})', mod_label, re.IGNORECASE)
         target_week = int(w_match_mod.group(1)) if w_match_mod else None
 
-        for mp4 in all_mp4s:
-            if course_code in str(mp4):
-                if target_week is not None:
+        # Check if note is genuinely video-linked (transcript, recording, worked solutions, or video cues)
+        is_video_doc = (
+            "recording" in clean_stem
+            or "transcript" in clean_stem
+            or "worked_solutions" in clean_stem
+            or "video" in file_path_str.lower()
+            or (c_info and any(getattr(c, "video", None) for c in getattr(c_info, "cards", [])))
+        )
+
+        if is_video_doc and target_week is not None:
+            is_tutorial = "tutorial" in clean_stem or "tutorial" in file_path_str.lower()
+            for mp4 in all_mp4s:
+                if course_code in str(mp4):
                     w_match_mp4 = re.search(r'(?:week|w)[_\s-]*(\d{1,2})', str(mp4), re.IGNORECASE)
                     if w_match_mp4 and int(w_match_mp4.group(1)) == target_week:
-                        matched_mp4 = str(mp4.relative_to(bundle_root)).replace("\\", "/")
-                        break
-                else:
-                    matched_mp4 = str(mp4.relative_to(bundle_root)).replace("\\", "/")
-                    break
+                        if is_tutorial and "tutorial" in mp4.name.lower():
+                            matched_mp4 = str(mp4.relative_to(bundle_root)).replace("\\", "/")
+                            break
+                        elif not is_tutorial and "topic" in mp4.name.lower():
+                            matched_mp4 = str(mp4.relative_to(bundle_root)).replace("\\", "/")
+                            break
+                        elif not matched_mp4:
+                            matched_mp4 = str(mp4.relative_to(bundle_root)).replace("\\", "/")
 
         # Find Zoom info
         zoom_url = ""
