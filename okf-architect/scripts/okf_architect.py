@@ -335,25 +335,27 @@ def classify_canvas_module(rel_path_str: str, meta: Dict[str, Any], course_name:
         slug = f"w{int(m_w.group(1)):02d}" if m_w else re.sub(r'[^a-zA-Z0-9]+', '_', m_str).lower().strip('_')
         return f"{course_name}/mod_{slug}", m_str, order
 
+    c_tag = course_name.split()[0] if course_name else "Course"
+
     m_week = re.search(r'(?:week|w)[_\s-]*(\d{1,2})', rel_path_str, re.IGNORECASE)
     if m_week:
         w_num = int(m_week.group(1))
-        return f"{course_name}/mod_w{w_num:02d}", f"Week {w_num:02d}", w_num
+        return f"{course_name}/mod_w{w_num:02d}", f"[{c_tag}] Week {w_num:02d}", w_num
 
     m_mod = re.search(r'\bmodule\s*(\d{1,2})\b', rel_path_str, re.IGNORECASE)
     if m_mod:
         m_num = int(m_mod.group(1))
-        return f"{course_name}/mod_m{m_num:02d}", f"Module {m_num:02d}", m_num
+        return f"{course_name}/mod_m{m_num:02d}", f"[{c_tag}] Module {m_num:02d}", m_num
 
     low = rel_path_str.lower()
     if "assignment" in low:
-        return f"{course_name}/mod_assignments", "Assignments & Projects", 90
+        return f"{course_name}/mod_assignments", f"[{c_tag}] Assignments & Projects", 90
     if "quiz" in low:
-        return f"{course_name}/mod_quizzes", "Quizzes & Practice", 85
+        return f"{course_name}/mod_quizzes", f"[{c_tag}] Quizzes & Practice", 85
     if "slide" in low:
-        return f"{course_name}/mod_slides", "Lecture Slides", 80
+        return f"{course_name}/mod_slides", f"[{c_tag}] Lecture Slides", 80
 
-    return f"{course_name}/mod_overview", "Course Overview", 0
+    return f"{course_name}/mod_overview", f"[{c_tag}] Course Overview", 0
 
 
 def clean_display_title(s: str) -> str:
@@ -773,9 +775,9 @@ def parse_curriculum_tree(
         if sline.startswith("# ") and not current_course:
             continue
 
-        if sline.startswith("## "):
             current_course = sline.replace("## ", "").strip()
-            current_module_label = "Course Overview"
+            c_tag = current_course.split()[0] if current_course else "Course"
+            current_module_label = f"[{c_tag}] Course Overview"
             current_module_order = 0
             current_module_id = f"{current_course}/mod_overview"
             seq_counter = 1
@@ -801,21 +803,35 @@ def parse_curriculum_tree(
             mod_text = sline.strip("- *")
 
         if is_module_header:
+            c_tag = current_course.split()[0] if current_course else ""
             current_module_label = mod_text
             m_num = re.search(r'\b(?:week|module|w|m)[_\s-]*(\d{1,2})\b', mod_text, re.IGNORECASE)
             if m_num:
                 current_module_order = int(m_num.group(1))
+                if re.search(r'\b(?:week|w)\b', mod_text, re.IGNORECASE) or mod_text.lower().startswith(("week", "w")):
+                    clean_slug = f"mod_w{current_module_order:02d}"
+                    current_module_label = f"[{c_tag}] Week {current_module_order:02d}"
+                else:
+                    clean_slug = f"mod_m{current_module_order:02d}"
+                    current_module_label = f"[{c_tag}] Module {current_module_order:02d}"
             elif "overview" in mod_text.lower() or "intro" in mod_text.lower():
                 current_module_order = 0
+                clean_slug = "mod_overview"
+                current_module_label = f"[{c_tag}] Course Overview"
             elif "quiz" in mod_text.lower() or "exam" in mod_text.lower():
                 current_module_order = 85
+                clean_slug = "mod_quizzes"
+                current_module_label = f"[{c_tag}] Quizzes & Practice"
             elif "assignment" in mod_text.lower() or "project" in mod_text.lower():
                 current_module_order = 90
+                clean_slug = "mod_assignments"
+                current_module_label = f"[{c_tag}] Assignments & Projects"
             else:
                 current_module_order = seq_counter
                 seq_counter += 1
+                clean_slug = "mod_" + re.sub(r'[^a-zA-Z0-9]+', '_', mod_text.lower()).strip('_')
+                current_module_label = f"[{c_tag}] {mod_text}" if c_tag and not mod_text.startswith("[") else mod_text
 
-            clean_slug = re.sub(r'[^a-zA-Z0-9]+', '_', mod_text.lower()).strip('_')
             current_module_id = f"{current_course}/{clean_slug}"
 
             course_modules.setdefault(current_course, {})
@@ -895,6 +911,9 @@ def build_graph_nodes(
 
         parts = rel_path.parts
         course = parts[0] if len(parts) > 1 else "General"
+        if md_file.name == "CONTEXT.md":
+            c_tag = course.split()[0] if course else "Subject"
+            title = f"[{c_tag}] Subject Context"
 
         assigned: Optional[NoteAssignment] = None
         if path_assignments and stem_assignments:
