@@ -729,6 +729,12 @@
       // Obsidian-style Drag Behavior (Glides connected nodes with spring tension)
       const drag = d3.drag()
         .container(canvas)
+        .filter(event => {
+          if (event.ctrlKey || (event.type === "mousedown" && event.button !== 0)) return false;
+          const [cx, cy] = d3.pointer(event, canvas);
+          const rect = canvas.getBoundingClientRect();
+          return !!findNodeAt(rect.left + cx, rect.top + cy);
+        })
         .subject(event => {
           const [cx, cy] = d3.pointer(event, canvas);
           const rect = canvas.getBoundingClientRect();
@@ -758,11 +764,11 @@
           draggedNode = null;
         });
 
-      // Pan & Zoom
+      // Pan & Zoom (Obsidian Infinite Canvas Panning)
       const zoom = d3.zoom()
         .scaleExtent([0.15, 6.0])
-        .translateExtent([[-width * 1.5, -height * 1.5], [width * 2.5, height * 2.5]])
         .filter(event => {
+          if (event.ctrlKey || (event.type === "mousedown" && event.button !== 0)) return false;
           if (event.type === "mousedown" || event.type === "touchstart") {
             const [cx, cy] = d3.pointer(event, canvas);
             const rect = canvas.getBoundingClientRect();
