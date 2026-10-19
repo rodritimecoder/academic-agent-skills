@@ -32,3 +32,7 @@ Thumbs.db
 *.swo
 *~
 .Trash-*
+
+# Runtime log artifacts (graph-memory digest hooks)
+**/digest/log/
+**/log/
