@@ -6,10 +6,9 @@ description: >
   and hybrid BM25 + EmbeddingGemma-2 (768d multimodal) RRF search with exact-quote distillation.
 metadata:
   creator: kem_glitch
-  source_reel:
-    id: DcTIPKyt7Am
-    url: https://www.instagram.com/reel/DcTIPKyt7Am/
-    vault_note: kem_glitch/2026-10-17_graph_memory_rant_and_fallacies/notes.md
+  source_reel_id: DcTIPKyt7Am
+  source_reel_url: https://www.instagram.com/reel/DcTIPKyt7Am/
+  source_reel_vault_note: kem_glitch/2026-10-17_graph_memory_rant_and_fallacies/notes.md
 compatibility: "Linux, Python 3 stdlib (urllib, sqlite3, struct, json, uuid). Zero external pip dependencies. Local endpoints: :8082 (EmbeddingGemma-2 768d multimodal embeddings via unsloth cpp), :8080 (Genesis 35B coder / distillation)."
 ---
 
