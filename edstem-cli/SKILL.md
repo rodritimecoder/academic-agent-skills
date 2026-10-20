@@ -53,7 +53,8 @@ Always use these. They are what keeps the response small enough to act on.
 ## 🛠️ CLI Quickstart
 
 ```bash
-CLI=/run/media/rodri/AI/skills/edstem-cli/scripts/ed_cli.py
+# Run from this skill's directory; the paths are relative to it.
+CLI=scripts/ed_cli.py
 
 # 1. Discovery
 python3 $CLI me

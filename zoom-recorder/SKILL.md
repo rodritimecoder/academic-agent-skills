@@ -4,7 +4,9 @@ name: zoom-recorder
 description: >
   Download transcripts, slide keyframes, and metadata from Zoom cloud
   recordings without API admin credentials. Handles passcode-protected
-  links, and unwraps Mimecast and SafeLinks wrappers.
+  links, and unwraps Mimecast and SafeLinks wrappers. Use when asked to pull a
+  lecture recording or transcript, extract slides from a class recording, or
+  read what was said in a Zoom session.
 
 license: "Proprietary. Complete terms are in the LICENSE file at the repository root."
 compatibility: "Requires network access to Zoom cloud recordings, and ffmpeg for keyframe extraction."
@@ -37,7 +39,8 @@ slides come back as keyframe images, ready for the `ocr` skill to read.
 ## 🛠️ CLI Quickstart
 
 ```bash
-ZR="/run/media/rodri/AI/skills/zoom-recorder/scripts"
+# Run these from this skill's directory; the paths are relative to it.
+ZR="scripts"
 
 # 1. Download a Markdown transcript
 python3 $ZR/zoom_download.py --url "<recording-url>" --passcode "<pwd>" --out-dir ./transcripts --format md
@@ -53,7 +56,7 @@ python3 $ZR/zoom_download.py --url "<recording-url>" --passcode "<pwd>" --info-o
 python3 $ZR/zoom_download.py --url "<recording-url>" --passcode "<pwd>" --outline --table --limit 15
 
 # 6. Pull every recording out of a Canvas course, with passcodes
-python3 /run/media/rodri/AI/skills/zoom-recorder/examples/canvas_zoom_pipeline.py --course-id <id> --out-dir <dir> --format md
+python3 examples/canvas_zoom_pipeline.py --course-id <id> --out-dir <dir> --format md
 ```
 
 ---

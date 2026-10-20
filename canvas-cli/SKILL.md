@@ -55,7 +55,8 @@ Always use these. They are what keeps the response small enough to act on.
 ## 🛠️ CLI Quickstart
 
 ```bash
-CLI=/run/media/rodri/AI/skills/canvas-cli/scripts/canvas_cli.py
+# Run from this skill's directory; the paths are relative to it.
+CLI=scripts/canvas_cli.py
 
 # 1. What needs doing, across every enrolled course
 python3 $CLI todo --table
@@ -87,7 +88,7 @@ python3 $CLI announcements 12345
 python3 $CLI calendar --context course_12345 --start-date 2026-03-01 --end-date 2026-03-31
 
 # 7. Handwritten and scanned PDFs
-OCR_CLI=/run/media/rodri/AI/skills/canvas-cli/scripts/pdf_ocr.py
+OCR_CLI=scripts/pdf_ocr.py
 python3 $OCR_CLI "path/to/Tutorial Solutions.pdf" -o "markdown/Tutorial_Solutions.md"
 ```
 

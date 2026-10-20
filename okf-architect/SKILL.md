@@ -43,23 +43,24 @@ Specification reference: [Google Cloud Platform Knowledge Catalog OKF v0.2](http
 
 ## 🚀 CLI Automation & Usage
 
-The skill provides an automated zero-dependency CLI at `scripts/okf_architect.py`:
+The skill provides an automated zero-dependency CLI at `scripts/okf_architect.py`.
+Run these from this skill's directory; the paths inside are relative to it.
 
 ```bash
 # 1. Validate an existing OKF bundle directory against spec v0.2
-python3 /run/media/rodri/AI/skills/okf-architect/scripts/okf_architect.py validate [bundle_path]
+python3 scripts/okf_architect.py validate [bundle_path]
 
 # 2. Scaffold a brand new, spec-compliant OKF bundle
-python3 /run/media/rodri/AI/skills/okf-architect/scripts/okf_architect.py scaffold [target_path] --title "My Domain Knowledge" --domain "Engineering"
+python3 scripts/okf_architect.py scaffold [target_path] --title "My Domain Knowledge" --domain "Engineering"
 
 # 3. Refresh or rebuild all index.md listings for progressive disclosure
-python3 /run/media/rodri/AI/skills/okf-architect/scripts/okf_architect.py index [bundle_path]
+python3 scripts/okf_architect.py index [bundle_path]
 
 # 4. Generate standalone interactive knowledge graph (viz.html)
-python3 /run/media/rodri/AI/skills/okf-architect/scripts/okf_architect.py viz [bundle_path]
+python3 scripts/okf_architect.py viz [bundle_path]
 
 # 5. Compile CURRICULUM_TREE.md into Canvas Constellations & Cornell Study Portal
-python3 /run/media/rodri/AI/skills/okf-architect/scripts/okf_architect.py compile-tree [bundle_path] [--init]
+python3 scripts/okf_architect.py compile-tree [bundle_path] [--init]
 ```
 
 ---

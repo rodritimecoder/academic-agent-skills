@@ -60,7 +60,8 @@ intermediate JSON, and a deterministic local script renders the HTML.
 ## 🛠️ CLI Quickstart
 
 ```bash
-CN="/run/media/rodri/AI/skills/cornell-notes"
+# Run from this skill's directory; the paths are relative to it.
+CN="scripts"
 
 # 1. Render the HTML, with a compact Markdown receipt
 python3 $CN/format_notes.py <input.json> --table

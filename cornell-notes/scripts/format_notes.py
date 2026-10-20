@@ -823,8 +823,13 @@ def main():
         return
 
     # 3. HTML Rendering
+    # The template is an asset, one level up from scripts/; the script-local
+    # location is still honoured so an older layout keeps rendering.
     script_dir = Path(__file__).resolve().parent
-    template_path = Path(args.template) if args.template else (script_dir / "template.html")
+    local_template = script_dir / "template.html"
+    asset_template = script_dir.parent / "assets" / "template.html"
+    default_template = local_template if local_template.exists() else asset_template
+    template_path = Path(args.template) if args.template else default_template
     if not template_path.exists():
         print(f"Error: Template not found at '{template_path}'.", file=sys.stderr)
         sys.exit(1)
