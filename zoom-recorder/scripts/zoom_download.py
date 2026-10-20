@@ -19,8 +19,10 @@ import re
 import subprocess
 import sys
 import urllib.parse
+from pathlib import Path
 from typing import Dict, Any, Optional, Tuple, List
 import requests
+
 
 DEFAULT_USER_AGENT = (
     "Mozilla/5.0 (X-11; Linux x86_64) AppleWebKit/537.36 "
@@ -514,58 +516,6 @@ class ZoomRecorderClient:
             proc.wait()
         print("[+] Keyframe extraction complete.")
 
-    def run_ocr_on_frame(self, image_path: str, model_type: str = "lighton") -> str:
-        """Run local OCR vision model on an extracted video frame."""
-        llama_cli = "/run/media/rodri/AI/llama.cpp/build/bin/llama-mtmd-cli"
-        models_map = {
-            "lighton": (
-                "/run/media/rodri/AI/models/prithivMLmods/LightOnOCR-3-1B-GGUF/LightOnOCR-3-1B.Q4_K_M.gguf",
-                "/run/media/rodri/AI/models/prithivMLmods/LightOnOCR-3-1B-GGUF/LightOnOCR-3-1B.mmproj-q8_0.gguf",
-                "Extract all text, math formulas, and code in Markdown format:"
-            ),
-            "navidc": (
-                "/run/media/rodri/AI/models/konradjr007/NaviDC-OCR-GGUF/NaviDC-OCR-Q5_K_M.gguf",
-                "/run/media/rodri/AI/models/konradjr007/NaviDC-OCR-GGUF/mmproj-NaviDC-OCR-F16.gguf",
-                "Extract all text from this image."
-            ),
-            "xiaomi": (
-                "/run/media/rodri/AI/models/prithivMLmods/Xiaomi-OCR-0-GGUF/Xiaomi-OCR-0.Q4_K_M.gguf",
-                "/run/media/rodri/AI/models/prithivMLmods/Xiaomi-OCR-0-GGUF/Xiaomi-OCR-0.mmproj-bf16.gguf",
-                "Extract all text and formulas:"
-            ),
-            "deskforge": (
-                "/run/media/rodri/AI/models/docling-project/DeskForge-Qwen3.5-4B/DeskForge-Qwen3.5-4B.Q4_K_M.gguf",
-                "/run/media/rodri/AI/models/docling-project/DeskForge-Qwen3.5-4B/DeskForge-Qwen3.5-4B.mmproj-bf16.gguf",
-                "Extract the content in markdown:"
-            ),
-            "ovis": (
-                "/run/media/rodri/AI/models/Abiray/OvisOCR2-GGUF/OvisOCR2-Q5_K_M.gguf",
-                "/run/media/rodri/AI/models/Abiray/OvisOCR2-GGUF/mmproj-BF16.gguf",
-                "Extract all text:"
-            ),
-        }
-        if model_type not in models_map:
-            raise ValueError(f"Unknown model_type '{model_type}'. Choose from: {list(models_map.keys())}")
-
-        m_path, mmproj_path, prompt = models_map[model_type]
-        cmd = [
-            llama_cli,
-            "-m", m_path,
-            "--mmproj", mmproj_path,
-            "--image", image_path,
-            "-p", prompt,
-            "-ngl", "99",
-            "-n", "512"
-        ]
-        res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        out_lines = []
-        for line in res.stdout.splitlines():
-            if any(term in line for term in ["WARNING:", "WARN:", "mtmd", "init:", "main:", "find_slot:"]):
-                continue
-            out_lines.append(line)
-        return "\n".join(out_lines).strip()
-
-
 def main():
     parser = argparse.ArgumentParser(description="Download Zoom recording transcripts and keyframes without full video downloads.")
     parser.add_argument("--url", required=True, help="Zoom recording URL (utsmeet.zoom.us/rec/share/... or /rec/play/...)")
@@ -575,8 +525,6 @@ def main():
     parser.add_argument("--video", action="store_true", help="Download the full MP4 video file")
     parser.add_argument("--keyframes", action="store_true", help="Extract presentation slide keyframes using ffmpeg")
     parser.add_argument("--scene-threshold", type=float, default=0.35, help="Scene change sensitivity for keyframes (0.0 - 1.0)")
-    parser.add_argument("--ocr", action="store_true", help="Run local vision OCR on extracted keyframes")
-    parser.add_argument("--ocr-model", choices=["lighton", "navidc", "xiaomi", "deskforge", "ovis", "all"], default="lighton", help="Vision model for OCR")
     parser.add_argument("--json", action="store_true", help="Output JSON format")
     parser.add_argument("--table", "-t", action="store_true", help="Output Markdown table format")
     parser.add_argument("--project", default="", help="Comma-separated fields to project in output")
@@ -716,32 +664,13 @@ def main():
             print("[-] Cannot download video: MP4 stream URL not available.", file=sys.stderr)
 
     # Keyframes extraction
-    if args.keyframes or args.ocr:
+    # OCR deliberately lives in the `ocr` skill, not here: point it at the
+    # extracted PNGs (`ocr <png>`) instead of rebuilding a vision stack in a
+    # downloader.
+    if args.keyframes:
         if info.get("video_url"):
             slides_dir = os.path.join(args.out_dir, f"{slug}_slides")
             client.extract_keyframes(info["video_url"], slides_dir, scene_threshold=args.scene_threshold)
-
-            if args.ocr:
-                import glob
-                frames = sorted(glob.glob(os.path.join(slides_dir, "*.png")))
-                if not (args.json or args.table):
-                    print(f"[*] Running OCR on {len(frames)} extracted slide frames...")
-                models_to_test = ["lighton", "navidc", "xiaomi", "deskforge", "ovis"] if args.ocr_model == "all" else [args.ocr_model]
-
-                ocr_out_file = os.path.join(args.out_dir, f"{slug}_slides_ocr.md")
-                with open(ocr_out_file, "w", encoding="utf-8") as out_f:
-                    out_f.write(f"# Slide OCR: {info['topic']}\n\n")
-                    for frame_path in frames:
-                        f_name = os.path.basename(frame_path)
-                        out_f.write(f"## Slide: {f_name}\n\n")
-                        for m_type in models_to_test:
-                            if not (args.json or args.table):
-                                print(f"    - Processing {f_name} with {m_type}...")
-                            ocr_text = client.run_ocr_on_frame(frame_path, model_type=m_type)
-                            out_f.write(f"### Model: {m_type}\n\n{ocr_text}\n\n")
-                saved_files.append({"format": "ocr_md", "path": ocr_out_file, "words": 0})
-                if not (args.json or args.table):
-                    print(f"[+] Saved visual OCR results: {ocr_out_file}")
         else:
             print("[-] Cannot extract keyframes: video URL not found.", file=sys.stderr)
 

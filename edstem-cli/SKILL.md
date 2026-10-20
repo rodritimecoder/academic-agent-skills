@@ -1,10 +1,17 @@
 ---
 name: edstem-cli
+
 description: >
   Read and post on Ed Discussion and Ed Courses: list courses, browse and
   search forum threads, read a thread and its comments, post a question or
   reply, open cloud IDE workspaces, and list lessons. Use for class forums,
   threads, course announcements, and assignments.
+
+license: "Proprietary. Complete terms are in the LICENSE file at the repository root."
+compatibility: "Requires network access to an Ed Discussion instance, an API token (ED_API_TOKEN) and a base URL (ED_BASE_URL)."
+metadata:
+  author: "rodri"
+allowed-tools: "Bash(edstem-cli:*) Bash(python3:*) Read Write"
 ---
 
 # EdStem (`edstem-cli`)

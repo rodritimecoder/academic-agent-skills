@@ -15,14 +15,14 @@
 | `--limit, -n <N>` | Cap the number of outline rows returned | `0` (unlimited) |
 | `--json` | Print extracted recording metadata or outline to stdout as JSON | Disabled |
 
-## Local OCR models
+## Reading the slides
 
-`--ocr-model` selects a local GGUF vision model, and `all` benchmarks every
-one of them on the same extracted slides.
+`--keyframes` writes the detected slide changes to `<slug>_slides/*.png`. OCR is
+not part of this skill; hand the frames to the `ocr` skill, which owns the
+models and the servers:
 
-| Model | Strength |
-|---|---|
-| `lighton` | LightOnOCR-3-1B — blazing fast (<1s), clean Markdown layout, accurate LaTeX equations |
-| `xiaomi` | Xiaomi-OCR-0 — reasoning OCR, LaTeX formulas, clean formatting |
-| `deskforge` | DeskForge-Qwen3.5-4B — document and Markdown hierarchy preservation, units formatted (`\mu\text{F}`) |
-| `ovis` | OvisOCR2-5B — high-detail UI and on-screen text extraction |
+```bash
+python3 $ZR/zoom_download.py --url "<url>" --passcode "<pwd>" --keyframes -o ./rec
+for f in ./rec/*_slides/*.png; do ocr "$f" -o "${f%.png}.md"; done
+```
+

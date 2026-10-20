@@ -1,9 +1,16 @@
 ---
 name: academic-icm
+
 description: >
   Unified Academic ICM (Interpretable Context Methodology) Suite & Orchestrator. Unifies Canvas LMS
   ingestion (canvas-cli), Zoom cloud lecture & slide extraction (zoom-recorder), active-recall Cornell
   notes (cornell-notes), and OKF curriculum architecture into a single late-binding academic hub.
+
+license: "Proprietary. Complete terms are in the LICENSE file at the repository root."
+compatibility: "Requires the canvas-cli, zoom-recorder and cornell-notes skills, and network access for the material it ingests."
+metadata:
+  author: "rodri"
+allowed-tools: "Bash(academic-icm:*) Bash(canvas-cli:*) Bash(python3:*) Read"
 ---
 
 # Academic ICM (`academic-icm`)
@@ -82,7 +89,7 @@ academic-icm modules
      2. Gate 2: Markdown & KaTeX Syntax `[D]` (balance of delimiters, zero `.vtt` video links).
      3. Gate 3: Cornell JSON & Anti-VTT Invariant `[D]` (strict exclusion of subtitle files as video).
      4. Gate 4: Web Cosmos & Study Portal Compilation `[D]` (HTML & Anki sync, zero `.vtt` in DOM).
-     5. Gate 5: Unbiased 0-Context Acceptance Judge `[P]` (local OneJev1.5-4B decision engine evaluation).
+     5. Gate 5: Unbiased 0-Context Acceptance Judge `[P]` (local vllm-d3-mini decision engine evaluation).
 
 ---
 
@@ -103,7 +110,7 @@ academic-icm verify --fix
 academic-icm verify 5 --stage 3
 ```
 
-### 2. Run Smart Cognitive & Visual Audit (AGY 3.8 Flash + OneJev Vision)
+### 2. Run Smart Cognitive & Visual Audit (AGY 3.8 Flash + vllm-d3-mini Vision)
 ```bash
 # Deep cognitive audit on a specific note
 academic-icm smart-check Week06_Phasors_cornell.json

@@ -19,9 +19,31 @@ import sys
 import tempfile
 from pathlib import Path
 
-DEFAULT_MODEL = "/run/media/rodri/AI/models/prithivMLmods/LightOnOCR-3-1B-GGUF/LightOnOCR-3-1B.Q4_K_M.gguf"
-DEFAULT_MMPROJ = "/run/media/rodri/AI/models/prithivMLmods/LightOnOCR-3-1B-GGUF/LightOnOCR-3-1B.mmproj-q8_0.gguf"
-DEFAULT_LLAMA_CLI = "/run/media/rodri/AI/llama.cpp/build/bin/llama-mtmd-cli"
+def _drive_root() -> Path:
+    """The AI volume root: $AI_ROOT, else the nearest ancestor holding models/.
+
+    The weights and the mtmd binary live under it, so resolving from here keeps
+    the skill working wherever the volume is mounted.
+    """
+    env = os.environ.get("AI_ROOT")
+    if env:
+        return Path(env).expanduser()
+    for parent in Path(__file__).resolve().parents:
+        if (parent / "models").is_dir():
+            return parent
+    return Path("/run/media/rodri/AI")
+
+
+DRIVE = _drive_root()
+DEFAULT_MODEL = os.environ.get(
+    "LIGHTON_MODEL",
+    str(DRIVE / "models/prithivMLmods/LightOnOCR-3-1B-GGUF/LightOnOCR-3-1B.Q4_K_M.gguf"),
+)
+DEFAULT_MMPROJ = os.environ.get(
+    "LIGHTON_MMPROJ",
+    str(DRIVE / "models/prithivMLmods/LightOnOCR-3-1B-GGUF/LightOnOCR-3-1B.mmproj-q8_0.gguf"),
+)
+DEFAULT_LLAMA_CLI = os.environ.get("LLAMA_MTMD_CLI", str(DRIVE / "llama.cpp/build/bin/llama-mtmd-cli"))
 
 def detect_page_mode(page, min_chars: int = 50) -> tuple[str, str]:
     """
