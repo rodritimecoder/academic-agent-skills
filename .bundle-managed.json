@@ -1,0 +1,12 @@
+{
+  "managed": [
+    "academic-icm",
+    "canvas-cli",
+    "cornell-notes",
+    "edstem-cli",
+    "icm-architect",
+    "markitdown-cli",
+    "okf-architect",
+    "zoom-recorder"
+  ]
+}
