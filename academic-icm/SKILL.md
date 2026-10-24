@@ -6,10 +6,7 @@ description: >
   ingestion (canvas-cli), Zoom cloud lecture & slide extraction (zoom-recorder), active-recall Cornell
   notes (cornell-notes), and OKF curriculum architecture into a single late-binding academic hub.
 
-license: "Proprietary. Complete terms are in the LICENSE file at the repository root."
 compatibility: "Requires the canvas-cli, zoom-recorder and cornell-notes skills, and network access for the material it ingests."
-metadata:
-  author: "rodri"
 allowed-tools: "Bash(academic-icm:*) Bash(canvas-cli:*) Bash(python3:*) Read"
 ---
 

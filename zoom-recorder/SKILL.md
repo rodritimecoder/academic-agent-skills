@@ -8,10 +8,7 @@ description: >
   lecture recording or transcript, extract slides from a class recording, or
   read what was said in a Zoom session.
 
-license: "Proprietary. Complete terms are in the LICENSE file at the repository root."
 compatibility: "Requires network access to Zoom cloud recordings, and ffmpeg for keyframe extraction."
-metadata:
-  author: "rodri"
 allowed-tools: "Bash(zoom-recorder:*) Bash(ffmpeg:*) Bash(python3:*) Read Write"
 ---
 

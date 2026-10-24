@@ -3,10 +3,7 @@ name: okf-architect
 
 description: Autonomous Open Knowledge Format (OKF v0.2) architect and validator. Design, scaffold, validate, and maintain agent-friendly knowledge bundles adhering to Google's Open Knowledge Format specification. Use whenever asked to create an OKF bundle, validate OKF compliance, scaffold concepts with provenance, trust tiers, and lifecycle signals, generate progressive-disclosure index.md and log.md files, or structure knowledge for AI agents and cross-organizational exchange.
 
-license: "Proprietary. Complete terms are in the LICENSE file at the repository root."
 compatibility: "Requires Python 3.10+. No network access needed."
-metadata:
-  author: "rodri"
 allowed-tools: "Bash(okf-architect:*) Bash(python3:*) Read Write"
 ---
 
