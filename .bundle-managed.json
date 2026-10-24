@@ -1,6 +1,7 @@
 {
   "managed": [
     "academic-icm",
+    "academic-pipeline-v2",
     "canvas-cli",
     "cornell-notes",
     "edstem-cli",

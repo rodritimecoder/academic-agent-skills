@@ -15,6 +15,9 @@ allowed-tools: "Bash(academic-icm:*) Bash(canvas-cli:*) Bash(python3:*) Read"
 > **Unified Academic Intelligence Suite & ICM Pipeline Orchestrator for University Knowledge Workspaces.**  
 > Solves the seam between raw Canvas LMS downloads, Zoom lecture recordings, Markdown conversions, Cornell study sheets, and the OKF Knowledge Cosmos graph.
 
+> [!NOTE]
+> **Superseded by [`academic-pipeline-v2`](../academic-pipeline-v2/SKILL.md)**: The v2 pipeline inverts the architecture by sifting early with parallel classifiers, keeping structure in OKF v0.2 folders, and producing 3 focused HTML targets (`graph.html`, `anki.html`, `cornell.html`) instead of the monolithic v1 cosmos.
+
 ---
 
 ## 🏛️ Integrated Academic Modules & Commands
