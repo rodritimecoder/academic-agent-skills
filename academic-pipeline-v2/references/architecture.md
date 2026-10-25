@@ -1,6 +1,6 @@
 # Academic Notes Pipeline v2 — Plan
 
-**Status:** Draft plan (no code yet), revised per feedback. Supersedes v1 `academic-icm` for structuring + render.
+**Status:** Draft plan (no code yet), revised per feedback and per the 2026-10-25 audit corrections. This document plans to supersede v1 `academic-icm` for structuring + render **after v2 passes its own gates**; v1 remains the live implementation until then.
 **Goal:** Text-first ingestion (Canvas + Zoom) → parallel classifier sifting → ICM/Kem-structured corpus → three focused HTML outputs.
 **Principle:** Clean upstream, render downstream. Poison sits upstream. Code decides wherever it can.
 
@@ -8,7 +8,7 @@
 
 v1 (`academic-icm`) grew into a monolith: one `viz.html` cosmos + one `study.html` + `cornell_index.html`, all entangled, with `CURRICULUM_TREE.md` retired mid-flight and stale source paths everywhere. Quality felt "mid" because filtering happened downstream and the render surface tried to do everything. `CURRICULUM_TREE.md` specifically was bad (manual, drift-prone) — replace with OKF v0.2.
 
-v2 inverts that: sift cheaply and early with classifiers, keep structure in folders (ICM), and ship **three small, single-purpose HTMLs** instead of one mega-page. Heavy on Kem/Glitch Cat machinery.
+v2 plans to invert that: sift cheaply and early with classifiers, keep structure in folders (ICM), and ship **three small, single-purpose HTMLs** instead of one mega-page. Heavy on Kem/Glitch Cat machinery. Nothing below is implemented yet; every stage is a plan until the corresponding scripts and gate runners land.
 
 ## 2. The three outputs (render layer)
 
@@ -18,7 +18,7 @@ v2 inverts that: sift cheaply and early with classifiers, keep structure in fold
 | **`anki.html`** | Anki **full hub**: deck management + card review, flip/reveal, progress, import/export TSV. Reuse the Anki UI from the old `viz.html`. | Port Anki hub from v1 (viz.html UI). |
 | **`cornell.html`** | Sleek white Cornell sheet: cues + notes, hidden answers by default, self-quiz toggle, print styles. | Reuse `cornell-notes` skill output. |
 
-Each HTML is standalone, small, independently verifiable. No cross-page coupling.
+Each HTML is standalone, small, independently verifiable. No cross-page coupling. **Planned, not yet implemented.**
 
 ## 3. Pipeline stages (ICM folders)
 
@@ -30,7 +30,7 @@ Each HTML is standalone, small, independently verifiable. No cross-page coupling
 05_verify/        Gates (asset, markdown/KaTeX, schema, render, judge)
 ```
 
-Each stage folder has its own `CONTEXT.md`. State in `.agent_state.json` + `STATE.md` (one fact per line, supersede in place). Context gating (`cgate`) slices files instead of dumping.
+Each stage folder has its own `CONTEXT.md`. State in `.agent_state.json` + `STATE.md` (one fact per line, supersede in place). Context gating (`cgate`) slices files instead of dumping. **All stages are planned; no runner exists yet.**
 
 ## 4. Stage 1 — Smart ingestion (planned around the constellation)
 
@@ -48,7 +48,7 @@ Either may carry an **explainer video** (Zoom recording or local MP4). Store URL
 - `canvas-cli` lists modules/pages/files (names + metadata only). A light classifier (`jev-decision` bool) decides `is_relevant_note` per item from its name/title — no download yet. Drop admin/welcome/empty/overview/quiz-admin pages.
 - Only download + markitdown-convert items that pass. Skip the rest (logged in `sift_report.json` as `skipped_irrelevant`).
 - Scope filter: only necessary stuff — weeks 1–12 notes + tutorial solutions. Ignore orientation/admin modules, duplicates, and anything outside the course weeks.
-- Zoom: only fetch transcript (ASR/VTT) + keyframes if a video is referenced; never the hour-long file.
+- Zoom: only fetch transcript (ASR/VTT) + keyframes if a video is referenced; never the hour-long file. **De-risk note:** `academic/zoom-recorder/scripts/zoom_download.py --help` currently fails at `import requests` (`ModuleNotFoundError`), so this mode is unverified until dependencies are installed and the script is exercised (see `DE-RISK.md`).
 - Dedup by signature fingerprint before writing to disk (poison stays upstream).
 
 **Outputs (per week, per stream):**
@@ -60,7 +60,16 @@ Either may carry an **explainer video** (Zoom recording or local MP4). Store URL
 
 ## 5. Stage 2 — Sifting (parallel classifiers)
 
-**Concurrency:** local 27B classifier on the GPUs (parallel instances across VRAM) + free OpenRouter 27B/9B models (`openrouter-free`: nemotron, etc.) running in parallel. `semantic-cache` skips repeated classifier prompts. Classifiers are cheap and fast — high-volume triage, not deep reasoning.
+**Concurrency (planned):** the local 35B classifier (Qwen3.6-35B-A3B, port 8080 per `ports.py list`) + free OpenRouter models (`openrouter-free`: nemotron, etc.) running in parallel, plus `free-swarm` fan-out. Repeated classifier prompts are skipped by the `glitch-cat/semantic-cache` Python module. Classifiers are cheap and fast — high-volume triage, not deep reasoning.
+
+**`free-swarm` (real path `orchestration/free-swarm`):** it is not a CLI command. It is an OpenCode subagent skill. Invocation:
+1. Install once: `python3 orchestration/free-swarm/scripts/install.py` (symlinks the nine `free-*` agents into `~/.config/opencode/agents`).
+2. In a session: launch named read-only subagents such as `subagent(agent: "free-glm", ...)`, `free-minimax`, `free-lightning`, etc., with `background: true` for parallel fan-out.
+3. Outside the loop: `python3 orchestration/free-swarm/scripts/fanout.py --models glm,minimax,flint "<task>"` for deterministic fan-out with answers written to disk.
+
+For this pipeline, fan the "extract 6-8 cues" / "tag topics" / "summarize tutorial solution" jobs across several `free-*` agents and merge or majority-vote the results.
+
+**`semantic-cache` (module path `glitch-cat/semantic-cache`):** this is an importable Python library, **not a CLI command**. Import it in code (e.g. `from glitch-cat.semantic_cache import ...`) rather than invoking a `semantic-cache` executable. It has no CLI entry, so the cache layer must be wired in code.
 
 **Classifier tasks (typed via `jev-decision` bool/choice/score where possible):**
 - `is_admin_fluff` — drop welcome/overview/empty pages.
@@ -79,7 +88,7 @@ Either may carry an **explainer video** (Zoom recording or local MP4). Store URL
 
 Replace `CURRICULUM_TREE.md` with **OKF v0.2** (`okf-architect`) for curriculum/knowledge architecture. Heavy Kem/Glitch Cat incorporation: state-compactor, cgate, guard-hooks, jev-decision, eval-pipeline (step-level gates), semantic-cache, graph-memory (hybrid RAG), notes-index.
 
-**Layout:** numbered folders per course, one home per fact, links over copies.
+**Layout (agreed, single source of truth — `SKILL.md` mirrors this exactly):** numbered folders per course, one home per fact, links over copies.
 
 ```
 <course>/
@@ -93,6 +102,8 @@ Replace `CURRICULUM_TREE.md` with **OKF v0.2** (`okf-architect`) for curriculum/
   03_state/             .agent_state.json, STATE.md
   _templates/           copy, don't blank-page
 ```
+
+Within the workspace, Stage 3 writes this scaffold under `03_structure/<course>/`; the `01_weeks/`, `02_index/`, `03_state/`, and `_templates/` folders live at the course root. `SKILL.md` documents the same course-root layout.
 
 **Invariants (icm-architect):** one folder one job; small stable entry file (AGENTS.md < ~60 lines, with "Not this workspace" + status rules incl. STALE); numbering encodes order; factory vs product; every output is an edit surface; filesystem is the state machine (STALE by mtime).
 
@@ -109,17 +120,19 @@ Three Kem/Glitch Cat skills anchor the pipeline. Each maps to a distinct concern
 
 ### 7.1 `eval-router` — digestion workhorse (sifting stage)
 - **What:** self-calibrating request router. Classifies prompt complexity (Easy/Moderate/Hard) via a local model, dispatches to local zero-cost models or free tiers (OpenRouter), verifies output quality (speculative shadow eval), and harvests failures into training evals. Claimed 30-40% token cost reduction.
-- **How implemented:** digestion prompts (is_admin_fluff, is_duplicate, topic_tag, quality_score, cue_candidate, node_type) get routed — easy ones to the cheapest free 9B, harder ones to the 27B/local 35B. Shadow verification catches bad classifier outputs; harvested failures feed back into better prompts. Replaces ad-hoc fan-out with measured routing + verification + learning.
+- **Real CLI (verified in `DE-RISK.md`):** `python3 glitch-cat/eval-router/eval_router.py {route,exec,stats,harvest}`. Stage 2 will call `eval_router.py route` for tier classification and `eval_router.py exec` for routed execution with fallback.
+- **How implemented (planned):** digestion prompts (is_admin_fluff, is_duplicate, topic_tag, quality_score, cue_candidate, node_type) get routed — easy ones to the cheapest free 9B, harder ones to the local 35B (Qwen3.6-35B-A3B, :8080). Shadow verification catches bad classifier outputs; harvested failures feed back into better prompts. Replaces ad-hoc fan-out with measured routing + verification + learning.
 - **Why here:** this is the digestion engine — "mix of free models + classifiers in parallel with quality control."
 
-### 7.2 `free-swarm` — parallel fan-out (digestion + conversion)
-- **What:** nine zero-cost OpenCode models exposed as named subagents; fan a task out to all of them at once for independent answers, majority votes, long-context reads, cheap parallel review.
-- **How implemented:** for each week's notes, fan the "extract 6-8 cues" / "tag topics" / "summarize tutorial solution" jobs across the 9 models in parallel, then take a majority vote or merge. For Cornell conversion, parallel subagents per note so the whole course converts in one pass. Cheap and fast because they're all free-tier.
+### 7.2 `free-swarm` (path `orchestration/free-swarm`) — parallel fan-out (digestion + conversion)
+- **What:** nine zero-cost OpenCode models exposed as named read-only subagents; fan a task out to all of them at once for independent answers, majority votes, long-context reads, cheap parallel review.
+- **How invoked:** install agents with `python3 orchestration/free-swarm/scripts/install.py`, then either launch `free-*` subagents in-session or run `python3 orchestration/free-swarm/scripts/fanout.py --models glm,minimax,flint "<task>"` for disk-backed fan-out.
+- **How implemented (planned):** for each week's notes, fan the "extract 6-8 cues" / "tag topics" / "summarize tutorial solution" jobs across several of the 9 models in parallel, then take a majority vote or merge. For Cornell conversion, parallel subagents per note so the whole course converts in one pass. Cheap and fast because they're all free-tier.
 - **Why here:** this is the "speed up digestion" and "turn stuff to cornell/anki" accelerator — parallelism across models.
 
 ### 7.3 `graph-memory` — constellation backend + retrieval (render stage)
 - **What:** SQLite k-hop graph + hybrid BM25/vector search (bge-small, 384d) + exact-quote distillation.
-- **How implemented:** weeks/topics/solutions/videos become entities with typed relations (`belongs-to-week`, `prerequisite`, `related-topic`, `has-explainer`). `graph.html`'s constellation renders from this graph; `graph recall "Supernode" --hops 3` gives the traversal for the node-settings panel. Dedups entities across weeks (no duplicate "Week 5 Phasors" nodes). Also powers search in the constellation.
+- **How implemented (planned):** weeks/topics/solutions/videos become entities with typed relations (`belongs-to-week`, `prerequisite`, `related-topic`, `has-explainer`). `graph.html`'s constellation renders from this graph; `graph recall "Supernode" --hops 3` gives the traversal for the node-settings panel. Dedups entities across weeks (no duplicate "Week 5 Phasors" nodes). Also powers search in the constellation.
 - **Why here:** the constellation view needs a real graph data model, not a hand-rolled JSON.
 
 ### Kem playbook (operating discipline across all stages)
@@ -132,7 +145,7 @@ Three Kem/Glitch Cat skills anchor the pipeline. Each maps to a distinct concern
 
 ## 8. Verification — a gate at every stage (not just the end)
 
-Per-stage micro-gates (Kem: "always run the control"). Each stage must pass its gate before the next stage runs; a failing gate is a hard stop with serialized evidence (`step_NN.json`), not a warning.
+Per-stage micro-gates (Kem: "always run the control"). Each stage must pass its gate before the next stage runs; a failing gate is a hard stop with serialized evidence (`step_NN.json`), not a warning. **All gates are planned; no gate runner exists yet.**
 
 - **Stage 1 (ingest) gate `[D]`:** asset doctor (MIME, video size, Zoom passcode presence); scope check (only weeks 1-12 notes + tutorial solutions); dedup fingerprint sanity. Output: `step_01.json`.
 - **Stage 2 (sift) gate `[D]+[P]`:** markdown + KaTeX balance; classifier confidence floor (low-confidence items routed to review queue, not auto-dropped); no `.vtt` in DOM. Output: `step_02.json`.
@@ -148,11 +161,8 @@ Exit codes gate CI. "Always run the control."
 |---|---|
 | `canvas-cli`, `zoom-recorder`, `markitdown-cli` (ingestion) | `academic-icm` monolithic orchestrator |
 | `cornell-notes` skill (white-page renderer) | `viz.html` mega-page → 3 focused HTMLs |
-| `okf-architect` (OKF v0.2 curriculum architecture) | `CURRICULUM_TREE.md` (fully gone) |
-| `eval-router` + `free-swarm` (parallel digestion + conversion) | `academic-icm` monolithic orchestrator |
-| `graph-memory` (constellation backend + retrieval) | `viz.html` mega-page -> 3 focused HTMLs |
-| `icm-architect` (workspace scaffolding) | Hand-maintained stem repair scripts |
-| Kem/Glitch Cat: state-compactor, cgate, guard-hooks, semantic-cache, graph-memory, notes-index, eval-pipeline | — |
+| `okf-architect` (OKF v0.2 curriculum architecture) | `CURRICULUM_TREE.md` manual tree |
+| `free-swarm` (`orchestration/free-swarm` subagents + fanout) | ad-hoc parallel fan-out |
 
 ## 10. Phased rollout (validation-first)
 
@@ -170,14 +180,16 @@ Exit codes gate CI. "Always run the control."
 2. **CURRICULUM_TREE.md:** fully gone. OKF v0.2 (`okf-architect`) handles curriculum/knowledge architecture.
 3. **Kem/Glitch Cat:** heavy incorporation (state-compactor, cgate, guard-hooks, jev-decision, eval-pipeline, semantic-cache, graph-memory, notes-index).
 4. **Digestion:** smart, classifier-gated — only download relevant note stuff; skip admin/fluff/dupes before writing to disk.
+5. **Local model:** Qwen3.6-35B-A3B on :8080 (per `ports.py list`). All "27B" references are corrected to 35B.
 
 ## 12. Still open (need your call)
 
-1. ~~Classifier concurrency~~ — RESOLVED: local 27B + OpenRouter free 27B/9B in parallel.
+1. ~~Classifier concurrency~~ — RESOLVED: local 35B (Qwen3.6-35B-A3B, :8080) + OpenRouter free models in parallel.
 2. ~~Smart digestion~~ — RESOLVED: first stage; light classifier (`jev-decision` bool) triages on Canvas metadata (names) before download; scope = weeks 1-12 notes + tutorial solutions only.
 3. ~~Anki~~ — RESOLVED: full hub (deck mgmt + review), reusing the Anki UI from old `viz.html`.
 4. ~~Phase 0 subject~~ — RESOLVED: user-specified subject list (default all 4: 41200, 48430, 48520, 48521); not hardcoded.
 5. ~~Kem verification~~ — RESOLVED: a micro-gate at every stage (hard stop on failure, serialized evidence).
+6. `eval-router` CLI contract — RESOLVED (see §7.1): `python3 glitch-cat/eval-router/eval_router.py {route,exec,stats,harvest}`.
 
 ## 13. Out of scope (deliberately)
 

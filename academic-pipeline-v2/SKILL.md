@@ -1,20 +1,26 @@
 ---
 name: academic-pipeline-v2
+status: draft
+version: 0.1-draft
 description: >
-  Academic Notes Pipeline (v2). Text-first university ingestion (Canvas + Zoom) →
-  parallel classifier sifting (jev-decision, eval-router, free-swarm) → OKF v0.2
-  curriculum structuring → three focused HTML outputs (constellation graph.html,
-  anki.html, and cornell.html) with micro-gates at every stage.
-  Supersedes monolithic academic-icm.
-compatibility: "Requires canvas-cli, zoom-recorder, markitdown-cli, and local inference (:8080, :8083)."
-allowed-tools: "Bash(canvas-cli:*) Bash(zoom-recorder:*) Bash(markitdown:*) Bash(jev:*) Read Write"
+  Academic Notes Pipeline (v2). DRAFT plan (no code yet): text-first university
+  ingestion (Canvas + Zoom) → parallel classifier sifting (jev-decision,
+  eval-router, free-swarm) → OKF v0.2 curriculum structuring → three focused HTML
+  outputs (constellation graph.html, anki.html, and cornell.html) with micro-gates
+  at every stage. Intended successor to monolithic academic-icm once implemented.
+compatibility: "Requires canvas-cli, zoom-recorder, markitdown-cli, local inference (:8080, :8083) and embeddings (:8087) for the semantic cache."
+allowed-tools: "Bash(canvas-cli:*) Bash(zoom-recorder:*) Bash(markitdown-cli:*) Bash(jev:*) Bash(okf:*) Bash(state-compactor:*) Bash(cgate:*) Bash(openrouter-free:*) Bash(eval-router:*) Bash(python3:*) Bash(opencode:*) Read Write"
 ---
 
 # Academic Notes Pipeline v2 (`academic-pipeline-v2`)
 
+> **Status: DRAFT.** This is a plan, not an executable skill. No stage runner,
+> gate enforcer, or `step_NN.json` producer exists yet. Do not route live work to
+> this skill until it is implemented and marked `status: live`.
+>
 > **Text-first university lecture & tutorial pipeline.**  
-> Ingests Canvas + Zoom, sifts early via parallel classifiers, structures into OKF v0.2 / ICM folders, and renders three clean, single-purpose HTML outputs.  
-> **Supersedes v1 `academic-icm`.**
+> Ingests Canvas + Zoom, sifts early via parallel classifiers, structures into OKF v0.2 / ICM folders, and renders three clean, single-purpose HTML outputs.
+> **Plans to supersede v1 `academic-icm` after passing its own gates; v1 remains live until then.**
 
 ---
 
@@ -45,11 +51,14 @@ allowed-tools: "Bash(canvas-cli:*) Bash(zoom-recorder:*) Bash(markitdown:*) Bash
 │   ├── CONTEXT.md
 │   ├── sift_report.json  # Classifier decisions & confidence
 │   └── cleaned/          # Filtered, tagged, deduped notes
-├── 03_structure/         # OKF v0.2 curriculum layout
+├── 03_structure/         # Stage 3 writes the OKF v0.2 course scaffold
 │   ├── CONTEXT.md
-│   ├── 01_weeks/         # Week_01 to Week_12 (topic.md, tutorial.md)
-│   ├── 02_index/         # Generated OKF maps (never hand-edited)
-│   └── 03_state/         # .agent_state.json & STATE.md
+│   └── <course>/         # OKF v0.2 course root (layout below)
+│       ├── AGENTS.md     # Small stable routing file
+│       ├── 01_weeks/     # Week_01 to Week_12 (topic.md, tutorial.md, meta.json)
+│       ├── 02_index/     # Generated OKF maps (never hand-edited)
+│       ├── 03_state/     # .agent_state.json & STATE.md
+│       └── _templates/   # Copy, don't blank-page
 ├── 04_render/            # Three standalone HTML targets
 │   ├── CONTEXT.md
 │   ├── graph.html        # Constellation view
@@ -58,6 +67,22 @@ allowed-tools: "Bash(canvas-cli:*) Bash(zoom-recorder:*) Bash(markitdown:*) Bash
 └── 05_verify/            # Independent verification & gates
     ├── CONTEXT.md
     └── step_*.json       # Serialized evidence logs
+```
+
+The OKF v0.2 course scaffold under `03_structure/<course>/` is the single Stage 3
+layout used by both this file and `references/architecture.md`:
+
+```
+<course>/
+  01_weeks/
+    Week_01/
+      CONTEXT.md        (inputs, process, outputs, human checkpoint)
+      topic.md
+      tutorial.md
+      meta.json
+  02_index/             generated file maps (OKF v0.2), never hand-edited
+  03_state/             .agent_state.json, STATE.md
+  _templates/           copy, don't blank-page
 ```
 
 ---
@@ -70,10 +95,11 @@ allowed-tools: "Bash(canvas-cli:*) Bash(zoom-recorder:*) Bash(markitdown:*) Bash
 * **Two Streams Per Week:**
   1. *Topic notes* (lecture slides, pages, PDFs).
   2. *Tutorial solutions* (worked problems).
-* **Smart Filter:** Light classifier (`jev bool`) triages Canvas items by title *before download*. Skips orientation, admin fluff, empty announcements, and quiz administration. Zoom downloads transcripts/keyframes only (never full video).
+* **Smart Filter:** Light classifier (`jev-decision` bool) triages Canvas items by title *before download*. Skips orientation, admin fluff, empty announcements, and quiz administration. Zoom downloads transcripts/keyframes only (never full video).
 
 ### Stage 2: Sifting (`02_sift`)
-* **Parallel Classifiers:** Combines local models with `openrouter-free` subagents (`free-swarm`), cached via `semantic-cache`.
+* **Parallel Classifiers:** Combines local models with `openrouter-free` subagents and `free-swarm` (`orchestration/free-swarm`), cached via the `glitch-cat/semantic-cache` module (imported as a Python library — it has no CLI).
+* **`free-swarm` invocation:** register the nine `free-*` OpenCode subagents with `python3 orchestration/free-swarm/scripts/install.py`, then either launch read-only subagents in-session (`subagent(agent: "free-glm", ...)`, `background: true`) or run `python3 orchestration/free-swarm/scripts/fanout.py --models glm,minimax,flint "<task>"` for disk-backed fan-out.
 * **Triage Tasks:**
   - `is_admin_fluff` — drops non-academic items.
   - `is_duplicate` — signature fingerprint deduplication.
@@ -84,10 +110,11 @@ allowed-tools: "Bash(canvas-cli:*) Bash(zoom-recorder:*) Bash(markitdown:*) Bash
 * **Spec:** Adheres to **Open Knowledge Format (OKF v0.2)** via `okf-architect`.
 * **State Ledger:** Compaction via `state-compactor`; context slicing via `cgate`.
 * **Invariants:** One home per fact (links over copies); filesystem encodes state.
+* **Output:** the `<course>/` OKF v0.2 layout shown above (`01_weeks/`, `02_index/`, `03_state/`, `_templates/`).
 
 ### Stage 4: Render (`04_render`)
 * Generates the 3 independent HTML surfaces without cross-page coupling.
-* Standalone files; can be viewed locally or exposed via `tailscale serve`.
+* Standalone files; viewed locally from `04_render/`.
 
 ### Stage 5: Verification Micro-Gates (`05_verify`)
 * **Stage 1 Gate `[D]`:** Asset doctor (MIME types, Zoom passcode presence, scope check weeks 1–12).
