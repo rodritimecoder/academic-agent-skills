@@ -238,8 +238,8 @@ STYLE = """
   .row span:last-child { text-align:right; word-break:break-word; }
   .legend { margin-top:14px; display:flex; gap:14px; flex-wrap:wrap;
             font-size:12px; color:var(--dim); }
-  .legend-item { display:flex; align-items:center; gap:6px; }
-  .swatch { width:10px; height:10px; border-radius:50%; display:inline-block; }
+  .legend-item { display:flex; align-items:center; gap:6px; }  .swatch { width:10px; height:10px; border-radius:50%; display:inline-block; }
+  .coverage-note { margin-top:14px; font-size:12px; color:#e0b070; line-height:1.4; }
   @media (max-width:760px) { main { grid-template-columns:1fr; } }
 """
 
@@ -378,6 +378,7 @@ __WEEK_CHIPS__
     <div class="legend">
 __LEGEND__
     </div>
+__COVERAGE__
   </aside>
 </main>
 <script id="meta-data" type="application/json">__META_JSON__</script>
@@ -393,17 +394,41 @@ def _json_for_script(data) -> str:
     return json.dumps(data, ensure_ascii=False, indent=2).replace("</", "<\\/")
 
 
-def render(meta) -> str:
+def _missing_text_weeks(workspace, meta):
+    """Weeks the course declares that produced no retrieved note text."""
+    cleaned = Path(workspace) / "02_sift" / "cleaned"
+    seen = set()
+    if cleaned.is_dir():
+        for path in cleaned.rglob("*.md"):
+            for part in path.relative_to(cleaned).parts[:-1]:
+                match = re.match(r"^week[ _-]?0*(\d{1,2})$", part, re.IGNORECASE)
+                if match:
+                    seen.add("Week_%02d" % int(match.group(1)))
+    labels = [str(e.get("week")) for e in meta.get("weeks") or [] if isinstance(e, dict)]
+    return [label for label in labels if label and label not in seen]
+
+
+def render(meta, missing_weeks=None) -> str:
     """Build the standalone HTML page for one meta.json payload."""
     clean = normalize_meta(meta)
     placed = layout(clean)
     page = PAGE
+    missing = [w for w in (missing_weeks or []) if w]
+    if missing:
+        coverage = (
+            '<p class="coverage-note">No retrieved text for '
+            + ", ".join(html.escape(w) for w in missing)
+            + " (Canvas Pages unavailable); their nodes are listed above.</p>"
+        )
+    else:
+        coverage = ""
     replacements = (
         ("__STYLE__", STYLE),
         ("__BEHAVIOR__", BEHAVIOR),
         ("__SVG__", _svg(clean, placed)),
         ("__WEEK_CHIPS__", _week_chips(clean)),
         ("__LEGEND__", _legend(clean)),
+        ("__COVERAGE__", coverage),
         ("__META_JSON__", _json_for_script(clean)),
         ("__EDGE_JSON__", _json_for_script(_edge_specs(placed))),
         ("__COURSE__", html.escape(clean["course"])),
@@ -438,7 +463,7 @@ def run(workspace, out_dir=None) -> dict:
     if not meta_path.is_file():
         raise FileNotFoundError("missing %s" % meta_path)
     meta = json.loads(meta_path.read_text(encoding="utf-8"))
-    page = render(meta)
+    page = render(meta, missing_weeks=_missing_text_weeks(root, meta))
     dest = Path(out_dir) if out_dir else root / "04_render"
     dest.mkdir(parents=True, exist_ok=True)
     html_path = dest / "graph.html"

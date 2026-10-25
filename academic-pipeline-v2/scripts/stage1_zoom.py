@@ -79,6 +79,57 @@ def _payload(started_at, status, inputs, outputs=None, evidence=None, errors=Non
     }
 
 
+def _load_meta(meta_path, course):
+    """Read the meta.json another lane may already have written."""
+    if meta_path.is_file():
+        try:
+            data = json.loads(meta_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            data = None
+        if isinstance(data, dict):
+            data.setdefault("course", course)
+            if not isinstance(data.get("weeks"), list):
+                data["weeks"] = []
+            return data
+    return {"course": course, "weeks": []}
+
+
+def _merge_meta(meta_path, course, zoom_weeks):
+    """Merge recording nodes into meta.json instead of overwriting it.
+
+    Canvas and Zoom both feed ``01_ingest/meta.json``.  Whichever lane runs
+    second must add to the file, not replace it: an overwrite deletes every
+    Canvas node and leaves the constellation empty.
+    """
+    meta = _load_meta(meta_path, course)
+    for entry in zoom_weeks:
+        if not isinstance(entry, dict):
+            continue
+        name = entry.get("week")
+        target = None
+        for candidate in meta["weeks"]:
+            if isinstance(candidate, dict) and candidate.get("week") == name:
+                target = candidate
+                break
+        if target is None:
+            meta["weeks"].append(entry)
+            continue
+        if not isinstance(target.get("nodes"), list):
+            target["nodes"] = []
+        known = {str(node.get("id")) for node in target["nodes"] if isinstance(node, dict)}
+        for node in entry.get("nodes") or []:
+            if not isinstance(node, dict):
+                continue
+            if str(node.get("id")) not in known:
+                target["nodes"].append(node)
+                known.add(str(node.get("id")))
+        for key in ("topic", "tutorial"):
+            if not target.get(key) and entry.get(key):
+                target[key] = entry[key]
+    meta["weeks"].sort(key=lambda w: str(w.get("week", "")))
+    return meta
+
+
 def _skipped(workspace, dry_run, started_at, missing):
     evidence = [
         "skipped: missing dep " + ", ".join(missing) + " (callable(s) not provided)",
@@ -222,14 +273,21 @@ def run(workspace: Path, dry_run: bool = False, deps: dict | None = None) -> dic
         )
 
     meta_path = ingest_dir / META_NAME
-    meta = {
-        "course": str(deps.get("course") or workspace.name or "course"),
-        "weeks": [weeks[key] for key in sorted(weeks)],
-    }
-    ingest_dir.mkdir(parents=True, exist_ok=True)
-    meta_path.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
-    outputs.append(_relative(meta_path, workspace))
-    evidence.append(f"wrote {_relative(meta_path, workspace)} with {len(meta['weeks'])} week(s)")
+    course = str(deps.get("course") or workspace.name or "course")
+    zoom_weeks = [weeks[key] for key in sorted(weeks)]
+    if zoom_weeks or not meta_path.is_file():
+        merged = _merge_meta(meta_path, course, zoom_weeks)
+        ingest_dir.mkdir(parents=True, exist_ok=True)
+        meta_path.write_text(json.dumps(merged, indent=2) + "\n", encoding="utf-8")
+        outputs.append(_relative(meta_path, workspace))
+        evidence.append(
+            f"merged {len(zoom_weeks)} recording week(s) into {_relative(meta_path, workspace)} "
+            f"({len(merged['weeks'])} week(s) total)"
+        )
+    else:
+        evidence.append(
+            f"kept existing {_relative(meta_path, workspace)}: no recordings to merge"
+        )
 
     status = "failed" if errors else "ok"
     inputs["counts"] = counts

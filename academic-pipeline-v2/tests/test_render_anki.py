@@ -142,6 +142,25 @@ class RenderAnkiTest(unittest.TestCase):
         ):
             self.assertEqual(self.module.week_label(raw), label)
 
+    def test_heading_with_no_text_is_not_a_card(self):
+        """A bare title cannot be answered, so it must not enter a deck."""
+        cards = self.module.extract_cards(
+            "# Week 1 overview\n\n# Limits\n\nA limit is the value a function approaches.\n"
+        )
+        self.assertEqual([c["q"] for c in cards], ["Limits"])
+
+    def test_pointer_and_prompt_answers_are_not_cards(self):
+        text = "# Limits\n\nSee Lecture Notes.\n\n# Derivative\n\nExpress the result:\n"
+        self.assertEqual(self.module.extract_cards(text), [])
+
+    def test_page_ships_a_static_card_list_without_javascript(self):
+        decks = [{"name": "week_01", "title": "Week 1", "cards": [{"q": "Q1", "a": "A1"}]}]
+        page = self.module.render_html(decks)
+        self.assertIn('class="static"', page)
+        self.assertIn("All cards", page)
+        self.assertIn("Q1", page)
+        self.assertNotIn("__STATIC__", page)
+
     def test_deck_selector_present(self):
         html = self._html()
         self.assertIn('<select id="deck"', html)

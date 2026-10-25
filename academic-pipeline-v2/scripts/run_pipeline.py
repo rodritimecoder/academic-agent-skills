@@ -388,26 +388,31 @@ def _write_stage_context(workspace, stage_number, dry_run):
     )
 
 
-def stage1(workspace, dry_run=False):
+def stage1(workspace, dry_run=False, real=False, course_id=None):
     _write_stage_context(workspace, 1, dry_run)
+    deps = _real_stage1_deps(workspace, course_id) if real else {}
     return _run_lanes(
         workspace,
         dry_run,
-        [("stage1_canvas", {}), ("stage1_zoom", {})],
+        [("stage1_canvas", {"deps": deps}), ("stage1_zoom", {"deps": deps})],
     )
 
 
-def stage2(workspace, dry_run=False):
+def stage2(workspace, dry_run=False, real=False, course_id=None):
     _write_stage_context(workspace, 2, dry_run)
-    return _run_lanes(workspace, dry_run, [("stage2_sift", {})])
+    deps = {}
+    if real:
+        adapters = _load_lane("adapters")
+        deps = adapters.stage2_deps(workspace)
+    return _run_lanes(workspace, dry_run, [("stage2_sift", {"deps": deps})])
 
 
-def stage3(workspace, dry_run=False):
+def stage3(workspace, dry_run=False, real=False, course_id=None):
     _write_stage_context(workspace, 3, dry_run)
     return _run_lanes(workspace, dry_run, [("stage3_structure", {})])
 
 
-def stage4(workspace, dry_run=False):
+def stage4(workspace, dry_run=False, real=False, course_id=None):
     _write_stage_context(workspace, 4, dry_run)
     return _run_lanes(
         workspace,
@@ -416,7 +421,7 @@ def stage4(workspace, dry_run=False):
     )
 
 
-def stage5(workspace, dry_run=False):
+def stage5(workspace, dry_run=False, real=False, course_id=None):
     """Verify: four disk gates plus the fresh-context judge.
 
     The judge is opt-in.  Set ``PIPELINE_CLI_JUDGE=1`` to wire
@@ -430,6 +435,14 @@ def stage5(workspace, dry_run=False):
     return _run_lanes(workspace, dry_run, [("gates", {"deps": deps})])
 
 
+def _real_stage1_deps(workspace, course_id):
+    """Build live Canvas + Zoom dependencies, failing loudly when unconfigured."""
+    if not course_id:
+        raise ValueError("--real needs --course-id <canvas course id>")
+    adapters = _load_lane("adapters")
+    return adapters.stage1_deps(workspace, course_id)
+
+
 STAGE_FUNCTIONS = {
     1: stage1,
     2: stage2,
@@ -439,12 +452,20 @@ STAGE_FUNCTIONS = {
 }
 
 
-def _run_one(workspace, stage_number, dry_run=False):
+def _run_one(workspace, stage_number, dry_run=False, real=False, course_id=None):
     """Run one stage and always write step_NN.json evidence (unless dry run)."""
     started_at = _now()
     try:
-        parts = STAGE_FUNCTIONS[stage_number](workspace, dry_run=dry_run)
+        parts = STAGE_FUNCTIONS[stage_number](
+            workspace, dry_run=dry_run, real=real, course_id=course_id
+        )
         payload = _merge_results(stage_number, started_at, parts, workspace=workspace)
+        payload["evidence"].insert(
+            0,
+            "deps: live adapters (canvas-cli, zoom-recorder, markitdown-cli, jev)"
+            if real
+            else "deps: none supplied (dependency-injected default)",
+        )
     except Exception as exc:  # noqa: BLE001 - serialize any failure as evidence
         payload = {
             "stage": stage_number,
@@ -500,11 +521,23 @@ def main(argv=None):
         action="store_true",
         help="print the stages that would run without dispatching or writing evidence",
     )
+    parser.add_argument(
+        "--real",
+        action="store_true",
+        help="wire live dependencies (canvas-cli, zoom-recorder, markitdown-cli, jev)",
+    )
+    parser.add_argument(
+        "--course-id",
+        default=None,
+        help="Canvas course id for --real (required with --real)",
+    )
     args = parser.parse_args(argv)
 
     workspace = Path(args.workspace)
     if not workspace.is_dir():
         parser.error(f"workspace does not exist: {workspace}")
+    if args.real and not args.course_id:
+        parser.error("--real needs --course-id")
 
     if args.stage == "all":
         stage_numbers = [1, 2, 3, 4, 5]
@@ -517,7 +550,12 @@ def main(argv=None):
         return 0
 
     for number in stage_numbers:
-        if not _run_one(workspace, number):
+        if not _run_one(
+            workspace,
+            number,
+            real=args.real,
+            course_id=args.course_id,
+        ):
             return 1
     return 0
 

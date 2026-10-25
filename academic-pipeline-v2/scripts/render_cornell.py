@@ -12,6 +12,7 @@ step payload valid against ``contracts/step.schema.json``.
 """
 
 import html
+import json
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -154,6 +155,21 @@ _PAGE = """<!DOCTYPE html>
   body.quiz-on .pair.revealed .cue h2 {{ color: #5b6373; }}
   .hint {{ font-size: 12px; color: #5b6373; margin-top: 18px; }}
   .empty {{ font-size: 14px; color: #5b6373; }}
+  .summary {{
+    margin-top: 22px; padding-top: 14px; border-top: 2px solid var(--rule);
+  }}
+  .summary h2 {{ font-size: 14px; font-weight: 700; margin: 0 0 8px; color: var(--cue); }}
+  .summary ul {{ margin: 0; padding-left: 20px; }}
+  .summary li {{ margin: 5px 0; }}
+  .coverage {{
+    margin: 0 0 18px; padding: 10px 12px; border: 1px solid var(--rule);
+    background: #f7f8fa;
+  }}
+  .coverage h2 {{ font-size: 13px; margin: 0 0 6px; color: var(--cue); }}
+  .coverage table {{ border-collapse: collapse; font-size: 12px; width: 100%; }}
+  .coverage th, .coverage td {{ text-align: left; padding: 3px 8px 3px 0; }}
+  .coverage th {{ border-bottom: 1px solid var(--rule); }}
+  .coverage td.missing {{ color: #8a4b00; }}
   @media print {{
     @page {{ margin: 16mm; }}
     html, body {{ background: #ffffff; color: #000000; }}
@@ -172,8 +188,10 @@ _PAGE = """<!DOCTYPE html>
   <button type="button" class="quiz-toggle" id="quizToggle" aria-pressed="false">Self-quiz: off</button>
 </header>
 <main class="sheet-body">
+{coverage}
 {pairs}
 </main>
+{summary}
 <p class="hint">Self-quiz hides the notes &mdash; click a cue to reveal its note.</p>
 <script>
   (function () {{
@@ -202,12 +220,13 @@ _PAGE = """<!DOCTYPE html>
 
 
 def _render_pairs(pairs):
-    if not pairs:
-        return '<p class="empty">No cue/note pairs found in 02_sift/cleaned.</p>'
+    usable = [p for p in pairs if str(p.get("note") or "").strip()]
+    if not usable:
+        return '<p class="empty">No cue/note pairs with content found in 02_sift/cleaned.</p>'
     chunks = []
-    for index, pair in enumerate(pairs, start=1):
+    for index, pair in enumerate(usable, start=1):
         cue = html.escape(pair["cue"])
-        note = html.escape(pair["note"]) or "&nbsp;"
+        note = html.escape(pair["note"])
         chunks.append(
             '<section class="pair" data-index="%d">'
             '<div class="cue"><h2>%s</h2></div>'
@@ -217,11 +236,94 @@ def _render_pairs(pairs):
     return "\n".join(chunks)
 
 
-def render_html(pairs, title="Cornell Notes"):
+def _render_summary(pairs, limit=12):
+    """One recall line per cue, taken verbatim from that cue's own note.
+
+    Extractive on purpose: a summary the pipeline invented would be a fact the
+    notes do not contain, which is exactly what the judge is asked to reject.
+    """
+    usable = [p for p in pairs if str(p.get("note") or "").strip()]
+    if not usable:
+        return ""
+    items = []
+    for pair in usable[:limit]:
+        note = " ".join(str(pair.get("note") or "").split())
+        sentence = re.split(r"(?<=[.!?])\s+", note)[0] if note else ""
+        if len(sentence) > 220:
+            sentence = sentence[:217].rstrip() + "..."
+        text = html.escape(sentence) or "&nbsp;"
+        items.append(f"<li><strong>{html.escape(pair['cue'])}</strong> &mdash; {text}</li>")
+    remaining = len(usable) - limit
+    if remaining > 0:
+        items.append(f"<li>{remaining} further cue(s) above.</li>")
+    return (
+        '<section class="summary">'
+        "<h2>Summary &mdash; recall check</h2>"
+        "<ul>" + "".join(items) + "</ul>"
+        "</section>"
+    )
+
+
+_WEEK_DIR_RE = re.compile(r"^week[ _-]?0*(\d{1,2})$", re.IGNORECASE)
+
+
+def _week_label_from_path(path, cleaned):
+    try:
+        rel = Path(path).relative_to(cleaned)
+    except (ValueError, OSError):
+        return ""
+    for part in rel.parts[:-1]:
+        match = _WEEK_DIR_RE.match(part)
+        if match:
+            return f"Week_{int(match.group(1)):02d}"
+    return ""
+
+
+def _coverage_html(rows):
+    """Table of every course week and how many cues it contributed.
+
+    Without it the sheet silently covers fewer weeks than the graph, and a
+    reader cannot tell an empty week from an unnoticed one.
+    """
+    if not rows:
+        return ""
+    body = []
+    for label, count in rows:
+        missing = "" if count else ' class="missing"'
+        note = f"{count} cue(s)" if count else "no retrieved text (Canvas Pages unavailable)"
+        body.append(f"<tr><td>{html.escape(label)}</td><td{missing}>{html.escape(note)}</td></tr>")
+    return (
+        '<section class="coverage">'
+        "<h2>Week coverage</h2>"
+        "<table><thead><tr><th>Week</th><th>Recall cues</th></tr></thead><tbody>"
+        + "".join(body)
+        + "</tbody></table></section>"
+    )
+
+
+def _coverage_rows(workspace, per_week):
+    """Every week the course declares, plus any week that produced notes."""
+    labels = set(per_week)
+    meta_path = Path(workspace) / "01_ingest" / "meta.json"
+    if meta_path.is_file():
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            meta = {}
+        for entry in meta.get("weeks") or []:
+            if isinstance(entry, dict) and entry.get("week"):
+                labels.add(str(entry["week"]))
+    return [(label, per_week.get(label, 0)) for label in sorted(labels)]
+
+
+def render_html(pairs, title="Cornell Notes", coverage=None):
+    usable = [p for p in pairs if str(p.get("note") or "").strip()]
     return _PAGE.format(
         title=html.escape(title),
-        pair_count=len(pairs),
+        pair_count=len(usable),
         pairs=_render_pairs(pairs),
+        summary=_render_summary(pairs),
+        coverage=_coverage_html(coverage or []),
     )
 
 
@@ -254,12 +356,20 @@ def run(workspace: Path, dry_run: bool = False, deps: dict | None = None) -> dic
 
         pairs = []
         used = []
+        per_week = {}
         for note_path in sorted(note_paths, key=str):
-            pairs.extend(parse_pairs(resolved["read_note"](note_path) or ""))
+            note_pairs = parse_pairs(resolved["read_note"](note_path) or "")
+            pairs.extend(note_pairs)
             used.append(str(note_path))
+            label = _week_label_from_path(note_path, cleaned_dir)
+            if label:
+                per_week[label] = per_week.get(label, 0) + sum(
+                    1 for pair in note_pairs if str(pair.get("note") or "").strip()
+                )
 
         inputs["notes"] = used
-        page = render_html(pairs)
+        coverage = _coverage_rows(workspace, per_week)
+        page = render_html(pairs, coverage=coverage)
 
         if dry_run:
             return _payload(

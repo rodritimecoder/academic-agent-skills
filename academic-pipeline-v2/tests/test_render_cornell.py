@@ -73,6 +73,19 @@ class RenderCornellTests(unittest.TestCase):
                 str(workspace / "04_render" / "cornell.html"), result["outputs"][0]["path"]
             )
 
+    def test_renders_a_summary_section_from_the_notes_themselves(self):
+        """The Cornell rubric requires cues, notes AND a summary."""
+        page = render_cornell.render_html(render_cornell.parse_pairs(TWO_NOTES))
+        self.assertIn('class="summary"', page)
+        self.assertIn("Summary", page)
+        # The summary quotes its own note; it must not invent content.
+        self.assertIn("summary &mdash;", page.lower())
+
+    def test_empty_note_bodies_are_not_rendered_as_pairs(self):
+        text = "# Week 1 overview\n\n# Limits\n\nA limit is the value a function approaches.\n"
+        page = render_cornell.render_html(render_cornell.parse_pairs(text))
+        self.assertEqual(page.count('class="pair"'), 1, page)
+
     def test_print_stylesheet_present(self):
         page = render_cornell.render_html(render_cornell.parse_pairs(TWO_NOTES))
         self.assertIn("@media print", page)

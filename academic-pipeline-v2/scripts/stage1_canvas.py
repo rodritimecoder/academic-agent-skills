@@ -54,16 +54,36 @@ def _item_text(item):
     return ""
 
 
+def _frontmatter(fields):
+    """Render a YAML frontmatter block.
+
+    Stage 3 routes notes by reading ``id``, ``week``, ``kind`` and ``title``
+    from this block, so it is written for every item rather than kept in prose
+    the parser would have to guess at.
+    """
+    lines = ["---"]
+    for key, value in fields:
+        text = str(value if value is not None else "").replace("\n", " ").strip()
+        lines.append(f"{key}: {text}")
+    lines.append("---")
+    return "\n".join(lines)
+
+
 def _render_markdown(item, week):
     title = str(item.get("title") or item.get("id") or "untitled")
-    lines = [f"# {title}", ""]
-    lines.append(f"- id: {item.get('id', '')}")
-    lines.append(f"- type: {item.get('type', '')}")
-    lines.append(f"- week: {_week_name(week)}")
-    url = item.get("url")
-    if url:
-        lines.append(f"- url: {url}")
-    lines.append("")
+    kind = str(item.get("kind") or "topic").strip().lower()
+    header = _frontmatter(
+        [
+            ("id", item.get("id", "")),
+            ("title", title),
+            ("week", int(week)),
+            ("kind", kind),
+            ("type", item.get("type", "")),
+            ("url", item.get("url", "")),
+            ("body_status", item.get("body_status", "")),
+        ]
+    )
+    lines = [header, "", f"# {title}", ""]
     body = _item_text(item)
     if body:
         lines.append(body)

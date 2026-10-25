@@ -263,8 +263,53 @@ def gate4_render(workspace, deps):
             continue
         evidence.append(f"gate4_render: {name} present, standalone (no external script src)")
 
+    ok, evidence = _check_week_coverage(workspace, render, ok, evidence)
+
     if ok:
         evidence.append(f"gate4_render: ok - {len(EXPECTED_HTML)} standalone page(s)")
+    return ok, evidence
+
+
+def _declared_weeks(workspace):
+    """Week labels the course declares in 01_ingest/meta.json."""
+    meta_path = Path(workspace) / "01_ingest" / "meta.json"
+    try:
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    weeks = meta.get("weeks") if isinstance(meta, dict) else None
+    return [str(e["week"]) for e in weeks or [] if isinstance(e, dict) and e.get("week")]
+
+
+def _check_week_coverage(workspace, render, ok, evidence):
+    """Every study page must name every week the course has.
+
+    A page that silently drops Week_03 looks complete and is not.  Naming a week
+    with no retrievable text is allowed; leaving it out is not.
+    """
+    weeks = _declared_weeks(workspace)
+    if not weeks:
+        return ok, evidence
+    for name in ("anki.html", "cornell.html"):
+        page = render / name
+        if not page.is_file():
+            continue
+        text = page.read_text(encoding="utf-8", errors="replace")
+        missing = []
+        for label in weeks:
+            match = re.search(r"(\d+)$", label)
+            friendly = "Week %d" % int(match.group(1)) if match else label
+            if label not in text and friendly not in text:
+                missing.append(label)
+        if missing:
+            ok, evidence = _fail(
+                evidence,
+                f"gate4_render: failed - {name} omits week(s): " + ", ".join(missing),
+            )
+        else:
+            evidence.append(
+                f"gate4_render: {name} names all {len(weeks)} declared week(s)"
+            )
     return ok, evidence
 
 
@@ -287,7 +332,20 @@ def _visible_text(path, limit=JUDGE_ARTEFACT_CHARS):
     text = re.sub(r"[ \t\r\f\v]+", " ", text)
     text = re.sub(r"\n\s*\n+", "\n\n", text).strip()
     if len(text) > limit:
-        text = text[:limit] + "\n[...truncated...]"
+        # Keep the head AND the tail: a summary or a static card list lives at
+        # the end of the page, and a head-only cut would hide exactly the part
+        # the rubric asks the judge to check.
+        head = max(0, limit - 1200)
+        tail = 900
+        omitted = len(text) - head - tail
+        if omitted > 0:
+            text = (
+                text[:head].rstrip()
+                + f"\n[... {omitted} characters omitted from the middle of this page ...]\n"
+                + text[-tail:].lstrip()
+            )
+        else:
+            text = text[:limit]
     return text
 
 
@@ -316,13 +374,18 @@ def judge_rubric(workspace):
         "1. Standalone: judge only that each page reads as a complete document.",
         "   Ignore external references - gate4 checks those deterministically.",
         "2. Coverage: graph.html, anki.html and cornell.html are all present,",
-        "   non-empty, and describe the same course weeks.",
+        "   non-empty, and describe the same course weeks. A week the pipeline",
+        "   could not retrieve text for must be named as such on the page;",
+        "   naming a gap is honesty, silently omitting the week is a defect.",
         f"3. Weeks: the pages cover these week directories: {', '.join(weeks) or '(none found)'}.",
         "4. Faithfulness: no invented facts, formulas or citations; content must",
         "   stay consistent with the rendered notes.",
         "5. Anki: cards are atomic (one fact per card) and answerable without",
         "   the graph page open.",
         "6. Cornell: each page carries cues, notes and a summary section.",
+        "   A page longer than the excerpt budget shows its head and tail with",
+        "   an explicit 'characters omitted' marker; that omission is not a",
+        "   defect, and missing artefacts are already caught before you run.",
         "",
         "Answer with exactly one word on the first line - PASS or FAIL - then a",
         "single short line of reason. Reply FAIL if any artefact is missing.",

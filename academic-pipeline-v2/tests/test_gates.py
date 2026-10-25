@@ -12,7 +12,10 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import gates  # noqa: E402
 
-HTML = "<!doctype html>\n<html><body><h1>{t}</h1></body></html>\n"
+HTML = (
+    "<!doctype html>\n<html><body><h1>{t}</h1>"
+    "<p>Covering Week_01 of the course.</p></body></html>\n"
+)
 
 META = {
     "course": "48520",
@@ -114,6 +117,19 @@ class GatesTest(unittest.TestCase):
             statuses = {g["gate"]: g["status"] for g in written["gates"]}
             self.assertEqual(statuses["gate4_render"], "failed")
             self.assertEqual(statuses["gate1_assets"], "ok")
+
+    def test_gate4_fails_when_a_page_omits_a_declared_week(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = build_workspace(Path(tmp) / "ws")
+            anki = Path(ws) / "04_render" / "anki.html"
+            anki.write_text("<!doctype html>\n<html><body><h1>Anki Hub</h1></body></html>\n", encoding="utf-8")
+
+            result = gates.run(ws, deps={"judge": lambda _ws: {"accepted": True}})
+
+            self.assertFalse(result["ok"], result)
+            gate4 = [g for g in result["gates"] if g["gate"] == "gate4_render"][0]
+            self.assertEqual(gate4["status"], "failed")
+            self.assertIn("Week_01", "\n".join(result["evidence"]))
 
     def test_missing_judge_is_skipped_not_passed(self):
         with tempfile.TemporaryDirectory() as tmp:

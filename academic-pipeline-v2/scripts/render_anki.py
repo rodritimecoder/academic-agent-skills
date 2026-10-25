@@ -20,9 +20,12 @@ Usage:
 """
 
 import argparse
+import html
 import json
 import re
 from datetime import datetime, timezone
+
+from anki_cards import extract_cards
 from pathlib import Path
 
 STAGE = 4
@@ -69,33 +72,19 @@ def _deck_id(name):
     return slug or DEFAULT_DECK
 
 
-def extract_cards(text):
-    """Return [{'q': str, 'a': str}] - one card per markdown heading."""
-    cards = []
-    lines = text.splitlines()
-    for i, line in enumerate(lines):
-        if not line.lstrip().startswith("#"):
-            continue
-        question = _heading_text(line)
-        if not question:
-            continue
-        answer_lines = []
-        j = i + 1
-        while j < len(lines) and not lines[j].strip():
-            j += 1
-        while j < len(lines) and lines[j].strip() and not lines[j].lstrip().startswith("#"):
-            answer_lines.append(lines[j].strip())
-            j += 1
-        cards.append({"q": question, "a": " ".join(answer_lines)})
-    return cards
-
-
 def _deck_folder(cleaned, path):
-    """Week directory (first relative part), or '' for a flat notes tree."""
+    """Week directory (anywhere in the path), or '' for a flat notes tree.
+
+    Stage 1 nests notes as ``markdown/Week_NN/``, so the week is not always the
+    first component; taking parts[0] put every card in one "markdown" deck.
+    """
     try:
         rel = path.relative_to(cleaned)
     except ValueError:
         return ""
+    for part in rel.parts[:-1]:
+        if _WEEK_RE.match(part):
+            return part
     return rel.parts[0] if len(rel.parts) > 1 else ""
 
 
@@ -106,8 +95,13 @@ def _sort_key(deck):
     return (1, 0, deck["title"].lower())
 
 
-def collect(cleaned):
-    """Return ordered decks: [{'name', 'title', 'cards'}] - one per week dir."""
+def collect(cleaned, meta_weeks=None):
+    """Return ordered decks: [{'name', 'title', 'cards'}] - one per week dir.
+
+    ``meta_weeks`` forces a deck for every week the course has, even with no
+    retrieved text: an absent deck makes this page cover fewer weeks than the
+    graph, which is a coverage lie rather than a small omission.
+    """
     cleaned = Path(cleaned)
     if not cleaned.is_dir():
         return []
@@ -132,7 +126,18 @@ def collect(cleaned):
         for card in extract_cards(text):
             card["src"] = source
             decks[key]["cards"].append(card)
-    result = [decks[key] for key in order if decks[key]["cards"]]
+
+    for label in meta_weeks or []:
+        if label in decks:
+            continue
+        decks[label] = {
+            "name": _deck_id(label),
+            "title": week_label(label),
+            "cards": [],
+        }
+        order.append(label)
+
+    result = [decks[key] for key in order]
     return sorted(result, key=_sort_key)
 
 
@@ -169,7 +174,11 @@ main{max-width:820px;margin:0 auto;padding:24px 20px 60px}
 #correct:hover{background:#12351f}
 #incorrect:hover{background:#3d1418}
 .kbd{opacity:.6;font-size:12px;border:1px solid var(--line);border-radius:4px;padding:0 4px;margin-left:4px}
+.static{margin-top:28px;border-top:1px solid var(--line);padding-top:16px}
+.static h2{font-size:15px;margin:0 0 8px}.static h3{font-size:13px;color:var(--dim);margin:14px 0 6px}
+.static ol{padding-left:20px;margin:0}.static li{margin:6px 0}.static .sq{font-weight:600;margin:0}.static .sa{color:var(--dim);margin:2px 0 0;white-space:pre-wrap}
 </style>
+
 </head>
 <body>
 <header>
@@ -198,8 +207,11 @@ main{max-width:820px;margin:0 auto;padding:24px 20px 60px}
     <button id="incorrect" type="button" disabled>&#10007; Incorrect<span class="kbd">2</span></button>
     <button id="correct" type="button" disabled>&#10003; Correct<span class="kbd">1</span></button>
   </div>
-</main>
-<script>
+  <section class="static">
+    <h2>All cards &mdash; static list</h2>
+    __STATIC__
+  </section>
+</main><script>
 var DATA = __DATA__;
 var state = {deck: "", index: 0, flipped: false, reviewed: {}, scores: {}};
 function el(id) { return document.getElementById(id); }
@@ -383,8 +395,40 @@ render();
 """
 
 
+def _static_list(decks):
+    """Every card as plain HTML, so the page is complete without JS."""
+    if not decks:
+        return '<p class="dim">No cards found in 02_sift/cleaned.</p>'
+    chunks = []
+    for deck in decks:
+        cards = deck.get("cards") or []
+        label = html.escape(str(deck.get("title") or deck.get("name") or "deck"))
+        chunks.append('<h3>%s &mdash; %d cards</h3><ol>' % (label, len(cards)))
+        if not cards:
+            chunks.append('<li><p class="sa">No retrieved text for this week.</p></li>')
+        for card in cards:
+            chunks.append(
+                '<li><p class="sq">%s</p><p class="sa">%s</p></li>'
+                % (html.escape(str(card.get("q") or "")), html.escape(str(card.get("a") or "")))
+            )
+        chunks.append("</ol>")
+    return "\n".join(chunks)
+
+
+def _meta_weeks(workspace):
+    meta_path = Path(workspace) / "01_ingest" / "meta.json"
+    try:
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    weeks = meta.get("weeks") if isinstance(meta, dict) else None
+    return [str(e["week"]) for e in weeks or [] if isinstance(e, dict) and e.get("week")]
+
+
 def render_html(decks):
-    return PAGE.replace("__DATA__", json.dumps(decks, ensure_ascii=False))
+    return PAGE.replace("__DATA__", json.dumps(decks, ensure_ascii=False)).replace(
+        "__STATIC__", _static_list(decks)
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -399,7 +443,7 @@ def run(workspace, dry_run=False, deps=None):
     errors = []
 
     try:
-        decks = collect(cleaned)
+        decks = collect(cleaned, meta_weeks=_meta_weeks(workspace))
     except Exception as exc:  # noqa: BLE001 - serialize as evidence
         decks = []
         errors.append("collect failed: %s" % exc)

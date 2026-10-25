@@ -147,6 +147,57 @@ class Stage1ZoomTests(unittest.TestCase):
         self.assertEqual(result["inputs"]["counts"]["transcripts"], 2)
         self.assertEqual(result["inputs"]["counts"]["keyframes"], 4)
 
+    def test_zoom_lane_preserves_canvas_nodes_already_in_meta(self):
+        """A second lane must merge into meta.json, never replace it.
+
+        Regression: stage1_zoom used to write meta.json outright, so running it
+        after stage1_canvas deleted every Canvas node (0 weeks left).
+        """
+        ingest = self.workspace / "01_ingest"
+        ingest.mkdir(parents=True, exist_ok=True)
+        prior = {
+            "course": "ELEC101",
+            "weeks": [
+                {
+                    "week": "Week_01",
+                    "topic": "Basic Laws",
+                    "tutorial": "Tutorial Week 1",
+                    "nodes": [{"id": "canvas-1", "label": "Week 1 notes", "kind": "page"}],
+                }
+            ],
+        }
+        (ingest / "meta.json").write_text(json.dumps(prior, indent=2) + "\n", encoding="utf-8")
+
+        deps, _calls = self.fake_deps()
+        result = self.module.run(self.workspace, deps=deps)
+        self.assertEqual(result["status"], "ok", result["errors"])
+
+        meta = json.loads((ingest / "meta.json").read_text(encoding="utf-8"))
+        self.assertTrue(validate(META_SCHEMA, meta), meta)
+        self.assertEqual(meta["course"], "ELEC101")
+        week1 = next(w for w in meta["weeks"] if w["week"] == "Week_01")
+        ids = [n["id"] for n in week1["nodes"]]
+        self.assertIn("canvas-1", ids, "the Canvas node was deleted by the Zoom lane")
+        self.assertIn("rec-abc123", ids)
+        self.assertEqual(week1["topic"], "Basic Laws")
+        self.assertEqual(week1["tutorial"], "Tutorial Week 1")
+        self.assertIn("Week_02", [w["week"] for w in meta["weeks"]])
+
+    def test_no_recordings_keeps_existing_meta_untouched(self):
+        """Zero recordings must not rewrite a meta.json that already has nodes."""
+        ingest = self.workspace / "01_ingest"
+        ingest.mkdir(parents=True, exist_ok=True)
+        prior = {"course": "ELEC101", "weeks": [{"week": "Week_01", "topic": "x", "tutorial": "", "nodes": []}]}
+        path = ingest / "meta.json"
+        path.write_text(json.dumps(prior, indent=2) + "\n", encoding="utf-8")
+        before = path.read_text(encoding="utf-8")
+
+        deps = {"list_recordings": lambda: [], "fetch": lambda _id: {}, "course": "ELEC101"}
+        result = self.module.run(self.workspace, deps=deps)
+        self.assertEqual(result["status"], "ok", result["errors"])
+        self.assertEqual(path.read_text(encoding="utf-8"), before)
+        self.assertTrue(any("kept existing" in line for line in result["evidence"]), result["evidence"])
+
     def test_no_video_files_written(self):
         deps, _ = self.fake_deps()
         self.module.run(self.workspace, deps=deps)

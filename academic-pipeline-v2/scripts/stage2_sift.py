@@ -39,6 +39,9 @@ SIFT_DIRNAME = "02_sift"
 CLEANED_DIRNAME = "cleaned"
 REPORT_NAME = "sift_report.json"
 REVIEW_THRESHOLD = 0.75
+
+# Scaffolding the dispatcher writes into 01_ingest: never course material.
+PIPELINE_ARTEFACT_NAMES = {"CONTEXT.md", "STATE.md", ".agent_state.json"}
 _WS = re.compile(r"\s+")
 
 
@@ -54,6 +57,27 @@ def normalise(text: str) -> str:
 
 def fingerprint(text: str) -> str:
     return hashlib.sha256(normalise(text).encode("utf-8")).hexdigest()
+
+
+def note_id(text: str) -> str | None:
+    """Return the ``id`` a note declares in its own frontmatter, if any.
+
+    Stage 3 routes by the id printed inside the note, so the report has to use
+    the same id.  Only a frontmatter block at the very top counts; a stray
+    ``id:`` line in the body is not an identity.
+    """
+    if not text.startswith("---"):
+        return None
+    end = text.find("\n---", 3)
+    if end == -1:
+        return None
+    for line in text[3:end].strip("\n").splitlines():
+        key, sep, value = line.partition(":")
+        if sep and key.strip() == "id":
+            value = value.strip()
+            if value:
+                return value
+    return None
 
 
 def _payload(started_at, status, inputs, outputs, evidence, errors):
@@ -128,7 +152,11 @@ def run(workspace: Path, dry_run: bool = False, deps: dict | None = None) -> dic
         )
         return _payload(started_at, "skipped", inputs, outputs, evidence, errors)
 
-    files = sorted(p for p in ingest_dir.rglob("*.md") if p.is_file())
+    files = sorted(
+        p
+        for p in ingest_dir.rglob("*.md")
+        if p.is_file() and p.name not in PIPELINE_ARTEFACT_NAMES
+    )
     evidence.append({"check": "ingest_scan", "status": "ok", "files": len(files)})
 
     classify = deps.get("classify")
@@ -158,7 +186,7 @@ def run(workspace: Path, dry_run: bool = False, deps: dict | None = None) -> dic
             continue
 
         fp = fingerprint(text)
-        item_id = "md-" + fp[:12]
+        item_id = note_id(text) or ("md-" + fp[:12])
         decisions: dict = {
             "is_duplicate": fp in seen,
             "duplicate_of": seen.get(fp),

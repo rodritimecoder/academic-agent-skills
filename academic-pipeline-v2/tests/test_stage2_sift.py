@@ -39,6 +39,34 @@ class Stage2SiftTests(unittest.TestCase):
     def tearDown(self):
         self._tmp.cleanup()
 
+    def test_pipeline_scaffolding_is_not_sifted_as_course_material(self):
+        """01_ingest/CONTEXT.md is written by the dispatcher, not by the course.
+
+        Regression: it used to be copied into 02_sift/cleaned and rendered as a
+        note, so every study sheet opened with "Stage 1: Ingest Folder".
+        """
+        _write(self.ingest / "CONTEXT.md", "# Stage 1: Ingest\n\nFolder: 01_ingest\n")
+        _write(self.ingest / "markdown" / "week1.md", "Limits notes\n")
+
+        result = stage2_sift.run(self.ws)
+        self.assertEqual(result["status"], "ok", result["errors"])
+        report = json.loads((self.ws / "02_sift" / "sift_report.json").read_text())
+        sources = [i["source"] for i in report["items"]]
+        self.assertNotIn("CONTEXT.md", sources)
+        self.assertIn("markdown/week1.md", sources)
+        self.assertFalse((self.ws / "02_sift" / "cleaned" / "CONTEXT.md").exists())
+
+    def test_frontmatter_id_is_the_report_id(self):
+        """Stage 3 matches notes by their own frontmatter id, so the report must too."""
+        _write(
+            self.ingest / "markdown" / "week1.md",
+            "---\nid: canvas-42\ntitle: Limits\nweek: 1\nkind: topic\n---\n\n# Limits\n\nA limit.\n",
+        )
+        result = stage2_sift.run(self.ws)
+        self.assertEqual(result["status"], "ok", result["errors"])
+        report = json.loads((self.ws / "02_sift" / "sift_report.json").read_text())
+        self.assertEqual([i["id"] for i in report["items"]], ["canvas-42"])
+
     def test_fingerprint_ignores_whitespace_and_case(self):
         a = stage2_sift.fingerprint("Hello   World\n")
         b = stage2_sift.fingerprint("hello world")
