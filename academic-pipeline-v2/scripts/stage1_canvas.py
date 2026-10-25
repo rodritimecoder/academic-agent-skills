@@ -139,6 +139,7 @@ def _payload(started_at, inputs, status, outputs, evidence, errors):
     return {
         "stage": STAGE,
         "stage_name": STAGE_NAME,
+        "step_type": "P",
         "status": status,
         "started_at": started_at,
         "finished_at": _now(),

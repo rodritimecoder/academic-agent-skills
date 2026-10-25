@@ -31,6 +31,7 @@ def _payload(status, started_at, inputs=None, outputs=None, evidence=None, error
     return {
         "stage": STAGE,
         "stage_name": STAGE_NAME,
+        "step_type": "D",
         "status": status,
         "started_at": started_at,
         "finished_at": _now(),

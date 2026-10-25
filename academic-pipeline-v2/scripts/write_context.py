@@ -268,6 +268,7 @@ def run(workspace, dry_run=False, deps=None):
     return {
         "stage": 5,
         "stage_name": "verify",
+        "step_type": "D",
         "status": status,
         "started_at": started_at,
         "finished_at": _now(),

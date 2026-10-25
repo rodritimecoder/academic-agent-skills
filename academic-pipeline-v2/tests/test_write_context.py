@@ -141,10 +141,10 @@ class WriteContextTests(unittest.TestCase):
         payload = write_context.run(self.workspace)
         validate(self.schema, payload)
         expected = {
-            "stage", "stage_name", "status", "started_at", "finished_at",
+            "stage", "stage_name", "step_type", "status", "started_at", "finished_at",
             "inputs", "outputs", "evidence", "errors",
         }
-        self.assertEqual(len(payload), 9)  # step.schema.json requires nine keys
+        self.assertEqual(len(payload), 10)  # step.schema.json requires ten keys
         self.assertEqual(set(payload), expected)
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["errors"], [])

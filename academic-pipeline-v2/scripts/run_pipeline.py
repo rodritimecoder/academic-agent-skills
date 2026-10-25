@@ -14,6 +14,10 @@ their step payloads into ONE ``05_verify/step_NN.json`` evidence file:
 A missing lane module never breaks ``--help``: imports happen inside the
 handlers only.  Evidence is written on success *and* failure, and the process
 exits 0 only when the merged status is ``ok``.  ``--dry-run`` writes nothing.
+
+Every written step is tagged with ``step_type`` (``D`` deterministic, ``P``
+probabilistic, ``H`` human) per ``STAGE_STEP_TYPES``; see
+``contracts/step.schema.json``.
 """
 
 import argparse
@@ -36,6 +40,22 @@ STAGE_NAMES = {
 STAGE_CHOICES = ["stage1", "stage2", "stage3", "stage4", "stage5", "all"]
 
 VALID_STATUSES = ("ok", "failed", "skipped")
+
+# Every stage is tagged with the kind of work it performs, so a step file says
+# *who* produced it: ``D`` = deterministic code, ``P`` = probabilistic model
+# call, ``H`` = human.  The tag is stamped by the dispatcher, never by a lane,
+# and is written on success, failure and skip alike.  Stage 5 is ``P`` because
+# its final gate is a fresh-context judge; when no judge is available the tag
+# stays ``P`` and the step is recorded as ``skipped``.
+VALID_STEP_TYPES = ("D", "P", "H")
+
+STAGE_STEP_TYPES = {
+    1: "P",  # ingest: model triage of canvas items and recordings
+    2: "P",  # sift: markdown classifier
+    3: "D",  # structure: pure code, no model calls
+    4: "D",  # render: pure templating, no model calls
+    5: "P",  # verify: fresh-context judge (skipped, not downgraded, if absent)
+}
 
 # What each stage really reads, writes and must be checked for.  Derived from
 # SKILL.md's stage breakdown and the JSON contracts in contracts/ (and kept in
@@ -254,9 +274,18 @@ def _merge_results(stage_number, started_at, parts, workspace=None):
     else:
         status = "failed"
 
+    if stage_number == 5 and status == "skipped":
+        # Keep the step_type (the judge is still the intended worker) and make
+        # the skip explicit in the evidence, so a missing judge never reads ok.
+        evidence.append(
+            "stage5: step_type P retained, step recorded as skipped - "
+            "no fresh-context judge supplied"
+        )
+
     payload = {
         "stage": stage_number,
         "stage_name": STAGE_NAMES[stage_number],
+        "step_type": STAGE_STEP_TYPES.get(stage_number, "D"),
         "status": status,
         "started_at": started_at,
         "finished_at": _now(),
@@ -269,10 +298,23 @@ def _merge_results(stage_number, started_at, parts, workspace=None):
     return payload
 
 
+def _stamp_step_type(payload, stage_number):
+    """Guarantee ``step_type`` on any payload about to be written.
+
+    Lanes never set it; the dispatcher owns it.  This is the last line of
+    defence so a step file can never be written without a contract-valid tag,
+    even on the failure path.
+    """
+    if payload.get("step_type") not in VALID_STEP_TYPES:
+        payload["step_type"] = STAGE_STEP_TYPES.get(stage_number, "D")
+    return payload
+
+
 def _write_step(workspace, stage_number, payload):
     """Serialize a merged step payload into 05_verify/step_NN.json."""
     step_path = Path(workspace) / "05_verify" / f"step_{stage_number:02d}.json"
     step_path.parent.mkdir(parents=True, exist_ok=True)
+    payload = _stamp_step_type(payload, stage_number)
     step_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     return step_path
 
@@ -308,7 +350,7 @@ def _call(module_name, workspace, dry_run, deps=None, **kwargs):
             "evidence": [f"{module_name}: skipped (no dry-run support)"],
             "errors": [],
         }
-    if _accepts(run, "deps"):
+    if "deps" not in call_kwargs and _accepts(run, "deps"):
         call_kwargs["deps"] = deps
 
     try:
@@ -375,8 +417,17 @@ def stage4(workspace, dry_run=False):
 
 
 def stage5(workspace, dry_run=False):
+    """Verify: four disk gates plus the fresh-context judge.
+
+    The judge is opt-in.  Set ``PIPELINE_CLI_JUDGE=1`` to wire
+    ``gates.cli_judge`` (the opencode CLI) into the gate; without it the judge
+    gate is skipped, which is what tests and offline runs rely on.
+    """
     _write_stage_context(workspace, 5, dry_run)
-    return _run_lanes(workspace, dry_run, [("gates", {})])
+    deps = {}
+    if os.environ.get("PIPELINE_CLI_JUDGE", "").strip().lower() in ("1", "true", "yes"):
+        deps["use_cli_judge"] = True
+    return _run_lanes(workspace, dry_run, [("gates", {"deps": deps})])
 
 
 STAGE_FUNCTIONS = {
@@ -398,6 +449,7 @@ def _run_one(workspace, stage_number, dry_run=False):
         payload = {
             "stage": stage_number,
             "stage_name": STAGE_NAMES[stage_number],
+            "step_type": STAGE_STEP_TYPES.get(stage_number, "D"),
             "status": "failed",
             "started_at": started_at,
             "finished_at": _now(),

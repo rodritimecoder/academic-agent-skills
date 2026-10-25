@@ -9,6 +9,7 @@ no services, no external tools.
 import importlib.util
 import io
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -20,6 +21,11 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 RUNNER = SCRIPTS / "run_pipeline.py"
 VALID_STATUSES = {"ok", "failed", "skipped"}
+VALID_STEP_TYPES = {"D", "P", "H"}
+STAGE_STEP_TYPES = {1: "P", 2: "P", 3: "D", 4: "D", 5: "P"}
+
+sys.path.insert(0, str(SCRIPTS))
+import gates  # noqa: E402  - stage 5 gate module under test
 
 META = {
     "course": "MATH101",
@@ -151,6 +157,8 @@ class PipelineE2ETests(unittest.TestCase):
             self.assertTrue(path.is_file(), f"missing {path}: {err}")
             self.assertIn("status", payload)
             self.assertIn(payload["status"], VALID_STATUSES, payload)
+            self.assertIn(payload.get("step_type"), VALID_STEP_TYPES, payload)
+            self.assertEqual(payload["step_type"], STAGE_STEP_TYPES[number], payload)
             if number == 3:
                 context = Path(self.workspace) / "03_structure" / "CONTEXT.md"
                 self.assertTrue(context.is_file(), f"missing {context}")
@@ -208,6 +216,105 @@ class PipelineE2ETests(unittest.TestCase):
         why = "\n".join(payload.get("evidence", []) + payload.get("errors", []))
         self.assertIn("gate5_judge: skipped", why)
         self.assertIn("judge", why.lower())
+        # The tag stays P (the judge is the intended worker); only status skips.
+        self.assertEqual(payload.get("step_type"), "P", payload)
+        self.assertIn("step_type P retained", why)
+
+    def _prepare_gate_workspace(self):
+        self.assertEqual(self._run("stage3")[0], 0)
+        code, _out, err = self._run("stage4")
+        self.assertEqual(code, 0, err)
+        return Path(self.workspace)
+
+    def test_gate5_skipped_when_no_judge_is_given(self):
+        ws = self._prepare_gate_workspace()
+
+        result = gates.run(ws, deps={})
+
+        self.assertEqual(result["status"], "skipped", result)
+        self.assertFalse(result["ok"], result)
+        gate5 = [g for g in result["gates"] if g["gate"] == "gate5_judge"]
+        self.assertEqual(gate5[0]["status"], "skipped", result)
+        self.assertEqual(result["step_type"], "P", result)
+
+    def test_gate5_passes_with_fake_judge_accepting(self):
+        ws = self._prepare_gate_workspace()
+        seen = []
+
+        def judge(workspace):
+            seen.append(Path(workspace))
+            return True
+
+        result = gates.run(ws, deps={"judge": judge})
+
+        self.assertEqual(result["status"], "ok", result)
+        self.assertTrue(result["ok"], result)
+        self.assertEqual(seen, [ws], seen)
+        gate5 = [g for g in result["gates"] if g["gate"] == "gate5_judge"]
+        self.assertEqual(gate5[0]["status"], "ok", result)
+
+    def test_gate5_fails_with_fake_judge_rejecting(self):
+        ws = self._prepare_gate_workspace()
+
+        result = gates.run(ws, deps={"judge": lambda _ws: False})
+
+        self.assertEqual(result["status"], "failed", result)
+        self.assertFalse(result["ok"], result)
+        gate5 = [g for g in result["gates"] if g["gate"] == "gate5_judge"]
+        self.assertEqual(gate5[0]["status"], "failed", result)
+        self.assertIn(
+            "gate5_judge: failed", "\n".join(result["evidence"]), result
+        )
+
+    def test_step_type_is_stamped_on_failure(self):
+        # Malformed meta.json makes stage3 (a deterministic stage) fail fast.
+        meta = Path(self.workspace) / "01_ingest" / "meta.json"
+        meta.write_text("{ not json", encoding="utf-8")
+
+        code, _out, err = self._run("stage3")
+        path, payload = read_step(self.workspace, 3)
+
+        self.assertTrue(path.is_file(), err)
+        self.assertEqual(payload["status"], "failed", payload)
+        self.assertNotEqual(code, 0, "a failed stage must not exit green")
+        self.assertEqual(payload["step_type"], "D", payload)
+
+    def test_judge_rubric_covers_every_render_artefact(self):
+        ws = self._prepare_gate_workspace()
+
+        rubric = gates.judge_rubric(ws)
+
+        for name in ("graph.html", "anki.html", "cornell.html"):
+            self.assertIn(name, rubric)
+        self.assertIn("PASS", rubric)
+        self.assertIn("FAIL", rubric)
+        # The parser must read the verdict, not the echoed rubric.
+        self.assertTrue(gates._parse_judge_verdict("Reasoning...\nPASS\nfaithful"))
+        self.assertFalse(gates._parse_judge_verdict("Reasoning...\nFAIL\ninvented"))
+        self.assertFalse(gates._parse_judge_verdict("no verdict here"))
+
+    def test_cli_judge_is_opt_in_via_env_and_swappable(self):
+        """PIPELINE_CLI_JUDGE wires gates.cli_judge; the fake stands in for it."""
+        ws = self._prepare_gate_workspace()
+        original = gates.cli_judge
+        gates.cli_judge = lambda _ws: {"accepted": True, "reason": "stub judge"}
+        previous = os.environ.get("PIPELINE_CLI_JUDGE")
+        os.environ["PIPELINE_CLI_JUDGE"] = "1"
+        try:
+            code, _out, err = self._run("stage5")
+        finally:
+            gates.cli_judge = original
+            if previous is None:
+                os.environ.pop("PIPELINE_CLI_JUDGE", None)
+            else:
+                os.environ["PIPELINE_CLI_JUDGE"] = previous
+
+        _path, payload = read_step(ws, 5)
+        self.assertEqual(code, 0, err)
+        self.assertEqual(payload["status"], "ok", payload)
+        self.assertEqual(payload["step_type"], "P", payload)
+        gate5 = [g for g in payload.get("gates", []) if g.get("gate") == "gate5_judge"]
+        self.assertEqual(gate5[0]["status"], "ok", payload)
 
     def test_stage5_fails_when_a_render_file_is_deleted(self):
         self.assertEqual(self._run("stage3")[0], 0)

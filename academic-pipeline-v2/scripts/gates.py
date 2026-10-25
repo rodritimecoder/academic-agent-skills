@@ -11,17 +11,28 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
 STAGE = 5
 STAGE_NAME = "verify"
+STEP_TYPE = "P"  # the judge is a model call: probabilistic
 STEP_FILE = ("05_verify", "step_05.json")
 
 EXPECTED_HTML = ("graph.html", "anki.html", "cornell.html")
 CONFIDENCE_FLOOR = 0.3
 CONTRACTS = Path(__file__).resolve().parents[1] / "contracts"
 META_SCHEMA = CONTRACTS / "meta.schema.json"
+
+# Fresh-context judge invoked through the local opencode CLI.  Kept as module
+# constants so a caller can see exactly what will be shelled.
+JUDGE_BIN = "opencode"
+JUDGE_AGENT = "judge"
+JUDGE_MODEL = "opencode-go/claude-haiku-5-5"
+JUDGE_TIMEOUT = 300
+JUDGE_ARTEFACT_CHARS = 4000
 
 _EXTERNAL_SCRIPT = re.compile(
     r"""<script\b[^>]*\bsrc\s*=\s*["']?\s*(?:https?:)?//""", re.IGNORECASE
@@ -258,11 +269,138 @@ def gate4_render(workspace, deps):
 
 
 # --------------------------------------------------------------------------- #
-# gate 5 - fresh-context judge via deps["judge"] (missing dep -> skipped)
+# gate 5 - fresh-context judge (deps["judge"], or opt-in cli_judge)
 # --------------------------------------------------------------------------- #
+def _visible_text(path, limit=JUDGE_ARTEFACT_CHARS):
+    """Flatten one HTML artefact to the text a judge needs to read."""
+    try:
+        raw = Path(path).read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        return f"<unreadable: {exc}>"
+    raw = re.sub(
+        r"<(script|style)\b[^>]*>.*?</\1>",
+        " ",
+        raw,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    text = re.sub(r"<[^>]+>", " ", raw)
+    text = re.sub(r"[ \t\r\f\v]+", " ", text)
+    text = re.sub(r"\n\s*\n+", "\n\n", text).strip()
+    if len(text) > limit:
+        text = text[:limit] + "\n[...truncated...]"
+    return text
+
+
+def judge_rubric(workspace):
+    """Assemble the fresh-context judge prompt from the render artefacts.
+
+    Only disk state is read, so this is safe to call in tests: it never shells
+    anything and never touches the network.
+    """
+    workspace = Path(workspace)
+    render = workspace / "04_render"
+    weeks = []
+    weeks_dir = workspace / "03_structure"
+    if weeks_dir.is_dir():
+        for course in sorted(p for p in weeks_dir.iterdir() if p.is_dir()):
+            week_root = course / "01_weeks"
+            if week_root.is_dir():
+                weeks = sorted(p.name for p in week_root.iterdir() if p.is_dir())
+                break
+
+    lines = [
+        "You are an independent, fresh-context judge for a study-material pipeline.",
+        "You have no memory of producing these artefacts. Judge only what is below.",
+        "",
+        "Rubric - check every item:",
+        "1. Standalone: judge only that each page reads as a complete document.",
+        "   Ignore external references - gate4 checks those deterministically.",
+        "2. Coverage: graph.html, anki.html and cornell.html are all present,",
+        "   non-empty, and describe the same course weeks.",
+        f"3. Weeks: the pages cover these week directories: {', '.join(weeks) or '(none found)'}.",
+        "4. Faithfulness: no invented facts, formulas or citations; content must",
+        "   stay consistent with the rendered notes.",
+        "5. Anki: cards are atomic (one fact per card) and answerable without",
+        "   the graph page open.",
+        "6. Cornell: each page carries cues, notes and a summary section.",
+        "",
+        "Answer with exactly one word on the first line - PASS or FAIL - then a",
+        "single short line of reason. Reply FAIL if any artefact is missing.",
+        "",
+    ]
+    for name in EXPECTED_HTML:
+        page = render / name
+        lines.append(f"===== {name} =====")
+        if not page.is_file():
+            lines.append("MISSING - this artefact was not rendered.")
+        else:
+            lines.append(_visible_text(page))
+        lines.append("")
+    return "\n".join(lines)
+
+
+def _parse_judge_verdict(stdout):
+    """True only when the judge's last PASS/FAIL token is PASS.
+
+    The rubric itself contains the words PASS and FAIL, so an echoed prompt is
+    harmless: the last token is the verdict.  No token at all means not
+    accepted.
+    """
+    if not isinstance(stdout, str):
+        return False
+    tokens = re.findall(r"\b(PASS|FAIL)\b", stdout, re.IGNORECASE)
+    if not tokens:
+        return False
+    return tokens[-1].upper() == "PASS"
+
+
+def cli_judge(workspace):
+    """Fresh-context judge backed by the local ``opencode`` CLI.
+
+    Shells ``opencode run --standalone --agent judge -m
+    opencode-go/claude-haiku-5-5`` with a rubric built from the render
+    artefacts (see :func:`judge_rubric`) and parses PASS/FAIL from stdout.
+
+    Contract: returns ``True`` only on an explicit PASS.  A missing binary, a
+    non-zero exit, a timeout, undecodable output or a missing verdict all
+    return ``False``.  It never raises and never retries.
+    """
+    try:
+        if shutil.which(JUDGE_BIN) is None:
+            return False
+        rubric = judge_rubric(workspace)
+        command = [
+            JUDGE_BIN,
+            "run",
+            "--standalone",
+            "--agent",
+            JUDGE_AGENT,
+            "-m",
+            JUDGE_MODEL,
+            rubric,
+        ]
+        completed = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=JUDGE_TIMEOUT,
+            check=False,
+        )
+        if completed.returncode != 0:
+            return False
+        return _parse_judge_verdict(completed.stdout or "")
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return False
+    except Exception:  # noqa: BLE001 - a judge is a dep, a dep never crashes a gate
+        return False
+
+
 def gate5_judge(workspace, deps):
     evidence = []
-    judge = (deps or {}).get("judge")
+    deps = deps or {}
+    judge = deps.get("judge")
+    if judge is None and deps.get("use_cli_judge"):
+        judge = cli_judge
     if judge is None:
         evidence.append(
             "gate5_judge: skipped - missing dependency: no fresh-context judge "
@@ -305,7 +443,13 @@ GATES = (
 # runner
 # --------------------------------------------------------------------------- #
 def run(workspace, dry_run=False, deps=None):
-    """Run all five gates, write 05_verify/step_05.json, return a step payload."""
+    """Run all five gates, write 05_verify/step_05.json, return a step payload.
+
+    Gate 5 is dependency-driven: pass ``deps={"judge": callable}`` for a fake or
+    custom judge, or ``deps={"use_cli_judge": True}`` to wire in
+    :func:`cli_judge`.  With neither, gate 5 is skipped - tests never shell out
+    and never touch the network.
+    """
     workspace = Path(workspace)
     deps = deps or {}
     started_at = _now()
@@ -357,6 +501,7 @@ def run(workspace, dry_run=False, deps=None):
         payload = {
             "stage": STAGE,
             "stage_name": STAGE_NAME,
+            "step_type": STEP_TYPE,
             "status": status,
             "started_at": started_at,
             "finished_at": _now(),
@@ -380,6 +525,7 @@ def run(workspace, dry_run=False, deps=None):
         payload = {
             "stage": STAGE,
             "stage_name": STAGE_NAME,
+            "step_type": STEP_TYPE,
             "status": status,
             "started_at": started_at,
             "finished_at": _now(),

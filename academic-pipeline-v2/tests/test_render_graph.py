@@ -39,6 +39,16 @@ META = {
 }
 
 
+MATCH_SCRIPT = r'<script id="%s" type="application/json">(.*?)</script>'
+
+
+def _embedded_json(page: str, element_id: str):
+    match = re.search(MATCH_SCRIPT % re.escape(element_id), page, flags=re.S)
+    if match is None:
+        raise AssertionError("missing embedded JSON block %r" % element_id)
+    return json.loads(match.group(1).replace("<\\/", "</"))
+
+
 class RenderGraphTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -62,6 +72,42 @@ class RenderGraphTest(unittest.TestCase):
     def test_contains_every_node_id(self):
         for node_id in NODE_IDS:
             self.assertIn(node_id, self.html, "missing node id %r" % node_id)
+
+    def test_week_chip_per_week(self):
+        weeks = [week["week"] for week in META["weeks"]]
+        self.assertIn('data-week="*"', self.html, "missing all-weeks chip")
+        for week in weeks:
+            self.assertIn('data-week="%s"' % week, self.html, "missing chip for %r" % week)
+        chips = re.findall(r'class="chip[^"]*"[^>]*data-week="[^"]+"', self.html)
+        self.assertEqual(len(chips), len(weeks) + 1, "expected one chip per week plus all-weeks")
+
+    def test_week_chips_filter_graph(self):
+        # Every node and every edge carries the week key the chips filter on.
+        node_weeks = re.findall(r'class="node"[^>]*data-week="([^"]+)"', self.html)
+        self.assertEqual(sorted(node_weeks), sorted(["Week 01", "Week 01", "Week 02"]))
+        self.assertIn('classList.toggle("off"', self.html)
+
+    def test_edges_drawn_to_week_centre(self):
+        self.assertIn("drawEdge(", self.html, "no edge-drawing call found")
+        specs = _embedded_json(self.html, "edge-data")
+        self.assertEqual(len(specs), len(NODE_IDS), "expected one spoke per node")
+        for spec in specs:
+            for key in ("week", "id", "x1", "y1", "x2", "y2"):
+                self.assertIn(key, spec, "edge spec missing %r" % key)
+        self.assertEqual({spec["week"] for spec in specs}, {"Week 01", "Week 02"})
+        self.assertEqual({spec["id"] for spec in specs}, set(NODE_IDS))
+        self.assertIn('id="edge-layer"', self.html)
+
+    def test_click_shows_settings_panel(self):
+        self.assertIn('el.addEventListener("click"', self.html)
+        for field in ("p-id", "p-label", "p-kind", "p-week"):
+            self.assertIn('id="%s"' % field, self.html)
+        self.assertIn("panel.week.textContent", self.html)
+
+    def test_escape_clears_selection(self):
+        self.assertIn('ev.key === "Escape"', self.html)
+        self.assertIn("clearSelection", self.html)
+        self.assertIn("showPanel(PLACEHOLDER)", self.html)
 
     def test_no_remote_script_src(self):
         for tag in re.findall(r"<script\b[^>]*>", self.html, flags=re.I):
@@ -87,8 +133,8 @@ class RenderGraphTest(unittest.TestCase):
         self.assertEqual(evidence["bytes"], self.html_path.stat().st_size)
 
     def test_week_edges_and_panel(self):
-        self.assertEqual(self.html.count('class="edge"'), len(NODE_IDS))
-        for panel_id in ("p-id", "p-label", "p-kind"):
+        self.assertIn('<g id="edge-layer">', self.html)
+        for panel_id in ("p-id", "p-label", "p-kind", "p-week"):
             self.assertIn('id="%s"' % panel_id, self.html)
         self.assertIn("legend-item", self.html)
 

@@ -6,6 +6,7 @@
   "required": [
     "stage",
     "stage_name",
+    "step_type",
     "status",
     "started_at",
     "finished_at",
@@ -22,6 +23,11 @@
     },
     "stage_name": {
       "type": "string"
+    },
+    "step_type": {
+      "type": "string",
+      "enum": ["D", "P", "H"],
+      "description": "D = deterministic code, P = probabilistic model call, H = human in the loop."
     },
     "status": {
       "type": "string",

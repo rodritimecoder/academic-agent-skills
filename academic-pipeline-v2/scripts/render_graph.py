@@ -122,11 +122,29 @@ def _legend(meta: dict) -> str:
 
 
 def _week_chips(meta: dict) -> str:
-    rows = ['<button class="chip active" data-week="*">All weeks</button>']
+    """One chip per week, plus the all-weeks reset, each carrying its week key."""
+    rows = ['<button type="button" class="chip active" data-week="*">All weeks</button>']
     for week in meta["weeks"]:
         label = html.escape(week["week"], quote=True)
-        rows.append('<button class="chip" data-week="%s">%s</button>' % (label, label))
+        rows.append(
+            '<button type="button" class="chip" data-week="%s">%s</button>' % (label, label)
+        )
     return "\n".join(rows)
+
+
+def _edge_specs(placed: list) -> list:
+    """One spoke per node: node position -> the centre of its week."""
+    return [
+        {
+            "week": p["week"],
+            "id": p["id"],
+            "x1": round(p["x"], 2),
+            "y1": round(p["y"], 2),
+            "x2": round(p["week_x"], 2),
+            "y2": round(p["week_y"], 2),
+        }
+        for p in placed
+    ]
 
 
 def _svg(meta: dict, placed: list) -> str:
@@ -135,20 +153,17 @@ def _svg(meta: dict, placed: list) -> str:
         'role="img" aria-label="Course constellation">' % (VIEWBOX, VIEWBOX),
         '<circle class="orbit" cx="%.1f" cy="%.1f" r="%d"/>' % (CENTER, CENTER, WEEK_RING),
         '<circle class="orbit faint" cx="%.1f" cy="%.1f" r="%d"/>' % (CENTER, CENTER, NODE_RING),
+        '<g id="edge-layer"></g>',
     ]
-    for p in placed:
-        out.append(
-            '<line class="edge" data-week="%s" x1="%.1f" y1="%.1f" x2="%.1f" y2="%.1f"/>'
-            % (html.escape(p["week"], quote=True), p["x"], p["y"], p["week_x"], p["week_y"])
-        )
     for week in meta["weeks"]:
         hub = next((p for p in placed if p["week"] == week["week"]), None)
         if hub is None:
             continue
         out.append(
-            '<g class="week"><circle class="week-dot" cx="%.1f" cy="%.1f" r="16"/>'
+            '<g class="week" data-week="%s"><circle class="week-dot" cx="%.1f" cy="%.1f" r="16"/>'
             '<text class="week-label" x="%.1f" y="%.1f">%s</text></g>'
             % (
+                html.escape(week["week"], quote=True),
                 hub["week_x"],
                 hub["week_y"],
                 hub["week_x"],
@@ -201,7 +216,7 @@ STYLE = """
            border-radius:12px; }
   .orbit { fill:none; stroke:#313244; stroke-width:1; }
   .orbit.faint { stroke:#24243a; stroke-dasharray:2 7; }
-  .edge { stroke:#45475a; stroke-width:1; opacity:.55; }
+  .edge { stroke:#45475a; stroke-width:1; opacity:.55; transition:opacity .15s ease; }
   .edge.hot { stroke:#89b4fa; opacity:1; stroke-width:1.6; }
   .week-dot { fill:#f9e2af; opacity:.85; }
   .week-label { fill:#f9e2af; font-size:11px; text-anchor:middle; }
@@ -211,6 +226,8 @@ STYLE = """
   .node text { fill:#bac2de; font-size:10px; pointer-events:none; }
   .node:hover text, .node.sel text { fill:#fff; }
   .node.sel circle { stroke:#fff; stroke-width:2; }
+  .off { display:none; }
+  .dim { opacity:.25; }
   aside { background:#181825; border:1px solid var(--line); border-radius:12px;
           padding:12px; min-height:150px; }
   aside h2 { margin:0 0 8px; font-size:12px; text-transform:uppercase;
@@ -229,40 +246,87 @@ STYLE = """
 BEHAVIOR = """
 (function () {
   "use strict";
+  var SVG_NS = "http://www.w3.org/2000/svg";
   var META = JSON.parse(document.getElementById("meta-data").textContent);
+  var EDGE_SPECS = JSON.parse(document.getElementById("edge-data").textContent);
+  var edgeLayer = document.getElementById("edge-layer");
   var selected = null;
+  var activeWeek = "*";
   var panel = {
     id: document.getElementById("p-id"),
     label: document.getElementById("p-label"),
     kind: document.getElementById("p-kind"),
     week: document.getElementById("p-week")
   };
+  var PLACEHOLDER = { id: "-", label: "click a node", kind: "-", week: "-" };
   var nodes = Array.prototype.slice.call(document.querySelectorAll(".node"));
-  var edges = Array.prototype.slice.call(document.querySelectorAll(".edge"));
+  var weekHubs = Array.prototype.slice.call(document.querySelectorAll(".week"));
   var chips = Array.prototype.slice.call(document.querySelectorAll(".chip"));
+  var edges = [];
 
-  function applyWeek(week) {
+  // One spoke per node, node -> its week centre, drawn into the edge layer.
+  function drawEdge(spec) {
+    var line = document.createElementNS(SVG_NS, "line");
+    line.setAttribute("class", "edge");
+    line.setAttribute("data-week", spec.week);
+    line.setAttribute("data-id", spec.id);
+    line.setAttribute("x1", spec.x1);
+    line.setAttribute("y1", spec.y1);
+    line.setAttribute("x2", spec.x2);
+    line.setAttribute("y2", spec.y2);
+    edgeLayer.appendChild(line);
+    return line;
+  }
+  edges = EDGE_SPECS.map(drawEdge);
+
+  function showPanel(data) {
+    panel.id.textContent = data.id;
+    panel.label.textContent = data.label;
+    panel.kind.textContent = data.kind;
+    panel.week.textContent = data.week;
+  }
+
+  function paintWeek() {
     nodes.forEach(function (el) {
-      el.style.opacity = (week === "*" || el.dataset.week === week) ? "1" : "0.15";
+      el.classList.toggle("off", activeWeek !== "*" && el.dataset.week !== activeWeek);
     });
     edges.forEach(function (el) {
-      el.style.opacity = (week === "*" || el.dataset.week === week) ? "0.55" : "0.06";
+      el.classList.toggle("off", activeWeek !== "*" && el.dataset.week !== activeWeek);
     });
+    weekHubs.forEach(function (el) {
+      el.classList.toggle("dim", activeWeek !== "*" && el.dataset.week !== activeWeek);
+    });
+  }
+
+  function clearSelection() {
+    if (selected) { selected.classList.remove("sel"); }
+    selected = null;
+    edges.forEach(function (edge) { edge.classList.remove("hot"); });
+    showPanel(PLACEHOLDER);
   }
 
   function select(el) {
-    if (selected) { selected.classList.remove("sel"); }
+    clearSelection();
     selected = el;
     el.classList.add("sel");
-    panel.id.textContent = el.dataset.id || "-";
-    panel.label.textContent = el.dataset.label || "-";
-    panel.kind.textContent = el.dataset.kind || "-";
-    panel.week.textContent = el.dataset.week || "-";
-    edges.forEach(function (edge) {
-      edge.classList.toggle("hot", edge.dataset.week === el.dataset.week);
+    showPanel({
+      id: el.dataset.id || "-",
+      label: el.dataset.label || "-",
+      kind: el.dataset.kind || "-",
+      week: el.dataset.week || "-"
     });
-    applyWeek(el.dataset.week);
+    edges.forEach(function (edge) {
+      edge.classList.toggle("hot", edge.dataset.id === el.dataset.id);
+    });
   }
+
+  function setWeek(week) {
+    activeWeek = week || "*";
+    chips.forEach(function (c) { c.classList.toggle("active", c.dataset.week === activeWeek); });
+    clearSelection();
+    paintWeek();
+  }
+
   nodes.forEach(function (el) {
     el.addEventListener("click", function () { select(el); });
     el.addEventListener("keydown", function (ev) {
@@ -270,15 +334,15 @@ BEHAVIOR = """
     });
   });
   chips.forEach(function (chip) {
-    chip.addEventListener("click", function () {
-      chips.forEach(function (c) { c.classList.remove("active"); });
-      chip.classList.add("active");
-      if (selected) { selected.classList.remove("sel"); selected = null; }
-      edges.forEach(function (edge) { edge.classList.remove("hot"); });
-      applyWeek(chip.dataset.week);
-    });
+    chip.addEventListener("click", function () { setWeek(chip.dataset.week); });
   });
-  window.__GRAPH__ = { meta: META, select: select, applyWeek: applyWeek };
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape" || ev.key === "Esc") { clearSelection(); }
+  });
+  paintWeek();
+  window.__GRAPH__ = {
+    meta: META, select: select, clearSelection: clearSelection, applyWeek: setWeek
+  };
 })();
 """
 
@@ -295,6 +359,7 @@ PAGE = """<!doctype html>
 <header>
   <h1>__COURSE__ &middot; constellation</h1>
   <div class="sub">Stage 4a render &middot; click a node to inspect it &middot;
+    Esc clears the selection &middot;
     __NODE_COUNT__ nodes / __WEEK_COUNT__ weeks</div>
 </header>
 <div class="chips" id="weekChips">
@@ -302,7 +367,7 @@ __WEEK_CHIPS__
 </div>
 <main>
   <div>__SVG__</div>
-  <aside>
+  <aside id="settings" aria-label="Selected node settings">
     <h2>Selected node</h2>
     <div id="panel">
       <div class="row"><span>id</span><span id="p-id">-</span></div>
@@ -316,13 +381,14 @@ __LEGEND__
   </aside>
 </main>
 <script id="meta-data" type="application/json">__META_JSON__</script>
+<script id="edge-data" type="application/json">__EDGE_JSON__</script>
 <script>__BEHAVIOR__</script>
 </body>
 </html>
 """
 
 
-def _json_for_script(data: dict) -> str:
+def _json_for_script(data) -> str:
     # Keep injected data inert: never let it close the script element.
     return json.dumps(data, ensure_ascii=False, indent=2).replace("</", "<\\/")
 
@@ -339,6 +405,7 @@ def render(meta) -> str:
         ("__WEEK_CHIPS__", _week_chips(clean)),
         ("__LEGEND__", _legend(clean)),
         ("__META_JSON__", _json_for_script(clean)),
+        ("__EDGE_JSON__", _json_for_script(_edge_specs(placed))),
         ("__COURSE__", html.escape(clean["course"])),
         ("__NODE_COUNT__", str(len(placed))),
         ("__WEEK_COUNT__", str(len(clean["weeks"]))),
@@ -353,6 +420,7 @@ def build_step(started_at: str, meta_path: Path, html_path: Path, size: int) -> 
     return {
         "stage": STAGE,
         "stage_name": STAGE_NAME,
+        "step_type": "D",
         "status": "ok",
         "started_at": started_at,
         "finished_at": _now(),

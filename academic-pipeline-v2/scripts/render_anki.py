@@ -5,10 +5,14 @@ Reads workspace/02_sift/cleaned/**/*.md and emits ONE standalone
 workspace/04_render/anki.html with inline CSS/JS (no external script src).
 
 - one deck per week directory (immediate child of 02_sift/cleaned); a flat
-  notes tree gets a single "all" deck
+  notes tree becomes a single "Notes" deck
+- directory names are normalised to week labels (`week_01_foundations`,
+  `w1`, `module 1` -> "Week 1 ..."), ported from the retired v1
+  assets/v1/viz_app.js `cleanNodeTitle` regexes (labels only, no data model)
 - one card per markdown heading: question = heading text,
   answer = first paragraph under that heading
-- card review with flip, next/prev and a reviewed/total counter
+- review mode: one card at a time, flip, correct/incorrect grading and a
+  running score per deck
 - client-side TSV export and import
 
 Usage:
@@ -17,12 +21,17 @@ Usage:
 
 import argparse
 import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
 STAGE = 4
 STAGE_NAME = "render"
-DEFAULT_DECK = "all"
+DEFAULT_DECK = "notes"
+
+_WEEK_RE = re.compile(
+    r"^(?:week|wk|w|module|mod)[\s:_-]*0*(\d{1,2})(?:[\s:_-]+(.*))?$", re.I
+)
 
 
 def _now():
@@ -34,6 +43,30 @@ def _now():
 # ---------------------------------------------------------------------------
 def _heading_text(line):
     return line.lstrip().lstrip("#").strip()
+
+
+def week_label(name):
+    """Normalise a directory name to a friendly label.
+
+    Ported from viz_app.js `cleanNodeTitle` (regex shape only): `week_01_x`,
+    `w1`, `module 3 - title` all collapse to "Week N" (plus any title words).
+    """
+    raw = str(name or "").strip()
+    if not raw:
+        return "Notes"
+    match = _WEEK_RE.match(raw)
+    if not match:
+        return raw.replace("_", " ").strip() or "Notes"
+    rest = re.sub(r"\s+", " ", (match.group(2) or "").replace("_", " ")).strip(" -:_")
+    if rest:
+        rest = rest[0].upper() + rest[1:]
+    label = "Week %d" % int(match.group(1))
+    return "%s - %s" % (label, rest) if rest else label
+
+
+def _deck_id(name):
+    slug = re.sub(r"[^a-z0-9]+", "-", str(name or "").lower()).strip("-")
+    return slug or DEFAULT_DECK
 
 
 def extract_cards(text):
@@ -57,16 +90,24 @@ def extract_cards(text):
     return cards
 
 
-def _deck_name(cleaned, path):
+def _deck_folder(cleaned, path):
+    """Week directory (first relative part), or '' for a flat notes tree."""
     try:
         rel = path.relative_to(cleaned)
     except ValueError:
-        return DEFAULT_DECK
-    return rel.parts[0] if len(rel.parts) > 1 else DEFAULT_DECK
+        return ""
+    return rel.parts[0] if len(rel.parts) > 1 else ""
+
+
+def _sort_key(deck):
+    match = re.match(r"Week (\d+)", deck["title"])
+    if match:
+        return (0, int(match.group(1)), deck["title"].lower())
+    return (1, 0, deck["title"].lower())
 
 
 def collect(cleaned):
-    """Return ordered decks: [{'name': str, 'cards': [...]}]."""
+    """Return ordered decks: [{'name', 'title', 'cards'}] - one per week dir."""
     cleaned = Path(cleaned)
     if not cleaned.is_dir():
         return []
@@ -74,10 +115,15 @@ def collect(cleaned):
     for path in sorted(cleaned.rglob("*.md")):
         if not path.is_file():
             continue
-        name = _deck_name(cleaned, path)
-        if name not in decks:
-            decks[name] = []
-            order.append(name)
+        folder = _deck_folder(cleaned, path)
+        key = folder or DEFAULT_DECK
+        if key not in decks:
+            decks[key] = {
+                "name": _deck_id(folder or DEFAULT_DECK),
+                "title": week_label(folder) if folder else "Notes",
+                "cards": [],
+            }
+            order.append(key)
         try:
             text = path.read_text(encoding="utf-8", errors="replace")
         except OSError:
@@ -85,9 +131,9 @@ def collect(cleaned):
         source = str(path.relative_to(cleaned))
         for card in extract_cards(text):
             card["src"] = source
-            decks[name].append(card)
-    order.sort(key=lambda n: (n == DEFAULT_DECK, n))
-    return [{"name": n, "cards": decks[n]} for n in order if decks[n]]
+            decks[key]["cards"].append(card)
+    result = [decks[key] for key in order if decks[key]["cards"]]
+    return sorted(result, key=_sort_key)
 
 
 # ---------------------------------------------------------------------------
@@ -108,6 +154,7 @@ h1{font-size:18px;margin:0;font-weight:600}
 select,button,input[type=file]{font:inherit;color:var(--fg);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 10px}
 button{cursor:pointer}
 button:hover{border-color:var(--acc)}
+button:disabled{opacity:.45;cursor:not-allowed;border-color:var(--line)}
 main{max-width:820px;margin:0 auto;padding:24px 20px 60px}
 #meta{color:var(--dim);font-size:14px;margin-bottom:12px}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:24px;min-height:220px;display:flex;flex-direction:column;justify-content:center;gap:16px}
@@ -117,13 +164,19 @@ main{max-width:820px;margin:0 auto;padding:24px 20px 60px}
 .row{display:flex;gap:10px;justify-content:space-between;align-items:center;margin-top:16px;flex-wrap:wrap}
 .dim{color:var(--dim);font-size:13px}
 .tools{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+#correct{border-color:#2ea043}
+#incorrect{border-color:#da3633}
+#correct:hover{background:#12351f}
+#incorrect:hover{background:#3d1418}
+.kbd{opacity:.6;font-size:12px;border:1px solid var(--line);border-radius:4px;padding:0 4px;margin-left:4px}
 </style>
 </head>
 <body>
 <header>
   <h1>Anki Hub</h1>
-  <label>Deck <select id="deck"></select></label>
+  <label>Deck <select id="deck" aria-label="Deck selector"></select></label>
   <span id="progress" class="dim">0 / 0 reviewed</span>
+  <span id="score" class="dim">Score 0/0 (0%)</span>
   <div class="tools">
     <button id="exportTSV" type="button">Export TSV</button>
     <label class="dim" for="importTSV">Import TSV</label>
@@ -141,21 +194,33 @@ main{max-width:820px;margin:0 auto;padding:24px 20px 60px}
     <button id="flip" type="button">Flip</button>
     <button id="next" type="button">Next &rarr;</button>
   </div>
+  <div class="row">
+    <button id="incorrect" type="button" disabled>&#10007; Incorrect<span class="kbd">2</span></button>
+    <button id="correct" type="button" disabled>&#10003; Correct<span class="kbd">1</span></button>
+  </div>
 </main>
 <script>
 var DATA = __DATA__;
-var state = {deck: "all", index: 0, reviewed: {}};
+var state = {deck: "", index: 0, flipped: false, reviewed: {}, scores: {}};
 function el(id) { return document.getElementById(id); }
 
 function allDecks() {
+  if (DATA.length <= 1) return DATA.slice();
   var merged = DATA.reduce(function (acc, d) { return acc.concat(d.cards); }, []);
-  return [{name: "all", cards: merged}].concat(DATA);
+  return [{name: "__all__", title: "All cards", cards: merged}].concat(DATA);
 }
-function deckCards() {
+function currentDeck() {
   var match = allDecks().filter(function (d) { return d.name === state.deck; })[0];
-  return match ? match.cards : [];
+  return match || {name: "", title: "", cards: []};
 }
+function deckCards() { return currentDeck().cards; }
 function cardKey(card, i) { return state.deck + "|" + i + "|" + card.q; }
+function scoreFor() {
+  if (!state.scores[state.deck]) {
+    state.scores[state.deck] = {right: 0, wrong: 0, streak: 0, best: 0};
+  }
+  return state.scores[state.deck];
+}
 
 function renderDeckOptions() {
   var sel = el("deck");
@@ -163,10 +228,19 @@ function renderDeckOptions() {
   allDecks().forEach(function (d) {
     var o = document.createElement("option");
     o.value = d.name;
-    o.textContent = d.name + " (" + d.cards.length + " cards)";
+    o.textContent = d.title + " (" + d.cards.length + " cards)";
     sel.appendChild(o);
   });
   sel.value = state.deck;
+}
+
+function renderScore() {
+  var s = scoreFor();
+  var total = s.right + s.wrong;
+  var pct = total ? Math.round((100 * s.right) / total) : 0;
+  el("score").textContent = "Score " + s.right + "/" + total + " (" + pct + "%)" +
+    (s.streak ? "  \\u00b7  streak " + s.streak : "") +
+    (s.best > s.streak ? "  \\u00b7  best " + s.best : "");
 }
 
 function render() {
@@ -174,11 +248,14 @@ function render() {
   var done = 0;
   cards.forEach(function (c, i) { if (state.reviewed[cardKey(c, i)]) done += 1; });
   el("progress").textContent = done + " / " + cards.length + " reviewed";
+  renderScore();
+  el("correct").disabled = !state.flipped || !cards.length;
+  el("incorrect").disabled = !state.flipped || !cards.length;
   if (!cards.length) {
     el("question").textContent = "(no cards)";
     el("answer").textContent = "";
     el("answer").className = "a hidden";
-    el("meta").textContent = "Deck " + state.deck + " has no cards.";
+    el("meta").textContent = currentDeck().title + " has no cards.";
     return;
   }
   if (state.index >= cards.length) state.index = 0;
@@ -186,32 +263,45 @@ function render() {
   var card = cards[state.index];
   el("question").textContent = card.q;
   el("answer").textContent = card.a || "(no content)";
-  el("answer").className = "a hidden";
-  el("meta").textContent = "Card " + (state.index + 1) + " of " + cards.length +
-    (card.src ? "  \u00b7  " + card.src : "");
+  el("answer").className = state.flipped ? "a" : "a hidden";
+  el("meta").textContent = currentDeck().title + "  \\u00b7  card " +
+    (state.index + 1) + " of " + cards.length +
+    (card.src ? "  \\u00b7  " + card.src : "");
 }
 
-function flip() { el("answer").className = "a"; markReviewed(); }
 function markReviewed() {
   var cards = deckCards();
-  if (cards.length) {
-    state.reviewed[cardKey(cards[state.index], state.index)] = true;
-    render();
+  if (cards.length) state.reviewed[cardKey(cards[state.index], state.index)] = true;
+}
+function flip() {
+  if (!deckCards().length) return;
+  state.flipped = !state.flipped;
+  if (state.flipped) markReviewed();
+  render();
+}
+function advance(step) {
+  var cards = deckCards();
+  if (!cards.length) return;
+  state.flipped = false;
+  state.index = (state.index + step + cards.length) % cards.length;
+  render();
+}
+function grade(ok) {
+  if (!state.flipped || !deckCards().length) return;
+  var s = scoreFor();
+  if (ok) {
+    s.right += 1;
+    s.streak += 1;
+    if (s.streak > s.best) s.best = s.streak;
+  } else {
+    s.wrong += 1;
+    s.streak = 0;
   }
-}
-function next() {
-  var cards = deckCards();
-  if (!cards.length) return;
   markReviewed();
-  state.index = (state.index + 1) % cards.length;
-  render();
+  advance(1);
 }
-function prev() {
-  var cards = deckCards();
-  if (!cards.length) return;
-  state.index = (state.index - 1 + cards.length) % cards.length;
-  render();
-}
+function next() { advance(1); }
+function prev() { advance(-1); }
 
 function toTSV(cards) {
   var clean = function (s) { return String(s || "").replace(/[\\t\\r\\n]+/g, " "); };
@@ -241,12 +331,14 @@ function parseTSV(text) {
 function importTSV(text) {
   var parsed = parseTSV(text);
   if (!parsed.length) return;
-  var name = state.deck === "all" ? "imported" : state.deck;
+  var name = state.deck === "__all__" ? "imported" : state.deck;
   DATA = DATA.filter(function (d) { return d.name !== name; })
-    .concat([{name: name, cards: parsed}]);
+    .concat([{name: name, title: "Imported", cards: parsed}]);
   state.deck = name;
   state.index = 0;
+  state.flipped = false;
   state.reviewed = {};
+  delete state.scores[name];
   renderDeckOptions();
   render();
 }
@@ -254,11 +346,15 @@ function importTSV(text) {
 el("deck").addEventListener("change", function (e) {
   state.deck = e.target.value;
   state.index = 0;
+  state.flipped = false;
+  renderDeckOptions();
   render();
 });
 el("flip").addEventListener("click", flip);
 el("next").addEventListener("click", next);
 el("prev").addEventListener("click", prev);
+el("correct").addEventListener("click", function () { grade(true); });
+el("incorrect").addEventListener("click", function () { grade(false); });
 el("exportTSV").addEventListener("click", exportTSV);
 el("importTSV").addEventListener("change", function (e) {
   var file = e.target.files && e.target.files[0];
@@ -268,12 +364,17 @@ el("importTSV").addEventListener("change", function (e) {
   reader.readAsText(file);
 });
 document.addEventListener("keydown", function (e) {
-  if (e.key === " " || e.key === "Enter") { e.preventDefault(); flip(); }
-  else if (e.key === "ArrowRight") next();
-  else if (e.key === "ArrowLeft") prev();
+  var tag = e.target && e.target.tagName;
+  if (tag === "SELECT" || tag === "INPUT" || tag === "TEXTAREA") return;
+  var key = String(e.key || "");
+  if (key === " " || key === "Enter") { e.preventDefault(); flip(); }
+  else if (key === "ArrowRight") next();
+  else if (key === "ArrowLeft") prev();
+  else if (key === "1" || key.toLowerCase() === "c") grade(true);
+  else if (key === "2" || key.toLowerCase() === "x") grade(false);
 });
 
-state.deck = allDecks()[0].name;
+state.deck = allDecks().length ? allDecks()[0].name : "";
 renderDeckOptions();
 render();
 </script>
@@ -324,6 +425,7 @@ def run(workspace, dry_run=False, deps=None):
     return {
         "stage": STAGE,
         "stage_name": STAGE_NAME,
+        "step_type": "D",
         "status": status,
         "started_at": started_at,
         "finished_at": _now(),

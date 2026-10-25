@@ -63,6 +63,17 @@ class RenderAnkiTest(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
+    def _html(self, workspace=None):
+        self.module.run(workspace or self.workspace)
+        return (Path(workspace or self.workspace) / "04_render" / "anki.html").read_text(
+            encoding="utf-8"
+        )
+
+    def _data(self, html):
+        match = re.search(r"var DATA = (.+?);\s*\nvar state", html, re.S)
+        self.assertIsNotNone(match, "embedded DATA payload not found")
+        return json.loads(match.group(1))
+
     # -- extraction ------------------------------------------------------
     def test_one_card_per_heading(self):
         cards = self.module.extract_cards(NOTE_ONE)
@@ -104,20 +115,83 @@ class RenderAnkiTest(unittest.TestCase):
         )
 
     # -- html contract ---------------------------------------------------
+    def test_one_deck_per_week_directory(self):
+        weekly = self.workspace / "weekly"
+        cleaned = weekly / "02_sift" / "cleaned"
+        (cleaned / "week_01_foundations").mkdir(parents=True)
+        (cleaned / "w2").mkdir()
+        (cleaned / "week_01_foundations" / "note.md").write_text(NOTE_ONE, encoding="utf-8")
+        (cleaned / "w2" / "note.md").write_text(NOTE_TWO, encoding="utf-8")
+
+        decks = self.module.collect(cleaned)
+        self.assertEqual([d["title"] for d in decks], ["Week 1 - Foundations", "Week 2"])
+        self.assertEqual([len(d["cards"]) for d in decks], [3, 3])
+        self.assertEqual(len({d["name"] for d in decks}), 2)
+
+        html = self._html(weekly)
+        data = self._data(html)
+        self.assertEqual([d["title"] for d in data], ["Week 1 - Foundations", "Week 2"])
+        self.assertEqual([len(d["cards"]) for d in data], [3, 3])
+
+    def test_week_label_normalisation(self):
+        for raw, label in (
+            ("week_01_foundations", "Week 1 - Foundations"),
+            ("w2", "Week 2"),
+            ("module 3 - protocols", "Week 3 - Protocols"),
+            ("week 12", "Week 12"),
+        ):
+            self.assertEqual(self.module.week_label(raw), label)
+
+    def test_deck_selector_present(self):
+        html = self._html()
+        self.assertIn('<select id="deck"', html)
+        self.assertIn("function renderDeckOptions", html)
+        self.assertIn("function allDecks", html)
+        self.assertIn("All cards", html)
+        self.assertIn('d.title + " (" + d.cards.length', html)
+
+    def test_review_mode_flip_and_running_score(self):
+        html = self._html()
+        for token in (
+            'id="flip"',
+            'id="correct"',
+            'id="incorrect"',
+            'id="score"',
+            "function flip",
+            "function grade",
+            "function renderScore",
+            "state.scores",
+        ):
+            self.assertIn(token, html, token)
+        self.assertRegex(html, r'id="score"[^>]*>Score 0/0 \(0%\)<')
+        self.assertIn("s.right += 1", html)
+        self.assertIn("s.wrong += 1", html)
+        self.assertIn("s.streak", html)
+        # grading unlocks only after the answer is revealed
+        self.assertIn("!state.flipped", html)
+
     def test_tsv_handlers_present(self):
-        self.module.run(self.workspace)
-        html = (self.workspace / "04_render" / "anki.html").read_text(encoding="utf-8")
+        html = self._html()
         self.assertIn("function exportTSV", html)
         self.assertIn("function importTSV", html)
+        self.assertIn("function toTSV", html)
         self.assertIn("text/tab-separated-values", html)
         self.assertIn('id="importTSV"', html)
+        self.assertIn("Export TSV", html)
+        self.assertIn("a.download", html)
 
     def test_no_external_script_src(self):
-        self.module.run(self.workspace)
-        html = (self.workspace / "04_render" / "anki.html").read_text(encoding="utf-8")
+        html = self._html()
         self.assertEqual(re.findall(r"<script[^>]*\bsrc\s*=", html, re.I), [])
+        self.assertEqual(
+            re.findall(r"""<script[^>]*src\s*=\s*['"]?https?://""", html, re.I), []
+        )
         self.assertNotIn("http://", html)
         self.assertNotIn("https://", html)
+
+    def test_module_stays_under_550_lines(self):
+        lines = MODULE_PATH.read_text(encoding="utf-8").splitlines()
+        self.assertLess(len(lines), 550)
 
     def test_review_and_progress_hooks_present(self):
         self.module.run(self.workspace)

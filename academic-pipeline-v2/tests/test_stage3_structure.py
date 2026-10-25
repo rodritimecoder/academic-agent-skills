@@ -18,6 +18,7 @@ SPEC.loader.exec_module(stage3)
 STEP_KEYS = {
     "stage",
     "stage_name",
+    "step_type",
     "status",
     "started_at",
     "finished_at",

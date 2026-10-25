@@ -71,6 +71,7 @@ class ContractTests(unittest.TestCase):
         valid = {
             "stage": 1,
             "stage_name": "ingest",
+            "step_type": "P",
             "status": "ok",
             "started_at": "2026-10-25T00:00:00Z",
             "finished_at": "2026-10-25T00:01:00Z",
@@ -80,6 +81,54 @@ class ContractTests(unittest.TestCase):
             "errors": [],
         }
         self.assertTrue(validate(self.step_schema, valid))
+
+    def test_step_requires_step_type(self):
+        missing = {
+            "stage": 3,
+            "stage_name": "structure",
+            "status": "ok",
+            "started_at": "2026-10-25T00:00:00Z",
+            "finished_at": "2026-10-25T00:01:00Z",
+            "inputs": {},
+            "outputs": [],
+            "evidence": [],
+            "errors": [],
+        }
+        with self.assertRaises(ValueError):
+            validate(self.step_schema, missing)
+
+    def test_step_accepts_each_step_type(self):
+        for step_type in ("D", "P", "H"):
+            valid = {
+                "stage": 4,
+                "stage_name": "render",
+                "step_type": step_type,
+                "status": "ok",
+                "started_at": "2026-10-25T00:00:00Z",
+                "finished_at": "2026-10-25T00:01:00Z",
+                "inputs": {},
+                "outputs": [],
+                "evidence": [],
+                "errors": [],
+            }
+            self.assertTrue(validate(self.step_schema, valid), step_type)
+
+    def test_step_rejects_unknown_step_type(self):
+        for bad in ("X", "deterministic", "", None):
+            invalid = {
+                "stage": 4,
+                "stage_name": "render",
+                "step_type": bad,
+                "status": "ok",
+                "started_at": "2026-10-25T00:00:00Z",
+                "finished_at": "2026-10-25T00:01:00Z",
+                "inputs": {},
+                "outputs": [],
+                "evidence": [],
+                "errors": [],
+            }
+            with self.assertRaises(ValueError, msg=repr(bad)):
+                validate(self.step_schema, invalid)
 
     def test_step_invalid(self):
         invalid = {
