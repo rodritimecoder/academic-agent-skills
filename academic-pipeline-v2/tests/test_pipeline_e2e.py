@@ -151,6 +151,13 @@ class PipelineE2ETests(unittest.TestCase):
             self.assertTrue(path.is_file(), f"missing {path}: {err}")
             self.assertIn("status", payload)
             self.assertIn(payload["status"], VALID_STATUSES, payload)
+            if number == 3:
+                context = Path(self.workspace) / "03_structure" / "CONTEXT.md"
+                self.assertTrue(context.is_file(), f"missing {context}")
+                self.assertIn("stage 3", context.read_text(encoding="utf-8").lower())
+            if number == 5:
+                context = Path(self.workspace) / "05_verify" / "CONTEXT.md"
+                self.assertTrue(context.is_file(), f"missing {context}")
             if number in (3, 4):
                 self.assertEqual(code, 0, f"{stage} failed: {err}")
                 self.assertEqual(payload["status"], "ok", payload)
