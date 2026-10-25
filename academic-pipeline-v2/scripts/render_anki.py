@@ -25,7 +25,7 @@ import json
 import re
 from datetime import datetime, timezone
 
-from anki_cards import extract_cards
+from anki_cards import document_title, extract_cards
 from pathlib import Path
 
 STAGE = 4
@@ -123,7 +123,7 @@ def collect(cleaned, meta_weeks=None):
         except OSError:
             continue
         source = str(path.relative_to(cleaned))
-        for card in extract_cards(text):
+        for card in extract_cards(text, skip_title=document_title(text)):
             card["src"] = source
             decks[key]["cards"].append(card)
 
@@ -405,7 +405,7 @@ def _static_list(decks):
         label = html.escape(str(deck.get("title") or deck.get("name") or "deck"))
         chunks.append('<h3>%s &mdash; %d cards</h3><ol>' % (label, len(cards)))
         if not cards:
-            chunks.append('<li><p class="sa">No retrieved text for this week.</p></li>')
+            chunks.append('<li><p class="sa">No reviewable cards for this week.</p></li>')
         for card in cards:
             chunks.append(
                 '<li><p class="sq">%s</p><p class="sa">%s</p></li>'

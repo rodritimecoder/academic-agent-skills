@@ -267,6 +267,11 @@ def _merge_results(stage_number, started_at, parts, workspace=None):
             status = "ok"
         else:
             status = "skipped"
+    elif stage_number in (3, 4):
+        # Structure and render are deterministic and every lane is required:
+        # one renderer raising means the deliverable set is incomplete, so the
+        # stage must not report ok on the strength of its siblings.
+        status = "failed" if "failed" in statuses else ("ok" if statuses else "skipped")
     elif "ok" in statuses:
         status = "ok"
     elif statuses and all(item == "skipped" for item in statuses):

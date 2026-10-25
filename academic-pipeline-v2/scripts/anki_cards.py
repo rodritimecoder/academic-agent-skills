@@ -60,8 +60,28 @@ def heading_text(line):
     return clean(match.group(1)) if match else ""
 
 
-def extract_cards(text):
-    """Return [{'q': str, 'a': str}] - one card per markdown heading."""
+def document_title(text):
+    """The ``title:`` a note declares in its frontmatter, if it declares one."""
+    body = str(text or "")
+    if not body.startswith("---"):
+        return ""
+    end = body.find("\n---", 3)
+    if end == -1:
+        return ""
+    for line in body[3:end].strip("\n").splitlines():
+        key, sep, value = line.partition(":")
+        if sep and key.strip() == "title":
+            return clean(value).strip("\"'")
+    return ""
+
+
+def extract_cards(text, skip_title=None):
+    """Return [{'q': str, 'a': str}] - one card per markdown heading.
+
+    ``skip_title`` is the note's own document title.  Stage 1 writes it as the
+    first heading, so without this a PDF's filename becomes a card whose answer
+    is the course name.
+    """
     cards = []
     lines = str(text or "").splitlines()
     for index, line in enumerate(lines):
@@ -69,6 +89,8 @@ def extract_cards(text):
             continue
         question = heading_text(line)
         if not question:
+            continue
+        if skip_title and question.casefold() == str(skip_title).strip().casefold():
             continue
         collected = []
         cursor = index + 1

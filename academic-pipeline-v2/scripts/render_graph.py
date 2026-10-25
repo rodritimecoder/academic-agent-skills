@@ -18,6 +18,7 @@ import argparse
 import html
 import json
 import math
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -394,12 +395,32 @@ def _json_for_script(data) -> str:
     return json.dumps(data, ensure_ascii=False, indent=2).replace("</", "<\\/")
 
 
-def _missing_text_weeks(workspace, meta):
-    """Weeks the course declares that produced no retrieved note text."""
+def _note_body(path):
+    """A note's prose: everything after the frontmatter, minus heading lines."""
+    try:
+        text = Path(path).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+    if text.startswith("---"):
+        end = text.find("\n---", 3)
+        if end != -1:
+            text = text[end + 4 :]
+    lines = [line for line in text.splitlines() if not line.lstrip().startswith("#")]
+    return "\n".join(lines)
+
+
+def _missing_text_weeks(workspace, meta, min_chars=40):
+    """Weeks the course declares that produced no retrieved note text.
+
+    Presence of a file is not presence of content: a page whose body Canvas
+    would not serve still writes a note with a title and nothing else.
+    """
     cleaned = Path(workspace) / "02_sift" / "cleaned"
     seen = set()
     if cleaned.is_dir():
         for path in cleaned.rglob("*.md"):
+            if len(_note_body(path).strip()) < min_chars:
+                continue
             for part in path.relative_to(cleaned).parts[:-1]:
                 match = re.match(r"^week[ _-]?0*(\d{1,2})$", part, re.IGNORECASE)
                 if match:

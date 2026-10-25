@@ -150,6 +150,20 @@ class PipelineE2ETests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertFalse((Path(self.workspace) / "05_verify" / "step_04.json").exists())
 
+    def test_a_raising_lane_fails_a_deterministic_stage(self):
+        """Stage 4 delivers three pages; one renderer raising cannot be green."""
+        module = load_runner()
+        parts = [
+            ("render_graph", {"status": "ok", "outputs": ["04_render/graph.html"]}),
+            ("render_anki", {"status": "ok", "outputs": ["04_render/anki.html"]}),
+            ("render_cornell", "render_cornell.run raised: name 're' is not defined"),
+        ]
+        payload = module._merge_results(
+            4, "2026-01-01T00:00:00Z", parts, workspace=self.workspace
+        )
+        self.assertEqual(payload["status"], "failed", payload)
+        self.assertTrue(any("render_cornell" in e for e in payload["errors"]), payload)
+
     def test_stages_three_four_five_write_evidence(self):
         for stage, number in (("stage3", 3), ("stage4", 4), ("stage5", 5)):
             code, _out, err = self._run(stage)
