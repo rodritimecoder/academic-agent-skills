@@ -1,12 +1,26 @@
 #!/usr/bin/env python3
-"""Contract-only pipeline runner for academic-pipeline-v2.
+"""Stage dispatcher for academic-pipeline-v2.
 
-This file freezes the stage dispatch interface. Stage functions are stubs that
-raise NotImplementedError; no stage logic is implemented here.
+Each stage handler imports its lane module(s) lazily, runs them, and merges
+their step payloads into ONE ``05_verify/step_NN.json`` evidence file:
+
+    stage1 -> stage1_canvas + stage1_zoom        (one step_01.json)
+    stage2 -> stage2_sift                        (one step_02.json)
+    stage3 -> stage3_structure                   (one step_03.json)
+    stage4 -> render_graph + render_anki +
+              render_cornell                     (one step_04.json)
+    stage5 -> gates                              (one step_05.json)
+
+A missing lane module never breaks ``--help``: imports happen inside the
+handlers only.  Evidence is written on success *and* failure, and the process
+exits 0 only when the merged status is ``ok``.  ``--dry-run`` writes nothing.
 """
 
 import argparse
+import importlib
+import inspect
 import json
+import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -21,6 +35,8 @@ STAGE_NAMES = {
 
 STAGE_CHOICES = ["stage1", "stage2", "stage3", "stage4", "stage5", "all"]
 
+VALID_STATUSES = ("ok", "failed", "skipped")
+
 
 def _now():
     return datetime.now(timezone.utc).isoformat()
@@ -30,44 +46,208 @@ def _stage_number(name):
     return int(name[-1])
 
 
-def _write_step(workspace, stage_number, status, started_at, errors=None):
-    """Serialize step_NN.json evidence into 05_verify/."""
-    errors = errors or []
-    step_path = Path(workspace) / "05_verify" / f"step_{stage_number:02d}.json"
-    step_path.parent.mkdir(parents=True, exist_ok=True)
+def _load_lane(module_name):
+    """Import a lane module from this script's directory, lazily."""
+    scripts_dir = str(Path(__file__).resolve().parent)
+    if scripts_dir not in sys.path:
+        sys.path.insert(0, scripts_dir)
+    return importlib.import_module(module_name)
+
+
+def _as_list(value):
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple)):
+        return list(value)
+    return [value]
+
+
+def _normalise_output(workspace, item):
+    """Coerce one lane output entry into a workspace-relative POSIX path string.
+
+    Lanes have historically emitted absolute paths and, for cornell, a dict
+    ``{"path": ..., "kind": ..., "bytes": ...}``.  The step contract wants a
+    flat array of workspace-relative path strings, so both shapes collapse to
+    the path.  Unusable entries return ``None``.
+    """
+    if isinstance(item, dict):
+        item = item.get("path")
+    if not isinstance(item, (str, Path)):
+        return None
+    text = str(item).strip()
+    if not text:
+        return None
+    path = Path(text)
+    if path.is_absolute():
+        root = Path(workspace).resolve()
+        try:
+            path = path.resolve().relative_to(root)
+        except (OSError, ValueError):
+            try:
+                path = Path(os.path.relpath(path, root))
+            except (OSError, ValueError):
+                return None
+    return path.as_posix()
+
+
+def _normalise_outputs(workspace, items):
+    """Return sorted, deduplicated workspace-relative path strings."""
+    normalised = set()
+    for item in items:
+        rel = _normalise_output(workspace, item)
+        if rel is not None:
+            normalised.add(rel)
+    return sorted(normalised)
+
+
+def _merge_results(stage_number, started_at, parts, workspace=None):
+    """Merge ``[(lane_name, payload_or_exception_text)]`` into one step payload.
+
+    Every merged stage reports ``outputs`` as workspace-relative path strings,
+    deduplicated and sorted (see :func:`_normalise_outputs`).
+
+    Status: ``ok`` if any lane ran ok, ``skipped`` if every lane skipped,
+    ``failed`` otherwise (including a lane that raised).  Stage 5 is stricter:
+    a skipped gate (e.g. the missing fresh-context judge) can never be merged
+    into ``ok``, so a missing check never looks green.
+    """
+    statuses = []
+    outputs = []
+    evidence = []
+    errors = []
+    lanes = {}
+    extras = {}
+
+    for name, result in parts:
+        if not isinstance(result, dict):
+            statuses.append("failed")
+            errors.append(f"{name}: {result}")
+            continue
+        status = str(result.get("status") or "failed")
+        statuses.append(status if status in VALID_STATUSES else "failed")
+        if isinstance(result.get("inputs"), dict):
+            lanes[name] = result["inputs"]
+        outputs.extend(_as_list(result.get("outputs")))
+        evidence.extend(_as_list(result.get("evidence")))
+        errors.extend(str(item) for item in _as_list(result.get("errors")))
+        for key, value in result.items():
+            if key in ("gates", "facts", "details"):
+                extras[key] = value
+
+    if stage_number == 5:
+        # A missing judge dependency must never look green: skip wins over ok.
+        if "failed" in statuses:
+            status = "failed"
+        elif "skipped" in statuses:
+            status = "skipped"
+        elif statuses:
+            status = "ok"
+        else:
+            status = "skipped"
+    elif "ok" in statuses:
+        status = "ok"
+    elif statuses and all(item == "skipped" for item in statuses):
+        status = "skipped"
+    else:
+        status = "failed"
+
     payload = {
         "stage": stage_number,
         "stage_name": STAGE_NAMES[stage_number],
         "status": status,
         "started_at": started_at,
         "finished_at": _now(),
-        "inputs": {"workspace": str(Path(workspace).resolve())},
-        "outputs": [],
-        "evidence": [],
+        "inputs": {"lanes": lanes},
+        "outputs": _normalise_outputs(workspace, outputs),
+        "evidence": evidence,
         "errors": errors,
     }
+    payload.update(extras)
+    return payload
+
+
+def _write_step(workspace, stage_number, payload):
+    """Serialize a merged step payload into 05_verify/step_NN.json."""
+    step_path = Path(workspace) / "05_verify" / f"step_{stage_number:02d}.json"
+    step_path.parent.mkdir(parents=True, exist_ok=True)
     step_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     return step_path
 
 
-def stage1(workspace):
-    raise NotImplementedError("Stage 1 (ingest) is not implemented in this contract-only snapshot.")
+def _accepts(run, name):
+    try:
+        params = inspect.signature(run).parameters
+    except (TypeError, ValueError):  # pragma: no cover - builtins/C callables
+        return False
+    if name in params:
+        return True
+    return any(p.kind is p.VAR_KEYWORD for p in params.values())
 
 
-def stage2(workspace):
-    raise NotImplementedError("Stage 2 (sift) is not implemented in this contract-only snapshot.")
+def _call(module_name, workspace, dry_run, deps=None, **kwargs):
+    """Run one lane module, returning its payload (exceptions become text)."""
+    try:
+        module = _load_lane(module_name)
+    except Exception as exc:  # noqa: BLE001 - a missing module is step evidence
+        return f"cannot import {module_name}: {exc}"
+    run = getattr(module, "run", None)
+    if not callable(run):
+        return f"{module_name}.run is not callable"
+
+    call_kwargs = dict(kwargs)
+    if _accepts(run, "dry_run"):
+        call_kwargs["dry_run"] = dry_run
+    elif dry_run:
+        # The lane has no dry-run switch: never let it write during --dry-run.
+        return {
+            "status": "skipped",
+            "outputs": [],
+            "evidence": [f"{module_name}: skipped (no dry-run support)"],
+            "errors": [],
+        }
+    if _accepts(run, "deps"):
+        call_kwargs["deps"] = deps
+
+    try:
+        return run(workspace, **call_kwargs)
+    except Exception as exc:  # noqa: BLE001 - serialize as evidence
+        return f"{module_name}.run raised: {exc}"
 
 
-def stage3(workspace):
-    raise NotImplementedError("Stage 3 (structure) is not implemented in this contract-only snapshot.")
+def _run_lanes(workspace, dry_run, lanes):
+    """Run ``[(name, kwargs)]`` and return merged payload parts."""
+    parts = []
+    for name, kwargs in lanes:
+        parts.append((name, _call(name, workspace, dry_run, **kwargs)))
+    return parts
 
 
-def stage4(workspace):
-    raise NotImplementedError("Stage 4 (render) is not implemented in this contract-only snapshot.")
+def stage1(workspace, dry_run=False):
+    return _run_lanes(
+        workspace,
+        dry_run,
+        [("stage1_canvas", {}), ("stage1_zoom", {})],
+    )
 
 
-def stage5(workspace):
-    raise NotImplementedError("Stage 5 (verify) is not implemented in this contract-only snapshot.")
+def stage2(workspace, dry_run=False):
+    return _run_lanes(workspace, dry_run, [("stage2_sift", {})])
+
+
+def stage3(workspace, dry_run=False):
+    return _run_lanes(workspace, dry_run, [("stage3_structure", {})])
+
+
+def stage4(workspace, dry_run=False):
+    return _run_lanes(
+        workspace,
+        dry_run,
+        [("render_graph", {}), ("render_anki", {}), ("render_cornell", {})],
+    )
+
+
+def stage5(workspace, dry_run=False):
+    return _run_lanes(workspace, dry_run, [("gates", {})])
 
 
 STAGE_FUNCTIONS = {
@@ -79,28 +259,50 @@ STAGE_FUNCTIONS = {
 }
 
 
-def _run_one(workspace, stage_number):
-    """Run one stage and always write step_NN.json evidence."""
+def _run_one(workspace, stage_number, dry_run=False):
+    """Run one stage and always write step_NN.json evidence (unless dry run)."""
     started_at = _now()
     try:
-        STAGE_FUNCTIONS[stage_number](workspace)
+        parts = STAGE_FUNCTIONS[stage_number](workspace, dry_run=dry_run)
+        payload = _merge_results(stage_number, started_at, parts, workspace=workspace)
     except Exception as exc:  # noqa: BLE001 - serialize any failure as evidence
-        _write_step(workspace, stage_number, "failed", started_at, errors=[str(exc)])
-        print(
-            f"stage{stage_number} ({STAGE_NAMES[stage_number]}): failed - {exc}",
-            file=sys.stderr,
-        )
-        return False
+        payload = {
+            "stage": stage_number,
+            "stage_name": STAGE_NAMES[stage_number],
+            "status": "failed",
+            "started_at": started_at,
+            "finished_at": _now(),
+            "inputs": {"workspace": str(Path(workspace).resolve())},
+            "outputs": [],
+            "evidence": [],
+            "errors": [str(exc)],
+        }
 
-    _write_step(workspace, stage_number, "ok", started_at)
-    print(f"stage{stage_number} ({STAGE_NAMES[stage_number]}): ok")
-    return True
+    if not dry_run:
+        try:
+            _write_step(workspace, stage_number, payload)
+        except OSError as exc:
+            payload["status"] = "failed"
+            payload["errors"] = list(payload.get("errors") or []) + [
+                f"cannot write step file: {exc}"
+            ]
+
+    status = payload["status"]
+    message = (
+        f"stage{stage_number} ({STAGE_NAMES[stage_number]}): {status}"
+    )
+    if status == "ok":
+        print(message)
+    else:
+        detail = "; ".join(payload.get("errors") or [])
+        print(f"{message}{' - ' + detail if detail else ''}", file=sys.stderr)
+    return status == "ok"
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(
         prog="run_pipeline.py",
-        description="Academic Notes Pipeline v2 stage dispatcher (contract only).",
+        description="Academic Notes Pipeline v2 stage dispatcher.",
     )
     parser.add_argument(
         "stage",
