@@ -30,7 +30,9 @@ Each HTML is standalone, small, independently verifiable. No cross-page coupling
 05_verify/        Gates (asset, markdown/KaTeX, schema, render, judge)
 ```
 
-Each stage folder has its own `CONTEXT.md`. State in `.agent_state.json` + `STATE.md` (one fact per line, supersede in place). Context gating (`cgate`) slices files instead of dumping. **All stages are planned; no runner exists yet.**
+Each stage folder has its own `CONTEXT.md`. State in `.agent_state.json` + `STATE.md` (one fact per line, supersede in place). Context gating (`cgate`) slices files instead of dumping. The runner is
+`scripts/run_pipeline.py`; every stage `CONTEXT.md` is generated from
+`scripts/stage_contracts.py`, the single contract table.
 
 ## 4. Stage 1 — Smart ingestion (planned around the constellation)
 
@@ -145,7 +147,8 @@ Three Kem/Glitch Cat skills anchor the pipeline. Each maps to a distinct concern
 
 ## 8. Verification — a gate at every stage (not just the end)
 
-Per-stage micro-gates (Kem: "always run the control"). Each stage must pass its gate before the next stage runs; a failing gate is a hard stop with serialized evidence (`step_NN.json`), not a warning. **All gates are planned; no gate runner exists yet.**
+Per-stage micro-gates (Kem: "always run the control"). Each stage must pass its gate before the next stage runs; a failing gate is a hard stop with serialized evidence (`step_NN.json`), not a warning. Implemented in `scripts/gates.py`; the five gates run in order and
+write `05_verify/step_05.json`.
 
 - **Stage 1 (ingest) gate `[D]`:** asset doctor (MIME, video size, Zoom passcode presence); scope check (only weeks 1-12 notes + tutorial solutions); dedup fingerprint sanity. Output: `step_01.json`.
 - **Stage 2 (sift) gate `[D]+[P]`:** markdown + KaTeX balance; classifier confidence floor (low-confidence items routed to review queue, not auto-dropped); no `.vtt` in DOM. Output: `step_02.json`.

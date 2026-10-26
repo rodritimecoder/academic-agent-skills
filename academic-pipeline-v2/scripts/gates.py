@@ -554,53 +554,35 @@ def run(workspace, dry_run=False, deps=None):
     else:
         status = "ok"
 
-    step_path = workspace / STEP_FILE[0] / STEP_FILE[1]
-    outputs = []
     if not dry_run:
-        evidence.append(
-            "gates: "
-            + ", ".join(f"{r['gate']}={r['status']}" for r in results)
-        )
-        payload = {
-            "stage": STAGE,
-            "stage_name": STAGE_NAME,
-            "step_type": STEP_TYPE,
-            "status": status,
-            "started_at": started_at,
-            "finished_at": _now(),
-            "inputs": {"workspace": str(workspace.resolve())},
-            "outputs": [],
-            "evidence": list(evidence),
-            "errors": errors,
-            "gates": results,
-        }
+        evidence.append("gates: " + ", ".join(f"{r['gate']}={r['status']}" for r in results))
+
+    payload = {
+        "stage": STAGE,
+        "stage_name": STAGE_NAME,
+        "step_type": STEP_TYPE,
+        "status": status,
+        "started_at": started_at,
+        "finished_at": _now(),
+        "inputs": {"workspace": str(workspace.resolve())},
+        "outputs": [],
+        "evidence": list(evidence),
+        "errors": errors,
+        "gates": results,
+    }
+
+    if not dry_run:
+        step_path = workspace / STEP_FILE[0] / STEP_FILE[1]
         try:
             step_path.parent.mkdir(parents=True, exist_ok=True)
             step_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-            outputs.append(str(step_path))
+            payload["outputs"] = [str(step_path)]
         except OSError as exc:
             payload["status"] = "failed"
             status = "failed"
             payload["errors"] = errors + [f"cannot write {step_path}: {exc}"]
-            errors = payload["errors"]
-        payload["outputs"] = outputs
-    else:
-        payload = {
-            "stage": STAGE,
-            "stage_name": STAGE_NAME,
-            "step_type": STEP_TYPE,
-            "status": status,
-            "started_at": started_at,
-            "finished_at": _now(),
-            "inputs": {"workspace": str(workspace.resolve())},
-            "outputs": [],
-            "evidence": list(evidence),
-            "errors": errors,
-            "gates": results,
-        }
 
     payload["ok"] = status == "ok"
-    payload.setdefault("errors", errors)
     return payload
 
 

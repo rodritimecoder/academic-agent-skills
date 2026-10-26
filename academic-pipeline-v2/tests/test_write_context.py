@@ -15,7 +15,7 @@ if str(SCRIPTS) not in sys.path:
 import write_context  # noqa: E402
 
 SCHEMA = ROOT / "contracts" / "step.schema.json"
-TEMPLATE = ROOT / "_templates" / "CONTEXT.md"
+TEMPLATE = ROOT / "_templates" / "stage-CONTEXT.md"
 
 EXPECTED_FOLDERS = {
     1: "01_ingest",
@@ -92,6 +92,24 @@ class WriteContextTests(unittest.TestCase):
         for folder in EXPECTED_FOLDERS.values():
             target = self.workspace / folder / "CONTEXT.md"
             self.assertTrue(target.is_file(), f"{folder}/CONTEXT.md not written")
+
+    def test_contract_fields_and_no_workspace_map(self):
+        path = write_context.write_stage_context(
+            self.workspace,
+            2,
+            reads=["01_ingest/**/*.md"],
+            writes=["02_sift/cleaned/**/*.md"],
+            checks=["fences are balanced"],
+        )
+        body = path.read_text(encoding="utf-8")
+        for field in ("**Actor:**", "**Step type:**", "**Proof:**"):
+            self.assertIn(field, body)
+        self.assertIn("05_verify/step_02.json", body)
+        for section in ("## Inputs", "## Process", "## Outputs", "## Human check"):
+            self.assertIn(section, body)
+        # The per-stage contract must not carry a copy of the workspace map.
+        self.assertNotIn("Stage execution map", body)
+        self.assertNotIn("## Stages", body)
 
     def test_body_names_stage_reads_and_writes(self):
         path = write_context.write_stage_context(

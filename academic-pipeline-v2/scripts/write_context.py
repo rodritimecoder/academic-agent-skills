@@ -5,10 +5,11 @@ ICM expects a ``CONTEXT.md`` in every working folder: what it reads, what it
 does, what it writes, and what a human must check.  No stage of this pipeline
 wrote one, so this module fills the gap.
 
-It renders ``_templates/CONTEXT.md`` (inline fallback if that file is absent)
-into ``workspace/0N_<name>/CONTEXT.md`` for stages 1-5, substituting
-``{{STAGE}}``, ``{{TITLE}}``, ``{{READS}}``, ``{{WRITES}}``, ``{{CHECKS}}``
-and ``{{HUMAN}}``.
+It renders ``_templates/stage-CONTEXT.md`` (inline fallback if that file is
+absent) into ``workspace/0N_<name>/CONTEXT.md`` for stages 1-5. The stage
+template is distinct from ``_templates/CONTEXT.md``, which is the workspace
+stage map: a per-stage contract that carried the whole map would duplicate the
+pipeline list once per folder.
 
 Public API
 ----------
@@ -29,35 +30,47 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-# Stage folder + title, kept local so the script runs standalone.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from stage_contracts import (  # noqa: E402 - path set above
+    STAGE_CONTRACTS,
+    STAGE_NAMES,
+    STAGE_TITLES,
+    STAGE_STEP_TYPES,
+    STEP_TYPE_ACTORS,
+    proof,
+)
+
+# Folder + title are derived from the contract table, never restated here.
 STAGES = {
-    1: ("01_ingest", "Ingest"),
-    2: ("02_sift", "Sift"),
-    3: ("03_structure", "Structure"),
-    4: ("04_render", "Render"),
-    5: ("05_verify", "Verify"),
+    number: (f"{number:02d}_{STAGE_NAMES[number]}", STAGE_TITLES[number])
+    for number in STAGE_NAMES
 }
 
-TEMPLATE_RELPATH = Path("_templates") / "CONTEXT.md"
+TEMPLATE_RELPATH = Path("_templates") / "stage-CONTEXT.md"
 
-INLINE_TEMPLATE = """# CONTEXT - Stage {{STAGE}}: {{TITLE}}
+INLINE_TEMPLATE = """# {{FOLDER}} — {{TITLE}}
 
-Folder: `0{{STAGE}}_{{TITLE}}`
+One job: produce the {{TITLE}} artefacts for stage {{STAGE}}.
 
-## Reads
+**Actor:** {{ACTOR}}
+**Step type:** {{STEP_TYPE}}
+**Proof:** {{PROOF}}
+
+## Inputs
 {{READS}}
 
-## Does
-- Produces the artefacts for stage {{STAGE}} of the academic pipeline.
-- Records every input it used so the step can be replayed.
+## Process
+1. Read the inputs above. Do not load the whole workspace.
+2. Produce the outputs below, following the checks in this contract.
+3. Write `05_verify/step_{{STAGE_PADDED}}.json` so the step can be replayed.
 
-## Writes
+## Outputs
 {{WRITES}}
 
-## Human checks
+## Human check
 {{CHECKS}}
 
-Human sign-off: {{HUMAN}}
+Sign-off: {{HUMAN}}
 """
 
 
@@ -102,12 +115,25 @@ def _find_template(workspace):
     return None
 
 
-def render_context(template_text, stage, title, reads, writes, checks, human=""):
-    """Substitute the six placeholders; keep stage facts in the body always."""
+def render_context(
+    template_text,
+    stage,
+    title,
+    reads,
+    writes,
+    checks,
+    human="",
+    actor="agent",
+    step_type="P",
+    proof="",
+):
+    """Substitute the placeholders; keep stage facts in the body always."""
     folder = stage_dir_name(stage)
     human = (human or "").strip() or "_to be confirmed by the researcher_"
+    stage_number = int(stage)
 
     replacements = {
+        "{{STAGE_PADDED}}": f"{stage_number:02d}",
         "{{STAGE}}": str(stage),
         "{{TITLE}}": title,
         "{{FOLDER}}": folder,
@@ -116,6 +142,9 @@ def render_context(template_text, stage, title, reads, writes, checks, human="")
         "{{WRITES}}": _bullet(writes),
         "{{CHECKS}}": _bullet(checks),
         "{{HUMAN}}": human,
+        "{{ACTOR}}": actor,
+        "{{STEP_TYPE}}": step_type,
+        "{{PROOF}}": proof or f"05_verify/step_{stage_number:02d}.json",
     }
 
     text = template_text
@@ -128,19 +157,24 @@ def render_context(template_text, stage, title, reads, writes, checks, human="")
     if not had_stage:
         parts.append(f"# CONTEXT - Stage {stage}: {title}\n\nFolder: `{folder}`")
     body = text.rstrip("\n")
-    # The template opens with its own H1; this file already has a stage heading.
-    if body.lstrip().startswith("# "):
+    # Only drop the template's H1 when we prepended our own stage heading.
+    if not had_stage and body.lstrip().startswith("# "):
         body = "\n".join(body.splitlines()[1:]).lstrip("\n")
     parts.append(body)
     if not had_sections:
         parts.append(
-            "## Reads\n"
+            f"**Actor:** {actor}\n"
+            f"**Step type:** {step_type}\n"
+            f"**Proof:** {replacements['{{PROOF}}']}\n\n"
+            "## Inputs\n"
             f"{_bullet(reads)}\n\n"
-            "## Writes\n"
+            "## Process\n"
+            f"1. Produce the stage {stage} artefacts.\n\n"
+            "## Outputs\n"
             f"{_bullet(writes)}\n\n"
-            "## Human checks\n"
+            "## Human check\n"
             f"{_bullet(checks)}\n\n"
-            f"Human sign-off: {human}"
+            f"Sign-off: {human}"
         )
     body = "\n\n".join(parts)
     if not body.endswith("\n"):
@@ -156,6 +190,9 @@ def write_stage_context(
     writes,
     checks,
     human="",
+    actor="agent",
+    step_type="P",
+    proof="",
     overwrite=False,
 ):
     """Render CONTEXT.md into ``workspace/0N_<name>/CONTEXT.md``.
@@ -179,7 +216,18 @@ def write_stage_context(
     tmpl = _find_template(workspace)
     template_text = tmpl.read_text(encoding="utf-8") if tmpl else INLINE_TEMPLATE
 
-    body = render_context(template_text, stage, title, reads, writes, checks, human)
+    body = render_context(
+        template_text,
+        stage,
+        title,
+        reads,
+        writes,
+        checks,
+        human,
+        actor=actor,
+        step_type=step_type,
+        proof=proof,
+    )
 
     target_dir.mkdir(parents=True, exist_ok=True)
     target.write_text(body, encoding="utf-8")
@@ -190,34 +238,18 @@ def write_stage_context(
 # Step-runner entry point (payload valid against contracts/step.schema.json)
 # --------------------------------------------------------------------------
 def default_spec(stage):
-    """Default reads/writes/checks for one stage, used by ``run``."""
-    folder = stage_dir_name(stage)
-    reads = {
-        1: [f"{folder}/TASK.md", "inputs/ (canvas export, zoom recordings)"],
-        2: ["01_ingest/meta.json", "01_ingest/*.md"],
-        3: ["01_ingest/meta.json", "02_sift/ (cleaned notes, sift_report.json)"],
-        4: ["03_structure/<course>/02_index/index.md", "03_structure/<course>/01_weeks/"],
-        5: ["03_structure/<course>/", "04_render/ (graph, anki, cornell)"],
-    }[stage]
-    writes = {
-        1: ["01_ingest/meta.json", "01_ingest/*.md"],
-        2: ["02_sift/*.md", "02_sift/sift_report.json"],
-        3: ["03_structure/<course>/01_weeks/", "03_structure/<course>/02_index/index.md"],
-        4: ["04_render/graph.html", "04_render/anki.html", "04_render/cornell.html"],
-        5: ["05_verify/step_05.json", "05_verify/gate_report.json"],
-    }[stage]
-    checks = {
-        1: ["meta.json validates against contracts/meta.schema.json"],
-        2: ["every note carries a source pointer"],
-        3: ["each week has slides/notes/cornell entries"],
-        4: ["rendered HTML opens and links resolve"],
-        5: ["all gates report ok"],
-    }[stage]
+    """Reads/writes/checks plus the three contract fields, from the one table."""
+    stage = int(stage)
+    entry = STAGE_CONTRACTS[stage]
+    step_kind = STAGE_STEP_TYPES[stage]
     return {
-        "reads": reads,
-        "writes": writes + [f"{folder}/CONTEXT.md"],
-        "checks": checks + ["CONTEXT.md lists reads, writes and human checks"],
+        "reads": list(entry["reads"]),
+        "writes": list(entry["writes"]),
+        "checks": list(entry["checks"]),
         "human": "Confirm scope and listed reads before running the stage.",
+        "actor": STEP_TYPE_ACTORS[step_kind],
+        "step_type": step_kind,
+        "proof": proof(stage),
     }
 
 
@@ -248,6 +280,9 @@ def run(workspace, dry_run=False, deps=None):
                 writes=spec["writes"],
                 checks=spec["checks"],
                 human=spec["human"],
+                actor=spec["actor"],
+                step_type=spec["step_type"],
+                proof=spec["proof"],
                 overwrite=False,
             )
             outputs.append(str(path))
