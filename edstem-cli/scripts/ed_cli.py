@@ -446,8 +446,7 @@ def cmd_unlock(client: EdClient, args: argparse.Namespace):
     res = client._request(f"threads/{args.thread_id}/unlock", method="POST")
     render_output(res, args)
 
-def cmd_workspaces(client: EdClient, args: argparse.Namespace):
-    course_id = getattr(args, "course_id", None)
+def _workspace_rows(client: EdClient, course_id: int | None = None) -> tuple[list[dict], list[dict]]:
     if course_id is None:
         user = client._request("user")
         courses = [entry.get("course", {}) for entry in user.get("courses", [])]
@@ -477,6 +476,43 @@ def cmd_workspaces(client: EdClient, args: argparse.Namespace):
                 row["course_code"] = course.get("code")
                 row["course"] = course.get("name")
             out.append(row)
+    return out, raw_responses
+
+
+def _resolve_workspace_id(client: EdClient, selector: str) -> str:
+    selector = selector.strip()
+    if not selector:
+        raise SystemExit("Workspace selector cannot be empty.")
+
+    rows, _ = _workspace_rows(client)
+    by_id = [row for row in rows if str(row.get("id", "")).casefold() == selector.casefold()]
+    if by_id:
+        return str(by_id[0]["id"])
+
+    term = selector.casefold()
+    exact_title = [row for row in rows if str(row.get("title") or "").casefold() == term]
+    exact_author = [row for row in rows if str(row.get("author") or "").casefold() == term]
+    title_matches = exact_title or [
+        row for row in rows if term in str(row.get("title") or "").casefold()
+    ]
+    matches = title_matches or exact_author or [
+        row for row in rows if term in str(row.get("author") or "").casefold()
+    ]
+    if len(matches) == 1:
+        return str(matches[0]["id"])
+    if not matches:
+        raise SystemExit(f"No workspace matched {selector!r}. Run 'workspaces --table' to browse.")
+
+    choices = "\n".join(
+        f"  {row.get('title')} — {row.get('course')} ({row.get('course_code')}) [ID: {row.get('id')}]"
+        for row in matches
+    )
+    raise SystemExit(f"Workspace selector {selector!r} is ambiguous; choose one:\n{choices}")
+
+
+def cmd_workspaces(client: EdClient, args: argparse.Namespace):
+    course_id = getattr(args, "course_id", None)
+    out, raw_responses = _workspace_rows(client, course_id)
 
     search_term = getattr(args, "search", None)
     if search_term:
@@ -492,10 +528,11 @@ def cmd_workspaces(client: EdClient, args: argparse.Namespace):
         render_output(raw_responses[0], args)
 
 def cmd_workspace(client: EdClient, args: argparse.Namespace):
-    res = client._request(f"workspaces/{args.workspace_id}")
+    workspace_id = _resolve_workspace_id(client, args.workspace_id)
+    res = client._request(f"workspaces/{workspace_id}")
     if getattr(args, "connect", False):
         try:
-            ticket_res = client._request(f"workspaces/{args.workspace_id}/connect", method="POST")
+            ticket_res = client._request(f"workspaces/{workspace_id}/connect", method="POST")
             res["ticket"] = ticket_res.get("ticket")
         except Exception as e:
             res["ticket_error"] = str(e)
@@ -547,13 +584,14 @@ def _render_workspace_report(report: dict, repo: Path, show_diff: bool = False) 
             print(diff, end="" if diff.endswith("\n") else "\n")
 
 
-def cmd_workspace_diff(_client: EdClient, args: argparse.Namespace):
+def cmd_workspace_diff(client: EdClient, args: argparse.Namespace):
+    workspace_id = _resolve_workspace_id(client, args.workspace_id)
     repo = Path(args.repo).expanduser().resolve()
     try:
-        temporary, snapshot = _pull_workspace_snapshot(args.workspace_id)
+        temporary, snapshot = _pull_workspace_snapshot(workspace_id)
         try:
             report = workspace_sync.compare_snapshot(snapshot, repo)
-            report["workspace_id"] = args.workspace_id
+            report["workspace_id"] = workspace_id
             report["snapshot"] = snapshot
             _render_workspace_report(report, repo, args.diff)
         finally:
@@ -683,7 +721,8 @@ def _guarded_push(repo: Path) -> None:
         raise workspace_sync.WorkspaceSyncError("push failed; local commit remains")
 
 
-def cmd_workspace_update(_client: EdClient, args: argparse.Namespace):
+def cmd_workspace_update(client: EdClient, args: argparse.Namespace):
+    workspace_id = _resolve_workspace_id(client, args.workspace_id)
     repo = Path(args.repo).expanduser().resolve()
     if args.push and not args.commit:
         raise SystemExit("workspace-update: --push requires --commit")
@@ -693,10 +732,10 @@ def cmd_workspace_update(_client: EdClient, args: argparse.Namespace):
         raise SystemExit("workspace-update: --commit requires at least one --test-command")
 
     try:
-        temporary, snapshot = _pull_workspace_snapshot(args.workspace_id)
+        temporary, snapshot = _pull_workspace_snapshot(workspace_id)
         try:
             report = workspace_sync.compare_snapshot(snapshot, repo)
-            report["workspace_id"] = args.workspace_id
+            report["workspace_id"] = workspace_id
             report["snapshot"] = snapshot
             _render_workspace_report(report, repo, args.diff)
             if not args.apply:
@@ -705,8 +744,8 @@ def cmd_workspace_update(_client: EdClient, args: argparse.Namespace):
             workspace_sync.require_clean_git_repo(repo)
             if args.commit:
                 _git_sync_preflight(repo)
-                _run_sandbox_tests(repo, snapshot, args.workspace_id, args.test_command)
-            result = workspace_sync.apply_snapshot(snapshot, repo, args.workspace_id)
+                _run_sandbox_tests(repo, snapshot, workspace_id, args.test_command)
+            result = workspace_sync.apply_snapshot(snapshot, repo, workspace_id)
             print(f"Applied {len(result['applied'])} file(s); removed files were not deleted.")
             print(f"Manifest: {result['manifest']}")
             if args.commit:
@@ -730,24 +769,27 @@ def _run_workspace_helper(args: list[str], *, capture_output: bool = True) -> su
     )
 
 
-def cmd_workspace_files(_client: EdClient, args: argparse.Namespace):
-    res = _run_workspace_helper(["files", args.workspace_id])
+def cmd_workspace_files(client: EdClient, args: argparse.Namespace):
+    workspace_id = _resolve_workspace_id(client, args.workspace_id)
+    res = _run_workspace_helper(["files", workspace_id])
     if res.returncode != 0:
         sys.stderr.write(res.stderr or "Workspace file listing failed.\n")
         sys.exit(res.returncode)
     print((res.stdout or "").strip())
 
 
-def cmd_workspace_cat(_client: EdClient, args: argparse.Namespace):
-    res = _run_workspace_helper(["cat", args.workspace_id, args.file_path])
+def cmd_workspace_cat(client: EdClient, args: argparse.Namespace):
+    workspace_id = _resolve_workspace_id(client, args.workspace_id)
+    res = _run_workspace_helper(["cat", workspace_id, args.file_path])
     if res.returncode != 0:
         sys.stderr.write(res.stderr or "Workspace file read failed.\n")
         sys.exit(res.returncode)
     sys.stdout.write(res.stdout or "")
 
 
-def cmd_workspace_pull(_client: EdClient, args: argparse.Namespace):
-    cmd = ["pull", args.workspace_id]
+def cmd_workspace_pull(client: EdClient, args: argparse.Namespace):
+    workspace_id = _resolve_workspace_id(client, args.workspace_id)
+    cmd = ["pull", workspace_id]
     if getattr(args, "dest", None):
         cmd.append(args.dest)
     res = _run_workspace_helper(cmd)
@@ -757,9 +799,10 @@ def cmd_workspace_pull(_client: EdClient, args: argparse.Namespace):
     print((res.stdout or "").strip())
 
 
-def cmd_workspace_sync(_client: EdClient, args: argparse.Namespace):
-    dest = getattr(args, "dest", None) or f"workspace_{args.workspace_id}"
-    cmd = ["sync", args.workspace_id, dest]
+def cmd_workspace_sync(client: EdClient, args: argparse.Namespace):
+    workspace_id = _resolve_workspace_id(client, args.workspace_id)
+    dest = getattr(args, "dest", None) or f"workspace_{workspace_id}"
+    cmd = ["sync", workspace_id, dest]
     if getattr(args, "push", False):
         cmd.append("--push")
     if getattr(args, "once", False):
@@ -890,25 +933,25 @@ def main():
     p_workspaces.add_argument("--summary", action="store_true", help="Print summary list")
 
     p_workspace = subparsers.add_parser("workspace", help="Inspect workspace details")
-    p_workspace.add_argument("workspace_id", help="Workspace string ID")
+    p_workspace.add_argument("workspace_id", metavar="workspace", help="Workspace ID, title, or author selector")
     p_workspace.add_argument("--connect", action="store_true", help="Fetch connection ticket")
 
     p_ws_files = subparsers.add_parser("workspace-files", help="List live files inside workspace container")
-    p_ws_files.add_argument("workspace_id", help="Workspace string ID")
+    p_ws_files.add_argument("workspace_id", metavar="workspace", help="Workspace ID, title, or author selector")
 
     p_ws_cat = subparsers.add_parser("workspace-cat", help="Print file buffer from live workspace container")
-    p_ws_cat.add_argument("workspace_id", help="Workspace string ID")
+    p_ws_cat.add_argument("workspace_id", metavar="workspace", help="Workspace ID, title, or author selector")
     p_ws_cat.add_argument("file_path", help="File path inside container (e.g. Makefile, archive.h)")
 
     p_ws_pull = subparsers.add_parser("workspace-pull", help="Download all files from workspace container")
-    p_ws_pull.add_argument("workspace_id", help="Workspace string ID")
+    p_ws_pull.add_argument("workspace_id", metavar="workspace", help="Workspace ID, title, or author selector")
     p_ws_pull.add_argument("--dest", help="Destination directory path (default: ./workspace_<id>)")
 
     p_ws_diff = subparsers.add_parser(
         "workspace-diff",
         help="Preview a workspace snapshot against a Git repo without changing files",
     )
-    p_ws_diff.add_argument("workspace_id", help="Workspace string ID")
+    p_ws_diff.add_argument("workspace_id", metavar="workspace", help="Workspace ID, title, or author selector")
     p_ws_diff.add_argument("--repo", required=True, help="Local Git repository path")
     p_ws_diff.add_argument("--diff", action="store_true", help="Print unified text diffs for changed files")
 
@@ -916,7 +959,7 @@ def main():
         "workspace-update",
         help="Safely apply a workspace snapshot to a clean Git repo",
     )
-    p_ws_update.add_argument("workspace_id", help="Workspace string ID")
+    p_ws_update.add_argument("workspace_id", metavar="workspace", help="Workspace ID, title, or author selector")
     p_ws_update.add_argument("--repo", required=True, help="Local Git repository path")
     p_ws_update.add_argument("--apply", action="store_true", help="Apply new and changed files (default: preview only)")
     p_ws_update.add_argument("--diff", action="store_true", help="Print unified text diffs before applying")
@@ -931,7 +974,7 @@ def main():
     p_ws_update.add_argument("--message", default="edstem-cli: sync workspace snapshot", help="Commit message")
 
     p_ws_sync = subparsers.add_parser("workspace-sync", help="Sync workspace with a local git repo (watch or single pass)")
-    p_ws_sync.add_argument("workspace_id", help="Workspace string ID")
+    p_ws_sync.add_argument("workspace_id", metavar="workspace", help="Workspace ID, title, or author selector")
     p_ws_sync.add_argument("--dest", help="Destination directory path (default: ./workspace_<id>)")
     p_ws_sync.add_argument("--push", action="store_true", help="Auto git push on new commits")
     p_ws_sync.add_argument("--once", action="store_true", help="Run once and exit instead of continuous watcher")

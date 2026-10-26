@@ -10,11 +10,11 @@ CLI=/run/media/rodri/AI/skills/edstem-cli/scripts/ed_cli.py
 ## Workspace files and Git sync
 
 ```bash
-# List files in the live workspace container
-python3 $CLI workspace-files <workspace_id>
+# List files by workspace title, author, or ID
+python3 $CLI workspace-files "Assessment 3"
 
 # Read a file directly from the container buffer, without downloading
-python3 $CLI workspace-cat <workspace_id> archive.h
+python3 $CLI workspace-cat "Assessment 3" archive.h
 
 # Pull the full workspace tree to a local directory
 python3 $CLI workspace-pull <workspace_id> --dest ./my_assessment_3

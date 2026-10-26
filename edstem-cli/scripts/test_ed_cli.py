@@ -150,6 +150,32 @@ mock_ws_resp = {
     "workspaces": [{"id": "workspace-1", "title": "Assessment 3", "type": "c", "user_id": 7}],
     "users": [{"id": 7, "name": "Timothy Perry"}],
 }
+lookup_client = SimpleNamespace(
+    _request=mock.Mock(side_effect=[
+        {"courses": [{"course": {"id": 1001, "code": "48430", "name": "Fundamentals of C"}}]},
+        mock_ws_resp,
+    ])
+)
+resolved = cli._resolve_workspace_id(lookup_client, "assessment 3")
+check("workspace title resolves to its ID", resolved == "workspace-1", resolved)
+
+ambiguous_client = SimpleNamespace(
+    _request=mock.Mock(side_effect=[
+        {"courses": [
+            {"course": {"id": 1001, "code": "48430", "name": "Fundamentals of C"}},
+            {"course": {"id": 1002, "code": "48441", "name": "Digital Systems"}},
+        ]},
+        mock_ws_resp,
+        mock_ws_resp,
+    ])
+)
+try:
+    cli._resolve_workspace_id(ambiguous_client, "Assessment 3")
+    ambiguous = False
+except SystemExit as exc:
+    ambiguous = "ambiguous" in str(exc) and "48430" in str(exc) and "48441" in str(exc)
+check("duplicate workspace titles require an explicit choice", ambiguous)
+
 mock_user_two_courses = {
     "courses": [
         {"course": {"id": 1001, "code": "48430", "name": "Fundamentals of C"}},
@@ -167,12 +193,14 @@ check(
 )
 
 helper_result = SimpleNamespace(returncode=0, stdout='[{"path":"/home/main.c"}]\n', stderr="")
-with mock.patch.object(cli, "_run_workspace_helper", return_value=helper_result):
+with mock.patch.object(cli, "_resolve_workspace_id", side_effect=lambda client, selector: selector), \
+     mock.patch.object(cli, "_run_workspace_helper", return_value=helper_result):
     out_text = run_cli(["workspace-files", "workspace-1"], {})
 check("workspace-files prints captured helper output without crashing", '"/home/main.c"' in out_text, out_text)
 
 helper_result = SimpleNamespace(returncode=0, stdout="int main(void) { return 0; }\n", stderr="")
-with mock.patch.object(cli, "_run_workspace_helper", return_value=helper_result):
+with mock.patch.object(cli, "_resolve_workspace_id", side_effect=lambda client, selector: selector), \
+     mock.patch.object(cli, "_run_workspace_helper", return_value=helper_result):
     out_text = run_cli(["workspace-cat", "workspace-1", "main.c"], {})
 check("workspace-cat prints the captured workspace file contents", "int main(void)" in out_text, out_text)
 
