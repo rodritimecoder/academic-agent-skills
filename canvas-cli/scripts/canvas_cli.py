@@ -33,7 +33,7 @@ class CanvasHTTPError(CanvasError):
 class CanvasNetworkError(CanvasError):
     pass
 
-env_path = Path(__file__).parent.parent / ".env"
+env_path = Path(__file__).resolve().parent.parent / ".env"
 if env_path.exists():
     for line in env_path.read_text().splitlines():
         line = line.strip()
