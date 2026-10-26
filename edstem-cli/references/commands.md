@@ -10,7 +10,7 @@ CLI=/run/media/rodri/AI/skills/edstem-cli/scripts/ed_cli.py
 ## Workspace files and Git sync
 
 ```bash
-# Stream the real-time file tree from the live workspace container
+# List files in the live workspace container
 python3 $CLI workspace-files <workspace_id>
 
 # Read a file directly from the container buffer, without downloading
@@ -54,6 +54,10 @@ reported via `.edstem-workspace.json` but never deleted from the repo;
 ```bash
 # The authenticated user profile and their organisation
 python3 $CLI me
+
+# List workspaces across all enrolled courses, optionally searching title/author/course
+python3 $CLI workspaces --table
+python3 $CLI workspaces --search "Tim" --table
 ```
 
 ## Reading a thread

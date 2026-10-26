@@ -86,7 +86,11 @@ python3 $CLI reply <thread_id> \
 # 5. Cloud IDE workspaces
 python3 $CLI workspaces <course_id> --summary
 python3 $CLI workspaces <course_id> --search "Tim" --summary
+python3 $CLI workspaces --search "Tim" --table
+python3 $CLI workspaces --table
 python3 $CLI workspace <workspace_id> --connect
+python3 $CLI workspace-files <workspace_id>
+python3 $CLI workspace-cat <workspace_id> main.c
 
 # 5b. Workspace -> Git, preview first, then apply
 python3 $CLI workspace-diff <workspace_id> --repo ~/path/to/repo --diff

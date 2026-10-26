@@ -6,6 +6,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 CLI_PATH = Path(__file__).resolve().parent / "ed_cli.py"
@@ -90,6 +91,15 @@ def run_cli(argv, response_payload):
         cli.main()
     return out.getvalue()
 
+def run_cli_responses(argv, response_payloads):
+    out = io.StringIO()
+    responses = [FakeResp(payload) for payload in response_payloads]
+    with mock.patch.object(sys, "argv", ["ed_cli.py"] + argv), \
+         mock.patch.object(cli, "urlopen", side_effect=responses), \
+         mock.patch.object(sys, "stdout", out):
+        cli.main()
+    return out.getvalue()
+
 mock_user_resp = {
     "user": {"id": 42, "name": "Rodrigo", "email": "rodrigo@example.com", "role": "student"},
     "realms": [{"name": "UTS"}],
@@ -135,6 +145,45 @@ check("--out writes to disk file", os.path.exists(tmp_out))
 check("--out returns concise 1-line receipt with count", "saved_to" in out_text and '"count": 1' in out_text, out_text)
 if os.path.exists(tmp_out):
     os.remove(tmp_out)
+
+mock_ws_resp = {
+    "workspaces": [{"id": "workspace-1", "title": "Assessment 3", "type": "c", "user_id": 7}],
+    "users": [{"id": 7, "name": "Timothy Perry"}],
+}
+mock_user_two_courses = {
+    "courses": [
+        {"course": {"id": 1001, "code": "48430", "name": "Fundamentals of C"}},
+        {"course": {"id": 1002, "code": "48441", "name": "Digital Systems"}},
+    ]
+}
+out_text = run_cli_responses(
+    ["workspaces", "--search", "Tim", "--table"],
+    [mock_user_two_courses, mock_ws_resp, {"workspaces": [], "users": []}],
+)
+check(
+    "workspaces without course ID searches all enrolled courses",
+    "Assessment 3" in out_text and "Timothy Perry" in out_text and "Fundamentals of C" in out_text,
+    out_text,
+)
+
+helper_result = SimpleNamespace(returncode=0, stdout='[{"path":"/home/main.c"}]\n', stderr="")
+with mock.patch.object(cli, "_run_workspace_helper", return_value=helper_result):
+    out_text = run_cli(["workspace-files", "workspace-1"], {})
+check("workspace-files prints captured helper output without crashing", '"/home/main.c"' in out_text, out_text)
+
+helper_result = SimpleNamespace(returncode=0, stdout="int main(void) { return 0; }\n", stderr="")
+with mock.patch.object(cli, "_run_workspace_helper", return_value=helper_result):
+    out_text = run_cli(["workspace-cat", "workspace-1", "main.c"], {})
+check("workspace-cat prints the captured workspace file contents", "int main(void)" in out_text, out_text)
+
+with mock.patch.object(cli.shutil, "which", return_value="node"), \
+     mock.patch.object(cli, "_workspace_helper_path", return_value=Path("ed_ws.js")), \
+     mock.patch.object(cli.subprocess, "run", return_value=helper_result) as run_helper:
+    cli._run_workspace_helper(["files", "workspace-1"])
+check(
+    "workspace helper captures text output for file commands",
+    run_helper.call_args.kwargs.get("capture_output") is True and run_helper.call_args.kwargs.get("text") is True,
+)
 
 print("\n" + ("ALL PASS" if not fails else f"{len(fails)} FAILURES: {fails}"))
 sys.exit(1 if fails else 0)

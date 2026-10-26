@@ -447,32 +447,49 @@ def cmd_unlock(client: EdClient, args: argparse.Namespace):
     render_output(res, args)
 
 def cmd_workspaces(client: EdClient, args: argparse.Namespace):
-    res = client._request(f"courses/{args.course_id}/workspaces")
-    workspaces = res.get("workspaces", [])
-    users = {u.get("id"): u.get("name") for u in res.get("users", [])}
+    course_id = getattr(args, "course_id", None)
+    if course_id is None:
+        user = client._request("user")
+        courses = [entry.get("course", {}) for entry in user.get("courses", [])]
+        course_entries = [course for course in courses if course.get("id") is not None]
+    else:
+        course_entries = [{"id": course_id}]
 
     out = []
-    for ws in workspaces:
-        uid = ws.get("user_id")
-        out.append({
-            "id": ws.get("id"),
-            "title": ws.get("title"),
-            "type": ws.get("type"),
-            "author": users.get(uid, f"User {uid}"),
-            "created_at": ws.get("created_at"),
-            "opened_at": ws.get("opened_at"),
-            "shared_at": ws.get("shared_at"),
-        })
+    raw_responses = []
+    for course in course_entries:
+        course_res = client._request(f"courses/{course['id']}/workspaces")
+        raw_responses.append(course_res)
+        users = {u.get("id"): u.get("name") for u in course_res.get("users", [])}
+        for ws in course_res.get("workspaces", []):
+            uid = ws.get("user_id")
+            row = {
+                "id": ws.get("id"),
+                "title": ws.get("title"),
+                "type": ws.get("type"),
+                "author": users.get(uid, f"User {uid}"),
+                "created_at": ws.get("created_at"),
+                "opened_at": ws.get("opened_at"),
+                "shared_at": ws.get("shared_at"),
+            }
+            if course_id is None:
+                row["course_id"] = course.get("id")
+                row["course_code"] = course.get("code")
+                row["course"] = course.get("name")
+            out.append(row)
 
     search_term = getattr(args, "search", None)
     if search_term:
-        term = search_term.lower()
-        out = [w for w in out if term in w["title"].lower() or term in w["author"].lower()]
+        term = search_term.casefold()
+        out = [
+            row for row in out
+            if any(term in str(row.get(key) or "").casefold() for key in ("title", "author", "course"))
+        ]
 
-    if getattr(args, "summary", False) or getattr(args, "table", False) or getattr(args, "project", False):
+    if course_id is None or getattr(args, "summary", False) or getattr(args, "table", False) or getattr(args, "project", False):
         render_output(out, args)
     else:
-        render_output(res, args)
+        render_output(raw_responses[0], args)
 
 def cmd_workspace(client: EdClient, args: argparse.Namespace):
     res = client._request(f"workspaces/{args.workspace_id}")
@@ -701,27 +718,32 @@ def cmd_workspace_update(_client: EdClient, args: argparse.Namespace):
     except workspace_sync.WorkspaceSyncError as exc:
         raise SystemExit(f"workspace-update: {exc}") from exc
 
-def _run_workspace_helper(args: list[str]) -> subprocess.CompletedProcess:
+def _run_workspace_helper(args: list[str], *, capture_output: bool = True) -> subprocess.CompletedProcess:
     node = shutil.which("node")
     if not node:
         raise SystemExit("node is required for workspace file access")
-    return subprocess.run([node, str(_workspace_helper_path())] + args, check=False)
+    return subprocess.run(
+        [node, str(_workspace_helper_path())] + args,
+        check=False,
+        capture_output=capture_output,
+        text=True,
+    )
 
 
 def cmd_workspace_files(_client: EdClient, args: argparse.Namespace):
     res = _run_workspace_helper(["files", args.workspace_id])
     if res.returncode != 0:
-        sys.stderr.write(res.stderr)
+        sys.stderr.write(res.stderr or "Workspace file listing failed.\n")
         sys.exit(res.returncode)
-    print(res.stdout.strip())
+    print((res.stdout or "").strip())
 
 
 def cmd_workspace_cat(_client: EdClient, args: argparse.Namespace):
     res = _run_workspace_helper(["cat", args.workspace_id, args.file_path])
     if res.returncode != 0:
-        sys.stderr.write(res.stderr)
+        sys.stderr.write(res.stderr or "Workspace file read failed.\n")
         sys.exit(res.returncode)
-    sys.stdout.write(res.stdout)
+    sys.stdout.write(res.stdout or "")
 
 
 def cmd_workspace_pull(_client: EdClient, args: argparse.Namespace):
@@ -730,9 +752,9 @@ def cmd_workspace_pull(_client: EdClient, args: argparse.Namespace):
         cmd.append(args.dest)
     res = _run_workspace_helper(cmd)
     if res.returncode != 0:
-        sys.stderr.write(res.stderr)
+        sys.stderr.write(res.stderr or "Workspace pull failed.\n")
         sys.exit(res.returncode)
-    print(res.stdout.strip())
+    print((res.stdout or "").strip())
 
 
 def cmd_workspace_sync(_client: EdClient, args: argparse.Namespace):
@@ -743,7 +765,7 @@ def cmd_workspace_sync(_client: EdClient, args: argparse.Namespace):
     if getattr(args, "once", False):
         cmd.append("--once")
     try:
-        _run_workspace_helper(cmd)
+        _run_workspace_helper(cmd, capture_output=False)
     except KeyboardInterrupt:
         print("\n[ed-sync] Watcher stopped.")
 
@@ -862,8 +884,8 @@ def main():
     p_unlock = subparsers.add_parser("unlock", help="Unlock a thread")
     p_unlock.add_argument("thread_id", type=int, help="Thread ID")
 
-    p_workspaces = subparsers.add_parser("workspaces", help="List workspaces in a course", parents=[common_parser])
-    p_workspaces.add_argument("course_id", type=int, help="Course ID")
+    p_workspaces = subparsers.add_parser("workspaces", help="List workspaces in one or all courses", parents=[common_parser])
+    p_workspaces.add_argument("course_id", type=int, nargs="?", help="Course ID (omit to search all enrolled courses)")
     p_workspaces.add_argument("--search", help="Search by workspace title or author")
     p_workspaces.add_argument("--summary", action="store_true", help="Print summary list")
 
