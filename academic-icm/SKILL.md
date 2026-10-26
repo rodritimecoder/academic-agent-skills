@@ -89,7 +89,7 @@ academic-icm modules
      2. Gate 2: Markdown & KaTeX Syntax `[D]` (balance of delimiters, zero `.vtt` video links).
      3. Gate 3: Cornell JSON & Anti-VTT Invariant `[D]` (strict exclusion of subtitle files as video).
      4. Gate 4: Web Cosmos & Study Portal Compilation `[D]` (HTML & Anki sync, zero `.vtt` in DOM).
-     5. Gate 5: Unbiased 0-Context Acceptance Judge `[P]` (local vllm-d3-mini decision engine evaluation).
+      5. Gate 5: Unbiased 0-Context Acceptance Judge `[P]` (local h2o-lightning-4b JEV decision evaluation).
 
 ---
 
@@ -110,7 +110,7 @@ academic-icm verify --fix
 academic-icm verify 5 --stage 3
 ```
 
-### 2. Run Smart Cognitive & Visual Audit (AGY 3.8 Flash + vllm-d3-mini Vision)
+### 2. Run Smart Cognitive & Visual Audit (AGY 3.8 Flash + h2o-lightning-4b Vision)
 ```bash
 # Deep cognitive audit on a specific note
 academic-icm smart-check Week06_Phasors_cornell.json
@@ -179,4 +179,3 @@ academic-icm stamp-video "48520 - Electronics and Circuits/outputs/json/Week_5_T
 academic-icm compile
 ```
 Extracts timestamps from `.vtt` and `_transcript.md` using BM25 semantic chunking, binds them to local MP4s, Zoom cloud recordings, or YouTube walkthroughs, and appends `[▶ MM:SS](url#t=sec)` directly to active-recall cues.
-

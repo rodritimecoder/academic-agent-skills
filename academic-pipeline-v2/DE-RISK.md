@@ -90,7 +90,7 @@ python3 ports.py list
 PORT   SLOT             CARD         DEFAULT                    ROLE
 8080   llm              many (7)     Qwen3.6-35B-A3B-Uncensore  Primary generative LLM — chat, code, long-form writing, prose projection
 8081   audio            many (3)     nemotron-asr               Speech-to-text, text-to-speech, forced alignment, voice cloning
-8083   decision         one-of-many (5) vllm-d3-nano               The decision engine slot - bool / choice / score primitives
+8083   decision         one-of-many (5) h2o-lightning-4b           The JEV decision engine slot - bool / choice / score primitives
 8082   decision-engine  single (1)   StartLux-Decision-v1.1-4B  Internal engine of the :8083 decision slot - prompts in one micro-batch, not a client-facing API
 8089   decision-fallback single (1)   Imajev-4B                  Secondary decision engine — Imajev-4B chat path, or letter/readout with READOUT=1
 8084   ocr-crispembed   single (1)   CrispEmbed (PP-OCRv6 smal  Scene text — 2D bounding boxes and structured markdown

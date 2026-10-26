@@ -1930,7 +1930,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
         except Exception:
             g5_warnings.append("Could not probe http://localhost:3333/test_zoom_player.html (range server not answering)")
 
-        # 0-Context Local Model Judge (vllm-d3-mini :8083)
+        # 0-Context Local Model Judge (h2o-lightning-4b :8083)
         if enable_judge:
             decide_script = find_engine_path("jev-decision", "jev_decision.py")
             if not decide_script:
@@ -1949,7 +1949,8 @@ def cmd_verify(args: argparse.Namespace) -> int:
                 try:
                     res = subprocess.run(
                         [sys.executable, str(decide_script), "--json", "bool",
-                         "--context", state_summary, "--question", question],
+                         "--context", state_summary, "--question", question,
+                         "--require-server"],
                         capture_output=True, text=True, timeout=8
                     )
                     if res.returncode == 0 and res.stdout.strip():
@@ -1988,7 +1989,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
         print(json.dumps({"scope": week_label, "passed": overall_passed, "gates": gate_results}, indent=2))
 
 # ==============================================================================
-# SUBCOMMAND: smart-check (AGY 3.8 Flash Cognitive Audit & vllm-d3-mini Vision Gating)
+# SUBCOMMAND: smart-check (AGY 3.8 Flash Cognitive Audit & h2o-lightning-4b Vision Gating)
 # ==============================================================================
 def audit_note_with_flash(note_data: Dict[str, Any], model: str = "gemini-3.8-flash-low") -> Dict[str, Any]:
     cues = []
@@ -2033,7 +2034,7 @@ Return strictly a single valid JSON object with NO surrounding markdown or extra
         return {"error": str(e)}
 
 def audit_image_with_decision_model(img_path: Path, topic_context: str) -> Dict[str, Any]:
-    """Gate a figure through the local vllm-d3-mini vision decision model (:8083)."""
+    """Gate a figure through the local h2o-lightning-4b vision decision model (:8083)."""
     jev_script = Path("/run/media/rodri/AI/skills/jev-decision/jev_decision.py")
     if not jev_script.is_file():
         return {"checked": False, "reason": "jev_decision.py not found"}
@@ -2045,6 +2046,7 @@ def audit_image_with_decision_model(img_path: Path, topic_context: str) -> Dict[
             "--context", f"Course circuit figure for {topic_context}",
             "--question", q,
             "--image", str(img_path),
+            "--require-server",
         ]
         res = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         if res.returncode != 0 or not res.stdout.strip():
@@ -2068,10 +2070,10 @@ def cmd_smart_check(args: argparse.Namespace) -> int:
     model = getattr(args, "model", "gemini-3.8-flash-low")
     output_json = getattr(args, "json", False)
 
-    print(f"\n🧠 [Academic ICM Smart Check — AGY 3.8 Flash & vllm-d3-mini Vision]")
+    print(f"\n🧠 [Academic ICM Smart Check — AGY 3.8 Flash & h2o-lightning-4b Vision]")
     print(f"   • Vault Root : {vault_root}")
     print(f"   • Cognitive  : AGY Subagent ({model})")
-    print(f"   • Vision     : vllm-d3-mini (:8083)")
+    print(f"   • Vision     : h2o-lightning-4b (:8083)")
 
     # Collect notes
     notes_to_audit = []
@@ -2119,7 +2121,7 @@ def cmd_smart_check(args: argparse.Namespace) -> int:
         title = data.get("title", jf.stem)
         print(f"📄 Auditing: {jf.name} ('{title[:50]}')")
 
-        # 1. Vision Gating with vllm-d3-mini
+        # 1. Vision Gating with h2o-lightning-4b
         vision_results = []
         if enable_vision:
             # Find images in source directory
@@ -2355,16 +2357,16 @@ def main() -> int:
     p_verify.add_argument("--stage", choices=["1", "2", "3", "4", "5", "all"], default="all", help="Target specific stage gate (default: all)")
     p_verify.add_argument("--judge", action="store_true", default=True, help="Run unbiased 0-context local model judge (default: True)")
     p_verify.add_argument("--no-judge", dest="judge", action="store_false", help="Disable 0-context model judge")
-    p_verify.add_argument("--smart", action="store_true", help="Run deep cognitive audit with AGY 3.8 Flash and vllm-d3-mini vision")
+    p_verify.add_argument("--smart", action="store_true", help="Run deep cognitive audit with AGY 3.8 Flash and h2o-lightning-4b vision")
     p_verify.add_argument("--json", action="store_true", help="Output machine-readable JSON evaluation report")
     p_verify.add_argument("--fix", action="store_true", help="Auto-repair fixable defects (e.g. normalize relative source paths)")
     p_verify.add_argument("--vault", default=None, help="Path to notes vault root")
 
     # smart-check
-    p_smart = subparsers.add_parser("smart-check", help="Run deep cognitive & visual audit with AGY 3.8 Flash and vllm-d3-mini vision")
+    p_smart = subparsers.add_parser("smart-check", help="Run deep cognitive & visual audit with AGY 3.8 Flash and h2o-lightning-4b vision")
     p_smart.add_argument("target", nargs="?", default=None, help="Path or substring of _cornell.json file or folder")
     p_smart.add_argument("--week", default=None, help="Filter by week (e.g. 5, 6, 9)")
-    p_smart.add_argument("--no-vision", dest="vision", action="store_false", default=True, help="Disable vllm-d3-mini vision image inspection")
+    p_smart.add_argument("--no-vision", dest="vision", action="store_false", default=True, help="Disable h2o-lightning-4b vision image inspection")
     p_smart.add_argument("--model", default="gemini-3.8-flash-low", help="AGY subagent model tier (default: gemini-3.8-flash-low)")
     p_smart.add_argument("--json", action="store_true", help="Output machine-readable JSON report")
     p_smart.add_argument("--vault", default=None, help="Path to notes vault root")
