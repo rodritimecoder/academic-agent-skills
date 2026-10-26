@@ -23,10 +23,15 @@ import argparse
 import html
 import json
 import re
+import sys
 from datetime import datetime, timezone
-
-from anki_cards import document_title, extract_cards
 from pathlib import Path
+
+try:
+    from anki_cards import document_title, extract_cards
+except ModuleNotFoundError:  # loaded via importlib from a different cwd
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from anki_cards import document_title, extract_cards
 
 STAGE = 4
 STAGE_NAME = "render"

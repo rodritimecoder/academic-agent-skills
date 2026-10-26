@@ -6,13 +6,17 @@ import html
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urljoin
 from urllib.request import Request, urlopen
 import xml.etree.ElementTree as ET
+
+import workspace_sync
 
 DEFAULT_BASE_URL = "https://edstem.org/api/"
 ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
@@ -480,43 +484,266 @@ def cmd_workspace(client: EdClient, args: argparse.Namespace):
             res["ticket_error"] = str(e)
     render_output(res, args)
 
+
+def _workspace_helper_path() -> Path:
+    return Path(__file__).resolve().parent / "ed_ws.js"
+
+
+def _pull_workspace_snapshot(workspace_id: str):
+    """Fetch the live workspace into an automatically cleaned temp directory."""
+    node = shutil.which("node")
+    if not node:
+        raise workspace_sync.WorkspaceSyncError("node is required for workspace file access")
+    helper = _workspace_helper_path()
+    if not helper.is_file():
+        raise workspace_sync.WorkspaceSyncError(f"workspace helper not found: {helper}")
+    temporary = tempfile.TemporaryDirectory(prefix="ed-workspace-")
+    result = subprocess.run(
+        [node, str(helper), "pull", workspace_id, temporary.name],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        temporary.cleanup()
+        detail = (result.stderr or result.stdout).strip()
+        raise workspace_sync.WorkspaceSyncError(detail or "workspace pull failed")
+    return temporary, Path(temporary.name)
+
+
+def _render_workspace_report(report: dict, repo: Path, show_diff: bool = False) -> None:
+    print(f"Ed workspace: {report.get('workspace_id') or '(not recorded yet)'}")
+    print(f"Repository: {repo}")
+    for key, label in (("added", "Added"), ("changed", "Changed"), ("unchanged", "Unchanged"), ("removed", "Removed from Ed (not deleted)")):
+        paths = report.get(key, [])
+        print(f"{label}: {len(paths)}")
+        for relative in paths:
+            print(f"  {relative}")
+    skipped = report.get("skipped", [])
+    print(f"Skipped: {len(skipped)}")
+    for item in skipped:
+        print(f"  {item['path']} ({item['reason']})")
+    if show_diff and report.get("changed"):
+        diff = workspace_sync.unified_diff(report["snapshot"], repo, report)
+        if diff:
+            print("--- diff ---")
+            print(diff, end="" if diff.endswith("\n") else "\n")
+
+
+def cmd_workspace_diff(_client: EdClient, args: argparse.Namespace):
+    repo = Path(args.repo).expanduser().resolve()
+    try:
+        temporary, snapshot = _pull_workspace_snapshot(args.workspace_id)
+        try:
+            report = workspace_sync.compare_snapshot(snapshot, repo)
+            report["workspace_id"] = args.workspace_id
+            report["snapshot"] = snapshot
+            _render_workspace_report(report, repo, args.diff)
+        finally:
+            temporary.cleanup()
+    except workspace_sync.WorkspaceSyncError as exc:
+        raise SystemExit(f"workspace-diff: {exc}") from exc
+
+
+def _git_sync_preflight(repo: Path) -> None:
+    """Require an up-to-date tracking branch before a commit or push."""
+    branch = subprocess.run(
+        ["git", "branch", "--show-current"], cwd=repo, capture_output=True, text=True, check=False
+    )
+    if branch.returncode != 0 or not branch.stdout.strip():
+        raise workspace_sync.WorkspaceSyncError("repo must be on a named Git branch")
+    upstream = subprocess.run(
+        ["git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if upstream.returncode != 0:
+        raise workspace_sync.WorkspaceSyncError("repo branch must track a remote before commit/push")
+    fetched = subprocess.run(["git", "fetch", "--quiet"], cwd=repo, check=False)
+    if fetched.returncode != 0:
+        raise workspace_sync.WorkspaceSyncError("git fetch failed; refusing commit/push")
+    divergence = subprocess.run(
+        ["git", "rev-list", "--left-right", "--count", f"HEAD...{upstream.stdout.strip()}"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if divergence.returncode != 0:
+        raise workspace_sync.WorkspaceSyncError("cannot compare local branch with its upstream")
+    counts = divergence.stdout.split()
+    if len(counts) != 2 or counts != ["0", "0"]:
+        raise workspace_sync.WorkspaceSyncError(
+            "local branch is ahead of or behind its remote; sync it before workspace update"
+        )
+
+
+def _run_sandbox_tests(repo: Path, snapshot: Path, workspace_id: str, commands: list[str]) -> None:
+    """Test an applied copy in a network-isolated subagent-space."""
+    sandbox = shutil.which("subagent-spaces")
+    if not sandbox:
+        raise workspace_sync.WorkspaceSyncError(
+            "subagent-spaces is required to run workspace tests safely; apply without --commit instead"
+        )
+    with tempfile.TemporaryDirectory(prefix="ed-workspace-test-") as temporary:
+        test_root = Path(temporary)
+        workspace_sync.copy_tracked_repo(repo, test_root)
+        workspace_sync.apply_snapshot(snapshot, test_root, workspace_id)
+        for command in commands:
+            result = subprocess.run(
+                [
+                    sandbox,
+                    "run",
+                    "--cpus",
+                    "2",
+                    "--memory",
+                    "2g",
+                    "--network",
+                    "none",
+                    "--workspace",
+                    str(test_root),
+                    "--",
+                    "bash",
+                    "-lc",
+                    f"cd /workspace && {command}",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            output = (result.stdout or "") + (result.stderr or "")
+            print(f"Test command: {command}")
+            if output:
+                print(output[-6000:], end="" if output.endswith("\n") else "\n")
+            if result.returncode != 0:
+                raise workspace_sync.WorkspaceSyncError(
+                    f"sandbox test failed ({result.returncode}); repository was not changed"
+                )
+
+
+def _guarded_commit(repo: Path, message: str) -> None:
+    command = shutil.which("git-sync")
+    if not command:
+        raise workspace_sync.WorkspaceSyncError("git-sync is required for guarded commits")
+    result = subprocess.run(
+        [command, "guarded-commit", "--repo", str(repo), "-m", message, "--json"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.stdout:
+        print(result.stdout.strip())
+    if result.stderr:
+        print(result.stderr.strip(), file=sys.stderr)
+    if result.returncode != 0:
+        raise workspace_sync.WorkspaceSyncError("guarded commit failed; changes remain for review")
+    try:
+        payload = json.loads(result.stdout or "{}")
+    except ValueError as exc:
+        raise workspace_sync.WorkspaceSyncError("git-sync returned invalid JSON") from exc
+    if not payload.get("committed"):
+        raise workspace_sync.WorkspaceSyncError("no changes were committed")
+
+
+def _guarded_push(repo: Path) -> None:
+    command = shutil.which("git-sync")
+    if not command:
+        raise workspace_sync.WorkspaceSyncError("git-sync is required for guarded pushes")
+    result = subprocess.run(
+        [command, "--yes", "--no-pull", "--no-gate", "--json"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.stdout:
+        print(result.stdout.strip())
+    if result.stderr:
+        print(result.stderr.strip(), file=sys.stderr)
+    if result.returncode != 0:
+        raise workspace_sync.WorkspaceSyncError("push failed; local commit remains")
+
+
+def cmd_workspace_update(_client: EdClient, args: argparse.Namespace):
+    repo = Path(args.repo).expanduser().resolve()
+    if args.push and not args.commit:
+        raise SystemExit("workspace-update: --push requires --commit")
+    if args.commit and not args.apply:
+        raise SystemExit("workspace-update: --commit requires --apply")
+    if args.commit and not args.test_command:
+        raise SystemExit("workspace-update: --commit requires at least one --test-command")
+
+    try:
+        temporary, snapshot = _pull_workspace_snapshot(args.workspace_id)
+        try:
+            report = workspace_sync.compare_snapshot(snapshot, repo)
+            report["workspace_id"] = args.workspace_id
+            report["snapshot"] = snapshot
+            _render_workspace_report(report, repo, args.diff)
+            if not args.apply:
+                print("Preview only: no repository files changed. Re-run with --apply to proceed.")
+                return
+            workspace_sync.require_clean_git_repo(repo)
+            if args.commit:
+                _git_sync_preflight(repo)
+                _run_sandbox_tests(repo, snapshot, args.workspace_id, args.test_command)
+            result = workspace_sync.apply_snapshot(snapshot, repo, args.workspace_id)
+            print(f"Applied {len(result['applied'])} file(s); removed files were not deleted.")
+            print(f"Manifest: {result['manifest']}")
+            if args.commit:
+                _guarded_commit(repo, args.message)
+                if args.push:
+                    _guarded_push(repo)
+        finally:
+            temporary.cleanup()
+    except workspace_sync.WorkspaceSyncError as exc:
+        raise SystemExit(f"workspace-update: {exc}") from exc
+
+def _run_workspace_helper(args: list[str]) -> subprocess.CompletedProcess:
+    node = shutil.which("node")
+    if not node:
+        raise SystemExit("node is required for workspace file access")
+    return subprocess.run([node, str(_workspace_helper_path())] + args, check=False)
+
+
 def cmd_workspace_files(_client: EdClient, args: argparse.Namespace):
-    ws_script = Path(__file__).parent / "ed_ws.js"
-    res = subprocess.run([str(ws_script), "files", args.workspace_id], capture_output=True, text=True)
+    res = _run_workspace_helper(["files", args.workspace_id])
     if res.returncode != 0:
         sys.stderr.write(res.stderr)
         sys.exit(res.returncode)
     print(res.stdout.strip())
 
+
 def cmd_workspace_cat(_client: EdClient, args: argparse.Namespace):
-    ws_script = Path(__file__).parent / "ed_ws.js"
-    res = subprocess.run([str(ws_script), "cat", args.workspace_id, args.file_path], capture_output=True, text=True)
+    res = _run_workspace_helper(["cat", args.workspace_id, args.file_path])
     if res.returncode != 0:
         sys.stderr.write(res.stderr)
         sys.exit(res.returncode)
     sys.stdout.write(res.stdout)
 
+
 def cmd_workspace_pull(_client: EdClient, args: argparse.Namespace):
-    ws_script = Path(__file__).parent / "ed_ws.js"
-    cmd = [str(ws_script), "pull", args.workspace_id]
+    cmd = ["pull", args.workspace_id]
     if getattr(args, "dest", None):
         cmd.append(args.dest)
-    res = subprocess.run(cmd, capture_output=True, text=True)
+    res = _run_workspace_helper(cmd)
     if res.returncode != 0:
         sys.stderr.write(res.stderr)
         sys.exit(res.returncode)
     print(res.stdout.strip())
 
+
 def cmd_workspace_sync(_client: EdClient, args: argparse.Namespace):
-    ws_script = Path(__file__).parent / "ed_ws.js"
     dest = getattr(args, "dest", None) or f"workspace_{args.workspace_id}"
-    cmd = [str(ws_script), "sync", args.workspace_id, dest]
+    cmd = ["sync", args.workspace_id, dest]
     if getattr(args, "push", False):
         cmd.append("--push")
     if getattr(args, "once", False):
         cmd.append("--once")
     try:
-        subprocess.run(cmd, check=True)
+        _run_workspace_helper(cmd)
     except KeyboardInterrupt:
         print("\n[ed-sync] Watcher stopped.")
 
@@ -655,6 +882,32 @@ def main():
     p_ws_pull.add_argument("workspace_id", help="Workspace string ID")
     p_ws_pull.add_argument("--dest", help="Destination directory path (default: ./workspace_<id>)")
 
+    p_ws_diff = subparsers.add_parser(
+        "workspace-diff",
+        help="Preview a workspace snapshot against a Git repo without changing files",
+    )
+    p_ws_diff.add_argument("workspace_id", help="Workspace string ID")
+    p_ws_diff.add_argument("--repo", required=True, help="Local Git repository path")
+    p_ws_diff.add_argument("--diff", action="store_true", help="Print unified text diffs for changed files")
+
+    p_ws_update = subparsers.add_parser(
+        "workspace-update",
+        help="Safely apply a workspace snapshot to a clean Git repo",
+    )
+    p_ws_update.add_argument("workspace_id", help="Workspace string ID")
+    p_ws_update.add_argument("--repo", required=True, help="Local Git repository path")
+    p_ws_update.add_argument("--apply", action="store_true", help="Apply new and changed files (default: preview only)")
+    p_ws_update.add_argument("--diff", action="store_true", help="Print unified text diffs before applying")
+    p_ws_update.add_argument(
+        "--test-command",
+        action="append",
+        default=[],
+        help="Command to run in an isolated sandbox before commit (repeatable)",
+    )
+    p_ws_update.add_argument("--commit", action="store_true", help="Run tests, then guarded-commit (requires --apply)")
+    p_ws_update.add_argument("--push", action="store_true", help="Push the guarded commit (requires --commit)")
+    p_ws_update.add_argument("--message", default="edstem-cli: sync workspace snapshot", help="Commit message")
+
     p_ws_sync = subparsers.add_parser("workspace-sync", help="Sync workspace with a local git repo (watch or single pass)")
     p_ws_sync.add_argument("workspace_id", help="Workspace string ID")
     p_ws_sync.add_argument("--dest", help="Destination directory path (default: ./workspace_<id>)")
@@ -692,6 +945,8 @@ def main():
         "workspace-files": cmd_workspace_files,
         "workspace-cat": cmd_workspace_cat,
         "workspace-pull": cmd_workspace_pull,
+        "workspace-diff": cmd_workspace_diff,
+        "workspace-update": cmd_workspace_update,
         "workspace-sync": cmd_workspace_sync,
         "lessons": cmd_lessons,
         "lesson": cmd_lesson,

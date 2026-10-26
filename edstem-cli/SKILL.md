@@ -29,6 +29,7 @@ JSON.
 | **Reading** — `thread` | *"What did people say about the sort constraint?"* |
 | **Posting** — `post`, `reply` | *"Ask the class about the sort constraint"* |
 | **Cloud IDE** — `workspaces`, `workspace` | *"Open the Assessment 3 workspace"* |
+| **Git sync** — `workspace-diff`, `workspace-update` | *"Pull the new workspace files into GitHub safely"* |
 | **Lessons** — `lessons`, `lesson` | *"What lessons are in this course?"* |
 
 ---
@@ -87,10 +88,37 @@ python3 $CLI workspaces <course_id> --summary
 python3 $CLI workspaces <course_id> --search "Tim" --summary
 python3 $CLI workspace <workspace_id> --connect
 
+# 5b. Workspace -> Git, preview first, then apply
+python3 $CLI workspace-diff <workspace_id> --repo ~/path/to/repo --diff
+python3 $CLI workspace-update <workspace_id> --repo ~/path/to/repo --apply \
+  --test-command "make all" --test-command "make compress_test sort_test"
+python3 $CLI workspace-update <workspace_id> --repo ~/path/to/repo --apply \
+  --commit --push --test-command "make all" \
+  --message "sync latest workspace files from Ed"
+
 # 6. Lessons and programming challenges
 python3 $CLI lessons <course_id> --summary
 python3 $CLI lesson <lesson_id> --summary
 ```
+
+---
+
+## 🔁 Workspace → Git Sync
+
+`workspace-diff` and `workspace-update` are the safe replacement for "pull
+everything and `git add -A`". Both fetch into a temp directory first.
+
+- `workspace-diff` never touches the repo: it reports added / changed /
+  unchanged / removed files and (with `--diff`) bounded text diffs.
+- `workspace-update` is preview-only unless `--apply`. Applying copies new and
+  changed files, and **never deletes** anything Ed no longer has.
+- The repo needs a clean working tree; the branch must match its remote before
+  `--commit`, which runs `--test-command` entries in a network-isolated
+  `subagent-spaces` sandbox first. Only then does it `git-sync guarded-commit`
+  (secrets and oversized blobs are blocked), and `--push` publishes.
+- Backup, credential, and generated files (`*.bak`, `.env`, `build/`, …) are
+  skipped and reported. `.edstem-workspace.json` records which files this
+  workspace owns, so a file that disappears from Ed is reported but kept.
 
 ---
 

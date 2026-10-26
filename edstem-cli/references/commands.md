@@ -26,6 +26,29 @@ python3 $CLI workspace-sync <workspace_id> --dest ./my_assessment_3 --push
 python3 $CLI workspace-sync <workspace_id> --dest ./my_assessment_3 --once
 ```
 
+### Safe workspace -> Git workflow
+
+```bash
+# 1. Preview against a repo: added / changed / unchanged / removed / skipped
+python3 $CLI workspace-diff <workspace_id> --repo ./my_assessment_3 --diff
+
+# 2. Apply new + changed files into a clean repo (never deletes anything)
+python3 $CLI workspace-update <workspace_id> --repo ./my_assessment_3 --apply
+
+# 3. Apply, test in an isolated sandbox, then guarded-commit and push
+python3 $CLI workspace-update <workspace_id> --repo ./my_assessment_3 \
+  --apply --commit --push \
+  --test-command "make all" --test-command "make compress_test sort_test" \
+  --message "sync latest workspace files from Ed"
+```
+
+Guarantees: preview is read-only; the destination tree must be clean; the
+branch must match its remote before `--commit`; tests run in a network-isolated
+`subagent-spaces` container before any file is applied; the commit goes through
+`git-sync guarded-commit` (secret and 50 MB blob guard); removals from Ed are
+reported via `.edstem-workspace.json` but never deleted from the repo;
+`*.bak`, `.env*`, keys and generated directories are skipped and listed.
+
 ## Discovery
 
 ```bash
