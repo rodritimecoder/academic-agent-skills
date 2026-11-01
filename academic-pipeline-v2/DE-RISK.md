@@ -94,7 +94,7 @@ PORT   SLOT             CARD         DEFAULT                    ROLE
 8082   decision-engine  single (1)   StartLux-Decision-v1.1-4B  Internal engine of the :8083 decision slot - prompts in one micro-batch, not a client-facing API
 8089   decision-fallback single (1)   Imajev-4B                  Secondary decision engine — Imajev-4B chat path, or letter/readout with READOUT=1
 8084   ocr-crispembed   single (1)   CrispEmbed (PP-OCRv6 smal  Scene text — 2D bounding boxes and structured markdown
-8085   ocr-lighton      single (1)   LightOnOCR-3-1B            Documents, PDFs and slides — fast prefill, high-throughput markdown
+8085   ocr-lighton      single (1)   LightOnOCR-3-0.8B            Documents, PDFs and slides — fast prefill, high-throughput markdown
 8086   reranker         single (1)   jina-reranker-v2-base-mul  Cross-encoder reranking for RAG
 8087   embed            one-of-many (2) bge-small-en-v1.5          Vector embeddings for RAG and semantic caching
 8088   grounding        single (1)   WeVisOne-VL-4B             Word-level OCR boxes, open-vocab detection, referring localization, pointing, counting

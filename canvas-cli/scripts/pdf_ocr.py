@@ -37,11 +37,11 @@ def _drive_root() -> Path:
 DRIVE = _drive_root()
 DEFAULT_MODEL = os.environ.get(
     "LIGHTON_MODEL",
-    str(DRIVE / "models/prithivMLmods/LightOnOCR-3-1B-GGUF/LightOnOCR-3-1B.Q4_K_M.gguf"),
+    str(DRIVE / "models/prithivMLmods/LightOnOCR-3-0.8B-GGUF/LightOnOCR-3-0.8B.Q4_K_M.gguf"),
 )
 DEFAULT_MMPROJ = os.environ.get(
     "LIGHTON_MMPROJ",
-    str(DRIVE / "models/prithivMLmods/LightOnOCR-3-1B-GGUF/LightOnOCR-3-1B.mmproj-q8_0.gguf"),
+    str(DRIVE / "models/prithivMLmods/LightOnOCR-3-0.8B-GGUF/LightOnOCR-3-0.8B.mmproj-q8_0.gguf"),
 )
 DEFAULT_LLAMA_CLI = os.environ.get("LLAMA_MTMD_CLI", str(DRIVE / "llama.cpp/build/bin/llama-mtmd-cli"))
 

@@ -2,9 +2,11 @@
 name: canvas-cli
 
 description: >
-  Read Canvas LMS data: courses, assignments, submissions, grades, the
-  gradebook, files, pages, announcements and the calendar. Use for school
-  assignments, homework, due dates, grades, or course content.
+  Read Canvas LMS data: courses, assignments, submissions, grades, the gradebook, files,
+  pages, announcements and the calendar. Use for anything school, university or class related
+  — the course portal, student portal, learning management system (LMS) or gradebook —
+  assignments, homework, what is due this week or next, deadlines, marks and results,
+  readings, lecture material a teacher posted, or course announcements.
 
 compatibility: "Requires network access to a Canvas LMS instance and a Canvas API token (CANVAS_API_KEY)."
 allowed-tools: "Bash(canvas-cli:*) Bash(python3:*) Read"
