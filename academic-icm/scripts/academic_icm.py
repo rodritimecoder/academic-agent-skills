@@ -47,17 +47,26 @@ def find_engine_path(skill_name: str, script_name: str) -> Optional[Path]:
     if internal_root.is_file():
         return internal_root
 
-    candidate_roots = [
+    candidate_roots: List[Path] = [
+        academic_root.parent / skill_name,
+    ]
+    repo_root = academic_root.parent.parent
+    if repo_root.is_dir():
+        for cat in repo_root.iterdir():
+            if cat.is_dir() and not cat.name.startswith("."):
+                candidate_roots.append(cat / skill_name)
+
+    candidate_roots.extend([
         Path("/run/media/rodri/AI/skills"),
         Path.home() / ".gemini" / "config" / "skills",
         Path.home() / ".pi" / "agent" / "skills",
         Path("/run/media/rodri/AI/academic-agent-skills"),
-    ]
+    ])
     for r in candidate_roots:
-        p = r / skill_name / "scripts" / script_name
+        p = r / "scripts" / script_name if r.name == skill_name else r / skill_name / "scripts" / script_name
         if p.is_file():
             return p
-        p_root = r / skill_name / script_name
+        p_root = r / script_name if r.name == skill_name else r / skill_name / script_name
         if p_root.is_file():
             return p_root
     return None
