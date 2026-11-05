@@ -21,7 +21,10 @@ import sys
 import urllib.parse
 from pathlib import Path
 from typing import Dict, Any, Optional, Tuple, List
-import requests
+try:
+    import requests
+except ImportError:
+    requests = None
 
 
 DEFAULT_USER_AGENT = (
@@ -293,7 +296,9 @@ def render_kv_table(data: Dict[str, Any], project_keys: Optional[List[str]] = No
 
 
 class ZoomRecorderClient:
-    def __init__(self, session: Optional[requests.Session] = None):
+    def __init__(self, session: Optional[Any] = None):
+        if requests is None:
+            raise RuntimeError("The 'requests' package is required for downloading zoom recordings: pip install requests")
         self.session = session or requests.Session()
         self.session.headers.update({
             "User-Agent": DEFAULT_USER_AGENT,
